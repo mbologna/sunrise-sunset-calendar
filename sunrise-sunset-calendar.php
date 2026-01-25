@@ -81,7 +81,7 @@ function calculate_daylight_percentile($target_daylight, $lat, $lon, $year) {
     return round(($count_below / count($daylight_lengths)) * 100, 1);
 }
 
-function build_supplemental_info($sun_info, $time_format, $enabled_types) {
+function build_supplemental_info($sun_info, $time_format, $enabled_types, $daylight_duration = null, $daylight_pct = null, $daylight_percentile = null, $night_duration = null, $night_pct = null, $night_percentile = null) {
     $info = "";
     $total_enabled = count(array_filter($enabled_types));
 
@@ -90,34 +90,56 @@ function build_supplemental_info($sun_info, $time_format, $enabled_types) {
         return $info;
     }
 
-    $info .= "\\n\\n--- Complete Sun Schedule for Today ---\\n";
+    $info .= "\\n\\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n";
+    $info .= "📅 COMPLETE SUN SCHEDULE FOR TODAY\\n";
+    $info .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n";
 
     if (!$enabled_types['astro'] && isset($sun_info['astronomical_twilight_begin'])) {
-        $info .= "Astronomical Dawn: " . date($time_format, $sun_info['astronomical_twilight_begin']) . "\\n";
+        $info .= "🌌 Astronomical Dawn: " . date($time_format, $sun_info['astronomical_twilight_begin']) . "\\n";
+        $info .= "   Stars begin to fade, first hint of sunlight\\n\\n";
     }
     if (!$enabled_types['nautical'] && isset($sun_info['nautical_twilight_begin'])) {
-        $info .= "Nautical Dawn: " . date($time_format, $sun_info['nautical_twilight_begin']) . "\\n";
+        $info .= "⚓ Nautical Dawn: " . date($time_format, $sun_info['nautical_twilight_begin']) . "\\n";
+        $info .= "   Horizon becomes visible at sea\\n\\n";
     }
     if (!$enabled_types['civil'] && isset($sun_info['civil_twilight_begin'])) {
-        $info .= "First Light (Civil Dawn): " . date($time_format, $sun_info['civil_twilight_begin']) . "\\n";
+        $info .= "🌅 First Light (Civil Dawn): " . date($time_format, $sun_info['civil_twilight_begin']) . "\\n";
+        $info .= "   Enough light for outdoor activities\\n\\n";
     }
     if (!$enabled_types['daylight'] && isset($sun_info['sunrise'])) {
-        $info .= "Sunrise: " . date($time_format, $sun_info['sunrise']) . "\\n";
+        $info .= "☀️ Sunrise: " . date($time_format, $sun_info['sunrise']) . "\\n";
+        $info .= "   Sun breaks the horizon\\n\\n";
     }
     if (!$enabled_types['daylight'] && isset($sun_info['transit'])) {
-        $info .= "Solar Noon: " . date($time_format, $sun_info['transit']) . "\\n";
+        $info .= "☀️ Solar Noon: " . date($time_format, $sun_info['transit']) . "\\n";
+        $info .= "   Sun at highest point in sky\\n\\n";
     }
     if (!$enabled_types['daylight'] && isset($sun_info['sunset'])) {
-        $info .= "Sunset: " . date($time_format, $sun_info['sunset']) . "\\n";
+        $info .= "☀️ Sunset: " . date($time_format, $sun_info['sunset']) . "\\n";
+        $info .= "   Sun dips below horizon\\n\\n";
     }
     if (!$enabled_types['civil'] && isset($sun_info['civil_twilight_end'])) {
-        $info .= "Last Light (Civil Dusk): " . date($time_format, $sun_info['civil_twilight_end']) . "\\n";
+        $info .= "🌇 Last Light (Civil Dusk): " . date($time_format, $sun_info['civil_twilight_end']) . "\\n";
+        $info .= "   Artificial light becomes necessary\\n\\n";
     }
     if (!$enabled_types['nautical'] && isset($sun_info['nautical_twilight_end'])) {
-        $info .= "Nautical Dusk: " . date($time_format, $sun_info['nautical_twilight_end']) . "\\n";
+        $info .= "⚓ Nautical Dusk: " . date($time_format, $sun_info['nautical_twilight_end']) . "\\n";
+        $info .= "   Horizon fades from view\\n\\n";
     }
     if (!$enabled_types['astro'] && isset($sun_info['astronomical_twilight_end'])) {
-        $info .= "Astronomical Dusk: " . date($time_format, $sun_info['astronomical_twilight_end']) . "\\n";
+        $info .= "🌌 Astronomical Dusk: " . date($time_format, $sun_info['astronomical_twilight_end']) . "\\n";
+        $info .= "   Complete darkness, stars fully visible\\n\\n";
+    }
+
+    // Add daylight/night statistics if not showing daylight events
+    if (!$enabled_types['daylight'] && $daylight_duration) {
+        $info .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n";
+        $info .= "📊 TODAY'S STATISTICS\\n";
+        $info .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n";
+        $info .= "☀️ Daylight: {$daylight_duration} ({$daylight_pct}% of day) [{$daylight_percentile} percentile]\\n";
+        $info .= "   Time when Sun is above the horizon\\n\\n";
+        $info .= "🌙 Night: {$night_duration} ({$night_pct}% of day) [{$night_percentile} percentile]\\n";
+        $info .= "   Time when Sun is below the horizon\\n";
     }
 
     return $info;
@@ -189,7 +211,7 @@ if (isset($_GET['feed']) && isset($_GET['token'])) {
             'daylight' => $include_daylight
         ];
 
-        $supplemental_info = build_supplemental_info($sun_info, $time_format, $enabled_types);
+        $supplemental_info = build_supplemental_info($sun_info, $time_format, $enabled_types, format_duration($daylight_seconds), $daylight_pct, $daylight_percentile, format_duration($night_seconds), $night_pct, $night_percentile);
 
         // ASTRONOMICAL DAWN
         if ($include_astro && isset($sun_info['astronomical_twilight_begin']) && isset($sun_info['nautical_twilight_begin'])) {
@@ -691,7 +713,7 @@ $sun_info = date_sun_info(time(), $default_lat, $default_lon);
                 <div class="help-text" style="margin-bottom: 10px;">💡 Select just ONE type to get all sun times in the event notes!</div>
                 <div class="checkbox-group">
                     <input type="checkbox" name="sun" id="sun" checked>
-                    <label for="sun">☀️ Daylight (Sunrise to Sunset) - with duration stats and solar noon</label>
+                    <label for="sun">☀️ Day & Night - Daylight period + complete night period with all statistics</label>
                 </div>
                 <div class="checkbox-group">
                     <input type="checkbox" name="civil" id="civil" checked>
@@ -757,7 +779,8 @@ $sun_info = date_sun_info(time(), $default_lat, $default_lon);
 
             <strong>Pro Tip:</strong>
             <ul>
-                <li>Select ONLY Civil Twilight to get a clean calendar with just dawn/dusk blocks, but with all other sun times (astronomical dawn, nautical dawn, sunrise, solar noon, sunset, nautical dusk, astronomical dusk) included in the event descriptions!</li>
+                <li><strong>Select only ONE event type</strong> to get a focused calendar with all other sun times and statistics automatically included in each event's description. This gives you a clean calendar view while keeping all the astronomical data at your fingertips!</li>
+                <li>For example: Select only "Civil Dawn/Dusk" to see just the useful twilight periods, but get sunrise, sunset, solar noon, and all other twilight times in the event notes.</li>
             </ul>
         </div>
     </div>
