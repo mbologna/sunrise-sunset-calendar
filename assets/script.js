@@ -1,41 +1,3 @@
-let use12Hour = false;
-
-function formatTime(timestamp, twelveHour) {
-    const date = new Date(timestamp * 1000);
-    if (twelveHour) {
-        return date.toLocaleTimeString('en-US', {
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-        });
-    } else {
-        return date.toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-        });
-    }
-}
-
-function toggleTimeFormat() {
-    use12Hour = !use12Hour;
-    const button = document.querySelector('.time-format-toggle');
-    button.textContent = use12Hour ? 'Switch to 24-hour format' : 'Switch to 12-hour format';
-
-    const display = document.getElementById('time-display');
-    display.innerHTML = `
-        Astronomical Dawn: ${formatTime(sunInfo.astro_begin, use12Hour)}<br>
-        Nautical Dawn: ${formatTime(sunInfo.nautical_begin, use12Hour)}<br>
-        Civil Dawn: ${formatTime(sunInfo.civil_begin, use12Hour)}<br>
-        Sunrise: ${formatTime(sunInfo.sunrise, use12Hour)}<br>
-        Solar Noon: ${formatTime(sunInfo.transit, use12Hour)}<br>
-        Sunset: ${formatTime(sunInfo.sunset, use12Hour)}<br>
-        Civil Dusk: ${formatTime(sunInfo.civil_end, use12Hour)}<br>
-        Nautical Dusk: ${formatTime(sunInfo.nautical_end, use12Hour)}<br>
-        Astronomical Dusk: ${formatTime(sunInfo.astro_end, use12Hour)}
-    `;
-}
-
 function showAddressSearch() {
     const searchDiv = document.getElementById('address-search');
     searchDiv.style.display = searchDiv.style.display === 'none' ? 'block' : 'none';
@@ -81,7 +43,6 @@ async function reverseGeocode() {
     const lon = document.getElementById('lon').value;
     const locationField = document.getElementById('location');
 
-    // Only suggest if location field is empty
     if (locationField.value || !lat || !lon) {
         return;
     }
@@ -95,7 +56,7 @@ async function reverseGeocode() {
             locationField.placeholder = data.name;
         }
     } catch (error) {
-        // Silently fail - not critical
+        // Silently fail
     }
 }
 
@@ -106,28 +67,20 @@ function getLocation() {
 
     if (!navigator.geolocation) {
         status.className = 'error';
-        status.textContent = 'Geolocation not supported by your browser.';
+        status.textContent = 'Geolocation not supported.';
         status.style.display = 'block';
         return;
     }
 
     navigator.geolocation.getCurrentPosition(
         function (position) {
-            document.getElementById('lat').value =
-                Math.round(position.coords.latitude * 1000000) / 1000000;
-            document.getElementById('lon').value =
-                Math.round(position.coords.longitude * 1000000) / 1000000;
-
-            if (position.coords.altitude !== null) {
-                document.getElementById('elevation').value =
-                    Math.round(position.coords.altitude);
-            }
+            document.getElementById('lat').value = Math.round(position.coords.latitude * 1000000) / 1000000;
+            document.getElementById('lon').value = Math.round(position.coords.longitude * 1000000) / 1000000;
 
             status.className = 'success';
-            status.textContent = '✓ Location retrieved successfully!';
+            status.textContent = '✓ Location retrieved!';
             status.style.display = 'block';
 
-            // Try to get location name
             reverseGeocode();
         },
         function (error) {
@@ -195,7 +148,6 @@ function copyToClipboard(elementId) {
     );
 }
 
-// Add enter key support for address search
 document.addEventListener('DOMContentLoaded', function () {
     const addressInput = document.getElementById('address-input');
     if (addressInput) {

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         colors="true"
+         stopOnFailure="false"
+         failOnWarning="true"
+         failOnRisky="true"
+         cacheDirectory=".phpunit.cache">
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Integration">
+            <directory>tests/Integration</directory>
+        </testsuite>
+        <testsuite name="Reference">
+            <directory>tests/Reference</directory>
+        </testsuite>
+        <testsuite name="Accuracy">
+            <directory>tests/Accuracy</directory>
+        </testsuite>
+    </testsuites>
+
+    <source>
+        <include>
+            <file>sunrise-sunset-calendar.php</file>
+            <directory suffix=".php">src</directory>
+        </include>
+    </source>
+
+    <php>
+        <const name="PHPUNIT_RUNNING" value="true"/>
+        <env name="AUTH_TOKEN" value="test-token-for-phpunit"/>
+    </php>
+</phpunit>

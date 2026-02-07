@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Test PHP ${{ matrix.php-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        php-version: ['7.4', '8.0', '8.1', '8.2']
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Cache Composer dependencies
+      uses: actions/cache@v3
+      with:
+        path: vendor
+        key: ${{ runner.os }}-php-${{ matrix.php-version }}-${{ hashFiles('**/composer.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-php-${{ matrix.php-version }}-
+          ${{ runner.os }}-php-
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ matrix.php-version }}
+        extensions: mbstring, json
+        coverage: none
+        tools: composer
+
+    - name: Validate Composer
+      run: composer validate --strict
+
+    - name: Install dependencies
+      run: composer install --prefer-dist --no-progress --no-interaction
+
+    - name: Validate PHP syntax
+      run: |
+        php -l sunrise-sunset-calendar.php
+        php -l src/calendar-generator.php
+
+    - name: Create test config
+      run: |
+        mkdir -p config
+        echo '<?php define("AUTH_TOKEN", "test-token-for-ci"); ?>' > config/config.php
+
+    - name: Run PHPUnit tests
+      run: ./vendor/bin/phpunit --testdox
+
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.1'
+        tools: php-cs-fixer
+
+    - name: Run PHP-CS-Fixer (check only)
+      run: php-cs-fixer fix --dry-run --diff --verbose
+      continue-on-error: true
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.1'
+
+    - name: Check for security vulnerabilities
+      run: |
+        # Check for common security issues
+        ! grep -r "eval(" --include="*.php" .
+        ! grep -r "system(" --include="*.php" .
+        ! grep -r "exec(" --include="*.php" . || grep -q "// Security checked" .
+        ! grep -r "\$_REQUEST" --include="*.php" .

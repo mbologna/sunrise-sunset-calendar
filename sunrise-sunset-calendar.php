@@ -1,622 +1,509 @@
 <?php
-/**
- * Sunrise/Sunset iCal Calendar Generator with Enhanced Twilight Support
- * Generates dynamic iCalendar feeds with detailed astronomical information
- *
- * @version 7.0 - Week summaries, special events, UV index, location notes
- */
 
-// Load configuration from external file
-$config_file = __DIR__ . '/config.php';
+/**
+ * Sunrise/Sunset iCal Calendar Generator
+ * Version 8.0 - Full NREL SPA via external library.
+ */
+$config_file = __DIR__ . '/config/config.php';
 if (!file_exists($config_file)) {
-    die('Error: config.php not found. Please create it from config.example.php');
+    die('Error: config/config.php not found');
 }
 require_once $config_file;
 
-// Validate AUTH_TOKEN
+// Load Composer autoloader if available
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}
+
+// Load solar calculation wrapper
+require_once __DIR__ . '/src/solar-spa-wrapper.php';
+
+// Load accurate astronomical calculations (Meeus algorithms)
+require_once __DIR__ . '/src/meeus-astronomy.php';
+
+// Load strings configuration and make it globally accessible
+$GLOBALS['STRINGS'] = require __DIR__ . '/src/strings.php';
+
 if (!defined('AUTH_TOKEN') || AUTH_TOKEN === 'CHANGE_ME_TO_A_RANDOM_STRING') {
-    die('Error: Please set AUTH_TOKEN in config.php to a secure random string');
+    die('Error: Please set AUTH_TOKEN in config.php');
 }
 
-// Configuration defaults
-if (!defined('CALENDAR_WINDOW_DAYS')) define('CALENDAR_WINDOW_DAYS', 365);
-if (!defined('UPDATE_INTERVAL')) define('UPDATE_INTERVAL', 86400);
+if (!defined('CALENDAR_WINDOW_DAYS')) {
+    define('CALENDAR_WINDOW_DAYS', 365);
+}
+if (!defined('UPDATE_INTERVAL')) {
+    define('UPDATE_INTERVAL', 86400);
+}
 
-// Security headers
-header('X-Content-Type-Options: nosniff');
-header('X-Frame-Options: DENY');
-header('X-XSS-Protection: 1; mode=block');
+// Security headers (skip in CLI mode for testing)
+if (php_sapi_name() !== 'cli') {
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('X-XSS-Protection: 1; mode=block');
+}
 
-// Validation functions
-function sanitize_float($value, $default, $min = -90, $max = 90) {
+function sanitize_float($value, $default, $min = -90, $max = 90)
+{
     $filtered = filter_var($value, FILTER_VALIDATE_FLOAT);
+
     return ($filtered === false || $filtered < $min || $filtered > $max) ? $default : $filtered;
 }
 
-function sanitize_int($value, $default, $min = -1440, $max = 1440) {
+function sanitize_int($value, $default, $min = -1440, $max = 1440)
+{
     $filtered = filter_var($value, FILTER_VALIDATE_INT);
+
     return ($filtered === false || $filtered < $min || $filtered > $max) ? $default : $filtered;
 }
 
-function sanitize_timezone($value) {
+function sanitize_timezone($value)
+{
     $zones = timezone_identifiers_list();
+
     return in_array($value, $zones, true) ? $value : 'Europe/Rome';
 }
 
-function sanitize_text($value, $max_length = 500) {
+function sanitize_text($value, $max_length = 500)
+{
     $clean = strip_tags($value);
-    $clean = str_replace(["\r\n", "\r", "\n"], " ", $clean);
+    $clean = str_replace(["\r\n", "\r", "\n"], ' ', $clean);
+
     return substr($clean, 0, $max_length);
 }
 
-function verify_token($provided_token) {
+function verify_token($provided_token)
+{
     return hash_equals(AUTH_TOKEN, $provided_token);
 }
 
-function format_duration($seconds) {
+function format_duration($seconds)
+{
     $hours = floor($seconds / 3600);
     $minutes = floor(($seconds % 3600) / 60);
-    return sprintf("%dh %02dm", $hours, $minutes);
+
+    return sprintf('%dh %02dm', $hours, $minutes);
 }
 
-function format_duration_short($seconds) {
+function format_duration_short($seconds)
+{
     $hours = floor($seconds / 3600);
     $minutes = floor(($seconds % 3600) / 60);
     $secs = $seconds % 60;
     if ($hours > 0) {
-        return sprintf("%dh %dm", $hours, $minutes);
-    } else if ($minutes > 0) {
-        return sprintf("%dm %ds", $minutes, $secs);
+        return sprintf('%dh %dm', $hours, $minutes);
+    } elseif ($minutes > 0) {
+        return sprintf('%dm %ds', $minutes, $secs);
     } else {
-        return sprintf("%ds", $secs);
+        return sprintf('%ds', $secs);
     }
 }
 
-function format_day_length_comparison($diff_seconds, $type = 'day') {
+function format_day_length_comparison($diff_seconds, $type = 'day')
+{
+    global $STRINGS;
     $abs_diff = abs($diff_seconds);
     $minutes = floor($abs_diff / 60);
     $seconds = $abs_diff % 60;
-    
-    $period = ($type === 'day') ? 'daylight' : 'night';
-    
+
     if ($diff_seconds > 0) {
-        return sprintf("+%dm %02ds longer %s", $minutes, $seconds, $period);
+        return sprintf('+%dm %02ds', $minutes, $seconds);
     } elseif ($diff_seconds < 0) {
-        return sprintf("-%dm %02ds shorter %s", $minutes, $seconds, $period);
+        return sprintf('-%dm %02ds', $minutes, $seconds);
     } else {
-        return "same length as yesterday";
+        return $STRINGS['comparisons']['same_length'];
     }
 }
 
-function calculate_daylight_percentile($target_daylight, $lat, $lon, $year) {
-    $daylight_lengths = [];
-    
-    for ($day = 1; $day <= 365; $day++) {
-        $timestamp = strtotime("$year-01-01 +".($day-1)." days");
-        $sun_info = date_sun_info($timestamp, $lat, $lon);
-        
-        if (isset($sun_info['sunrise']) && isset($sun_info['sunset'])) {
-            $daylight_lengths[] = $sun_info['sunset'] - $sun_info['sunrise'];
-        }
+function julianDay($y, $m, $d, $hourUTC = 0.0)
+{
+    if ($m <= 2) {
+        $y -= 1;
+        $m += 12;
     }
-    
+    $A = floor($y / 100);
+    $B = 2 - $A + floor($A / 4);
+
+    return floor(365.25 * ($y + 4716)) + floor(30.6001 * ($m + 1)) + $d + $B - 1524.5 + $hourUTC / 24.0;
+}
+
+function julianCentury($JD)
+{
+    return ($JD - 2451545.0) / 36525.0;
+}
+
+function sunMeanLongitude($T)
+{
+    return fmod(280.46646 + $T * (36000.76983 + 0.0003032 * $T), 360.0);
+}
+
+function sunMeanAnomaly($T)
+{
+    return 357.52911 + $T * (35999.05029 - 0.0001537 * $T);
+}
+
+function sunEquationOfCenter($T, $M)
+{
+    $Mr = deg2rad($M);
+
+    return sin($Mr) * (1.914602 - $T * (0.004817 + 0.000014 * $T)) + sin(2 * $Mr) * (0.019993 - 0.000101 * $T) + sin(3 * $Mr) * 0.000289;
+}
+
+function sunTrueLongitude($L0, $C)
+{
+    return $L0 + $C;
+}
+
+function sunApparentLongitude($T, $trueLon)
+{
+    return $trueLon - 0.00569 - 0.00478 * sin(deg2rad(125.04 - 1934.136 * $T));
+}
+
+function meanObliquity($T)
+{
+    return 23 + (26 + ((21.448 - $T * (46.815 + $T * (0.00059 - $T * 0.001813))) / 60)) / 60;
+}
+
+function correctedObliquity($T, $eps0)
+{
+    return $eps0 + 0.00256 * cos(deg2rad(125.04 - 1934.136 * $T));
+}
+
+function solarDeclination($lambda, $eps)
+{
+    return rad2deg(asin(sin(deg2rad($eps)) * sin(deg2rad($lambda))));
+}
+
+function equationOfTime($T, $L0, $e, $M, $eps)
+{
+    $y = pow(tan(deg2rad($eps) / 2), 2);
+    $L0r = deg2rad($L0);
+    $Mr = deg2rad($M);
+
+    return 4 * rad2deg($y * sin(2 * $L0r) - 2 * $e * sin($Mr) + 4 * $e * $y * sin($Mr) * cos(2 * $L0r) - 0.5 * $y * $y * sin(4 * $L0r) - 1.25 * $e * $e * sin(2 * $Mr));
+}
+
+function sunriseHourAngle($lat, $decl, $alt)
+{
+    $latr = deg2rad($lat);
+    $declr = deg2rad($decl);
+    $altr = deg2rad($alt);
+    $cos_ha = (sin($altr) - sin($latr) * sin($declr)) / (cos($latr) * cos($declr));
+    if ($cos_ha > 1) {
+        return 0;
+    }
+    if ($cos_ha < -1) {
+        return 180;
+    }
+
+    return rad2deg(acos($cos_ha));
+}
+
+/**
+ * Calculate sun times - uses high-precision NREL SPA library
+ * Backward-compatible wrapper that calls SPA implementation.
+ *
+ * @param int $y Year
+ * @param int $m Month (1-12)
+ * @param int $d Day of month
+ * @param float $lat Latitude in degrees
+ * @param float $lon Longitude in degrees
+ * @param float $utc_offset UTC offset in hours
+ * @param float $sun_alt Solar altitude angle (default: -0.833 for sunrise/sunset)
+ * @return array Solar times and parameters
+ */
+function calculate_sun_times($y, $m, $d, $lat, $lon, $utc_offset, $sun_alt = -0.833)
+{
+    return calculate_sun_times_spa($y, $m, $d, $lat, $lon, $utc_offset, $sun_alt);
+}
+
+/**
+ * Legacy solar calculation implementation (NREL-inspired, ±1-2 minutes)
+ * Kept for rollback purposes and backward compatibility testing.
+ *
+ * @deprecated Use calculate_sun_times() which calls SPA wrapper for ±30 second precision
+ */
+function calculate_sun_times_legacy($y, $m, $d, $lat, $lon, $utc_offset, $sun_alt = -0.833)
+{
+    $JD = julianDay($y, $m, $d);
+    $T = julianCentury($JD);
+    $L0 = sunMeanLongitude($T);
+    $M = sunMeanAnomaly($T);
+    $C = sunEquationOfCenter($T, $M);
+    $trueLon = sunTrueLongitude($L0, $C);
+    $lambda = sunApparentLongitude($T, $trueLon);
+    $eps0 = meanObliquity($T);
+    $eps = correctedObliquity($T, $eps0);
+    $decl = solarDeclination($lambda, $eps);
+    $e = 0.016708634 - $T * (0.000042037 + 0.0000001267 * $T);
+    $eqTime = equationOfTime($T, $L0, $e, $M, $eps);
+    $HA = sunriseHourAngle($lat, $decl, $sun_alt);
+    $dayLength = (2 * $HA) / 15.0;
+    $solarNoon = (720 - 4 * $lon - $eqTime + $utc_offset * 60) / 1440;
+    $sunrise = $solarNoon - ($HA * 4) / 1440;
+    $sunset = $solarNoon + ($HA * 4) / 1440;
+    $HA_civil = sunriseHourAngle($lat, $decl, -6.0);
+    $civil_begin = $solarNoon - ($HA_civil * 4) / 1440;
+    $civil_end = $solarNoon + ($HA_civil * 4) / 1440;
+    $HA_nautical = sunriseHourAngle($lat, $decl, -12.0);
+    $nautical_begin = $solarNoon - ($HA_nautical * 4) / 1440;
+    $nautical_end = $solarNoon + ($HA_nautical * 4) / 1440;
+    $HA_astro = sunriseHourAngle($lat, $decl, -18.0);
+    $astro_begin = $solarNoon - ($HA_astro * 4) / 1440;
+    $astro_end = $solarNoon + ($HA_astro * 4) / 1440;
+
+    return ['declination_deg' => $decl, 'equation_of_time_min' => $eqTime, 'sunrise_frac' => $sunrise, 'sunset_frac' => $sunset, 'solar_noon_frac' => $solarNoon, 'daylength_h' => $dayLength, 'civil_begin_frac' => $civil_begin, 'civil_end_frac' => $civil_end, 'nautical_begin_frac' => $nautical_begin, 'nautical_end_frac' => $nautical_end, 'astro_begin_frac' => $astro_begin, 'astro_end_frac' => $astro_end];
+}
+
+function fraction_to_timestamp($date_y, $date_m, $date_d, $frac)
+{
+    $midnight = mktime(0, 0, 0, $date_m, $date_d, $date_y);
+
+    return $midnight + round($frac * 86400);
+}
+
+function calculate_daylight_percentile($target_daylight_hours, $lat, $lon, $year, $utc_offset)
+{
+    $daylight_lengths = [];
+    $days_in_year = (($year % 4 == 0 && $year % 100 != 0) || $year % 400 == 0) ? 366 : 365;
+    for ($day = 1; $day <= $days_in_year; $day++) {
+        $date = new DateTime("$year-01-01");
+        $date->modify('+' . ($day - 1) . ' days');
+        $result = calculate_sun_times((int) $date->format('Y'), (int) $date->format('m'), (int) $date->format('d'), $lat, $lon, $utc_offset);
+        $daylight_lengths[] = $result['daylength_h'];
+    }
     sort($daylight_lengths);
-    
     $count_below = 0;
     foreach ($daylight_lengths as $length) {
-        if ($length < $target_daylight) $count_below++;
+        if ($length < $target_daylight_hours) {
+            $count_below++;
+        }
     }
-    
+
     return round(($count_below / count($daylight_lengths)) * 100, 1);
 }
 
-function calculate_uv_index($lat, $timestamp) {
-    // Simplified UV index calculation based on latitude and day of year
-    // This is an approximation - real UV index requires ozone data, cloud cover, etc.
-    
-    $day_of_year = date('z', $timestamp);
-    $lat_rad = deg2rad($lat);
-    
-    // Solar declination (angle of sun relative to equator)
-    $declination = 23.45 * sin(deg2rad(360/365 * ($day_of_year + 284)));
-    $declination_rad = deg2rad($declination);
-    
-    // Solar noon angle (how high the sun gets at noon)
-    $solar_noon_angle = 90 - abs($lat - $declination);
-    
-    // Base UV calculation (0-11+ scale)
-    // Higher sun angle = more UV
-    if ($solar_noon_angle < 0) {
-        $uv = 0; // Polar night
-    } else {
-        $uv = ($solar_noon_angle / 90) * 11;
-        
-        // Seasonal adjustment
-        // UV is higher in summer, lower in winter
-        $season_factor = 1 + 0.3 * sin(deg2rad(360/365 * ($day_of_year - 80)));
-        $uv *= $season_factor;
-        
-        // Clamp between 0 and 11
-        $uv = max(0, min(11, $uv));
-    }
-    
-    return round($uv, 1);
-}
-
-function get_uv_category($uv_index) {
-    if ($uv_index < 3) return "Low";
-    if ($uv_index < 6) return "Moderate";
-    if ($uv_index < 8) return "High";
-    if ($uv_index < 11) return "Very High";
-    return "Extreme";
-}
-
-function get_location_notes($lat) {
+function get_location_notes($lat)
+{
+    global $STRINGS;
     $notes = [];
-    
-    // Polar regions
     if (abs($lat) > 66.5) {
-        if ($lat > 0) {
-            $notes[] = "⚠️ ARCTIC LOCATION: You experience midnight sun in summer and polar night in winter.";
-        } else {
-            $notes[] = "⚠️ ANTARCTIC LOCATION: You experience midnight sun in summer (Dec-Feb) and polar night in winter (Jun-Aug).";
-        }
+        $notes[] = $lat > 0 ? $STRINGS['location_notes']['arctic'] : $STRINGS['location_notes']['antarctic'];
     }
-    
-    // Near polar circles
     if (abs($lat) > 60 && abs($lat) <= 66.5) {
-        $notes[] = "ℹ️ HIGH LATITUDE: Extreme day length variations throughout the year. Summer has very long days, winter has very short days.";
+        $notes[] = $STRINGS['location_notes']['high_latitude'];
     }
-    
-    // Tropical regions
     if (abs($lat) < 23.5) {
-        $notes[] = "ℹ️ TROPICAL LOCATION: Day length varies minimally throughout the year (within 1-2 hours). Sun passes directly overhead twice per year.";
+        $notes[] = $STRINGS['location_notes']['tropical'];
     }
-    
-    // Equatorial
     if (abs($lat) < 5) {
-        $notes[] = "ℹ️ EQUATORIAL LOCATION: Nearly equal day and night year-round (~12 hours each). Minimal seasonal variation.";
+        $notes[] = $STRINGS['location_notes']['equatorial'];
     }
-    
+
     return $notes;
 }
 
-function get_special_astronomical_events($year) {
-    // Calculate key astronomical events for the year
-    // These are approximations - exact times would require more complex calculations
-    
-    $events = [];
-    
-    // Equinoxes and Solstices (approximate dates)
-    $events[] = [
-        'date' => strtotime("$year-03-20"),
-        'name' => 'March Equinox',
-        'emoji' => '⚖️',
-        'description' => 'Day and night are approximately equal length worldwide. Spring begins in Northern Hemisphere.'
+function get_solstice_dates($year)
+{
+    // Use accurate Meeus algorithm from src/meeus-astronomy.php
+    // Accuracy: ±1 minute (vast improvement over old ±12 hour error!)
+    // Algorithm: Meeus "Astronomical Algorithms" Chapter 27
+
+    $result = calculate_equinox_solstice($year);
+
+    // Return with consistent key naming
+    return [
+        'march_equinox' => $result['march_equinox'],
+        'june_solstice' => $result['june_solstice'],
+        'sept_equinox' => $result['september_equinox'],  // Note: different key name
+        'dec_solstice' => $result['december_solstice'],  // Note: different key name
     ];
-    
-    $events[] = [
-        'date' => strtotime("$year-06-21"),
-        'name' => 'June Solstice',
-        'emoji' => '☀️',
-        'description' => 'Longest day in Northern Hemisphere, shortest in Southern. Summer begins in Northern Hemisphere.'
-    ];
-    
-    $events[] = [
-        'date' => strtotime("$year-09-22"),
-        'name' => 'September Equinox',
-        'emoji' => '⚖️',
-        'description' => 'Day and night are approximately equal length worldwide. Autumn begins in Northern Hemisphere.'
-    ];
-    
-    $events[] = [
-        'date' => strtotime("$year-12-21"),
-        'name' => 'December Solstice',
-        'emoji' => '🌙',
-        'description' => 'Shortest day in Northern Hemisphere, longest in Southern. Winter begins in Northern Hemisphere.'
-    ];
-    
-    return $events;
 }
 
-function get_week_summary_data($week_start, $lat, $lon, $year) {
+function get_special_astronomical_events($year)
+{
+    global $STRINGS;
+    return [
+        ['date' => strtotime("$year-03-20"), 'name' => $STRINGS['astronomical_events']['march_equinox']['name'], 'emoji' => $STRINGS['astronomical_events']['march_equinox']['emoji'], 'description' => $STRINGS['astronomical_events']['march_equinox']['description']],
+        ['date' => strtotime("$year-06-21"), 'name' => $STRINGS['astronomical_events']['june_solstice']['name'], 'emoji' => $STRINGS['astronomical_events']['june_solstice']['emoji'], 'description' => $STRINGS['astronomical_events']['june_solstice']['description']],
+        ['date' => strtotime("$year-09-22"), 'name' => $STRINGS['astronomical_events']['september_equinox']['name'], 'emoji' => $STRINGS['astronomical_events']['september_equinox']['emoji'], 'description' => $STRINGS['astronomical_events']['september_equinox']['description']],
+        ['date' => strtotime("$year-12-21"), 'name' => $STRINGS['astronomical_events']['december_solstice']['name'], 'emoji' => $STRINGS['astronomical_events']['december_solstice']['emoji'], 'description' => $STRINGS['astronomical_events']['december_solstice']['description']],
+    ];
+}
+
+function get_week_summary_data($week_start, $lat, $lon, $year, $utc_offset)
+{
+    global $STRINGS;
     $week_end = strtotime('+6 days', $week_start);
     $day_lengths = [];
     $current = $week_start;
-    
     while ($current <= $week_end) {
-        $sun_info = date_sun_info($current, $lat, $lon);
-        if (isset($sun_info['sunrise']) && isset($sun_info['sunset'])) {
-            $day_lengths[] = [
-                'timestamp' => $current,
-                'length' => $sun_info['sunset'] - $sun_info['sunrise']
-            ];
-        }
+        $date_parts = getdate($current);
+        $result = calculate_sun_times($date_parts['year'], $date_parts['mon'], $date_parts['mday'], $lat, $lon, $utc_offset);
+        $day_lengths[] = ['timestamp' => $current, 'length' => $result['daylength_h'] * 3600];
         $current = strtotime('+1 day', $current);
     }
-    
     if (empty($day_lengths)) {
         return null;
     }
-    
-    // Calculate statistics
     $lengths = array_column($day_lengths, 'length');
     $avg_length = array_sum($lengths) / count($lengths);
     $min_length = min($lengths);
     $max_length = max($lengths);
-    $first_length = $lengths[0];
-    $last_length = end($lengths);
-    $total_change = $last_length - $first_length;
-    
-    // Determine trend
-    if ($total_change > 300) { // > 5 minutes
-        $trend = "Increasing";
-        $trend_emoji = "📈";
+    $total_change = end($lengths) - $lengths[0];
+    if ($total_change > 300) {
+        $trend = $STRINGS['trends']['increasing'];
+        $trend_emoji = $STRINGS['trend_emojis']['increasing'];
     } elseif ($total_change < -300) {
-        $trend = "Decreasing";
-        $trend_emoji = "📉";
+        $trend = $STRINGS['trends']['decreasing'];
+        $trend_emoji = $STRINGS['trend_emojis']['decreasing'];
     } else {
-        $trend = "Stable";
-        $trend_emoji = "➡️";
+        $trend = $STRINGS['trends']['stable'];
+        $trend_emoji = $STRINGS['trend_emojis']['stable'];
     }
-    
-    // Find shortest and longest days
     $shortest_idx = array_search($min_length, $lengths);
     $longest_idx = array_search($max_length, $lengths);
-    
-    // Get moon phase at week start
     $moon_info = get_moon_phase_info($week_start);
-    
-    return [
-        'avg_length' => $avg_length,
-        'min_length' => $min_length,
-        'max_length' => $max_length,
-        'total_change' => $total_change,
-        'trend' => $trend,
-        'trend_emoji' => $trend_emoji,
-        'shortest_day' => $day_lengths[$shortest_idx]['timestamp'],
-        'longest_day' => $day_lengths[$longest_idx]['timestamp'],
-        'moon_phase' => $moon_info['phase_name']
-    ];
+
+    return ['avg_length' => $avg_length, 'min_length' => $min_length, 'max_length' => $max_length, 'total_change' => $total_change, 'trend' => $trend, 'trend_emoji' => $trend_emoji, 'shortest_day' => $day_lengths[$shortest_idx]['timestamp'], 'longest_day' => $day_lengths[$longest_idx]['timestamp'], 'moon_phase' => $moon_info['phase_name']];
 }
 
-function get_moon_phase_info($timestamp) {
-    // Calculate moon phase using astronomical formula
-    $year = date('Y', $timestamp);
-    $month = date('n', $timestamp);
-    $day = date('j', $timestamp);
-    
-    // Convert to Julian Day
-    if ($month <= 2) {
-        $year--;
-        $month += 12;
-    }
-    
-    $a = floor($year / 100);
-    $b = 2 - $a + floor($a / 4);
-    $jd = floor(365.25 * ($year + 4716)) + floor(30.6001 * ($month + 1)) + $day + $b - 1524.5;
-    
-    // Days since known new moon (January 6, 2000)
-    $days_since_new = $jd - 2451549.5;
-    
-    // New moon cycle is approximately 29.53 days
-    $new_moons = $days_since_new / 29.53;
-    $phase = ($new_moons - floor($new_moons));
-    
-    // Calculate illumination percentage
-    $illumination = round((1 - cos($phase * 2 * M_PI)) * 50, 1);
-    
-    // Determine phase name
-    if ($phase < 0.0625 || $phase >= 0.9375) {
-        $phase_name = 'New Moon';
-    } elseif ($phase < 0.1875) {
-        $phase_name = 'Waxing Crescent';
-    } elseif ($phase < 0.3125) {
-        $phase_name = 'First Quarter';
-    } elseif ($phase < 0.4375) {
-        $phase_name = 'Waxing Gibbous';
-    } elseif ($phase < 0.5625) {
-        $phase_name = 'Full Moon';
-    } elseif ($phase < 0.6875) {
-        $phase_name = 'Waning Gibbous';
-    } elseif ($phase < 0.8125) {
-        $phase_name = 'Last Quarter';
-    } else {
-        $phase_name = 'Waning Crescent';
-    }
-    
-    // Find previous and next major phases
-    $phases = [
-        ['name' => 'New Moon', 'phase' => 0],
-        ['name' => 'First Quarter', 'phase' => 0.25],
-        ['name' => 'Full Moon', 'phase' => 0.5],
-        ['name' => 'Last Quarter', 'phase' => 0.75],
-        ['name' => 'New Moon', 'phase' => 1.0]
-    ];
-    
-    $prev_phase = null;
-    $next_phase = null;
-    
-    foreach ($phases as $i => $p) {
-        if ($phase < $p['phase']) {
-            $next_phase = $p;
-            $prev_phase = $phases[$i - 1];
-            break;
-        }
-    }
-    
-    if (!$prev_phase) {
-        $prev_phase = $phases[3]; // Last Quarter
-        $next_phase = $phases[0]; // New Moon
-    }
-    
-    // Calculate dates
-    $days_to_prev = ($phase - $prev_phase['phase']) * 29.53;
-    if ($days_to_prev < 0) $days_to_prev += 29.53;
-    $prev_date = date('j M Y, H:i', $timestamp - ($days_to_prev * 86400));
-    
-    $days_to_next = ($next_phase['phase'] - $phase) * 29.53;
-    if ($days_to_next < 0) $days_to_next += 29.53;
-    $next_date = date('j M Y, H:i', $timestamp + ($days_to_next * 86400));
-    
-    return [
-        'phase_name' => $phase_name,
-        'illumination' => $illumination,
-        'prev_phase' => [
-            'name' => $prev_phase['name'],
-            'date' => $prev_date
-        ],
-        'next_phase' => [
-            'name' => $next_phase['name'],
-            'date' => $next_date
-        ]
-    ];
+function get_moon_phase_info($timestamp)
+{
+    // Use accurate Meeus algorithm from src/meeus-astronomy.php
+    // Accuracy: ±2 minutes (vast improvement over old implementation!)
+    // Algorithm: Meeus "Astronomical Algorithms" Chapter 49
+
+    return get_accurate_moon_phase($timestamp);
 }
 
-function build_dawn_supplemental($sun_info, $time_format, $enabled, $daylight_seconds, $daylight_pct, $daylight_percentile, $day_length_comparison, $moon_info, $current_event) {
-    $total_selected = count(array_filter($enabled));
-    
-    // Only add supplemental if not all 4 options are selected
-    if ($total_selected >= 4) {
-        return "";
+function build_dawn_supplemental($sunrise, $sunset, $solar_noon, $civil_begin, $civil_end, $nautical_begin, $nautical_end, $astro_begin, $astro_end, $time_format, $enabled, $daylight_seconds, $daylight_pct, $daylight_percentile, $day_length_comparison, $winter_comparison, $summer_comparison, $solar_noon_time, $winter_solstice_info, $summer_solstice_info, $diff_from_winter, $diff_from_summer, $current_event, $strings)
+{
+    if (count(array_filter($enabled)) >= 4) {
+        return '';
     }
-    
-    $info = "\\n\\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n";
-    $info .= "☀️ COMPLETE MORNING & DAYTIME SCHEDULE\\n";
-    $info .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n";
-    
-    // Astronomical Dawn
-    if (!$enabled['astro'] && isset($sun_info['astronomical_twilight_begin']) && isset($sun_info['nautical_twilight_begin'])) {
-        $start = date($time_format, $sun_info['astronomical_twilight_begin']);
-        $end = date($time_format, $sun_info['nautical_twilight_begin']);
-        $duration = format_duration($sun_info['nautical_twilight_begin'] - $sun_info['astronomical_twilight_begin']);
-        
-        $bold_start = ($current_event === 'astro') ? "**{$start}**" : $start;
-        
-        $info .= "🌌 ASTRONOMICAL DAWN: {$bold_start} - {$end} ({$duration})\\n";
-        $info .= "   ▸ Before: Complete darkness; optimal astronomy conditions.\\n";
-        $info .= "   ▸ During: Very faint light appears; time to pack up telescopes.\\n";
-        $info .= "   ▸ After: Stars fade and sky lightens; too bright for deep-sky astronomy.\\n\\n";
+    $info = "\n\n{$strings['headers']['daytime_schedule']}\n\n";
+
+    if (!$enabled['astro'] && isset($astro_begin) && isset($nautical_begin)) {
+        $info .= '🌌 Astronomical Dawn: ' . date($time_format, $astro_begin) . ' - ' . date($time_format, $nautical_begin) . ' (' . format_duration($nautical_begin - $astro_begin) . ")\n";
+        $info .= "  {$strings['supplemental']['astronomical_dawn']}\n\n";
     }
-    
-    // Nautical Dawn
-    if (!$enabled['nautical'] && isset($sun_info['nautical_twilight_begin']) && isset($sun_info['civil_twilight_begin'])) {
-        $start = date($time_format, $sun_info['nautical_twilight_begin']);
-        $end = date($time_format, $sun_info['civil_twilight_begin']);
-        $duration = format_duration($sun_info['civil_twilight_begin'] - $sun_info['nautical_twilight_begin']);
-        
-        $bold_start = ($current_event === 'nautical') ? "**{$start}**" : $start;
-        
-        $info .= "⚓ NAUTICAL DAWN: {$bold_start} - {$end} ({$duration})\\n";
-        $info .= "   ▸ Before: Complete darkness with horizon invisible.\\n";
-        $info .= "   ▸ During: Sky brightens but too dark for most activities without light.\\n";
-        $info .= "   ▸ After: Horizon becomes visible at sea; enough light for outdoor activities.\\n\\n";
+
+    if (!$enabled['nautical'] && isset($nautical_begin) && isset($civil_begin)) {
+        $info .= '⚓ Nautical Dawn: ' . date($time_format, $nautical_begin) . ' - ' . date($time_format, $civil_begin) . ' (' . format_duration($civil_begin - $nautical_begin) . ")\n";
+        $info .= "  {$strings['supplemental']['nautical_dawn']}\n\n";
     }
-    
-    // Civil Dawn
-    if (!$enabled['civil'] && isset($sun_info['civil_twilight_begin']) && isset($sun_info['sunrise'])) {
-        $start = date($time_format, $sun_info['civil_twilight_begin']);
-        $end = date($time_format, $sun_info['sunrise']);
-        $duration = format_duration($sun_info['sunrise'] - $sun_info['civil_twilight_begin']);
-        
-        $bold_start = ($current_event === 'civil') ? "**{$start}**" : $start;
-        
-        $info .= "🌅 CIVIL DAWN (First Light): {$bold_start} - {$end} ({$duration})\\n";
-        $info .= "   ▸ Before: Still dark with stars visible and artificial light needed.\\n";
-        $info .= "   ▸ During: Enough light for outdoor activities; blue hour for photography.\\n";
-        $info .= "   ▸ After: Sun's upper edge breaks horizon; full daylight begins.\\n\\n";
+
+    if (!$enabled['civil'] && isset($civil_begin) && isset($sunrise)) {
+        $info .= '🌅 Civil Dawn: ' . date($time_format, $civil_begin) . ' - ' . date($time_format, $sunrise) . ' (' . format_duration($sunrise - $civil_begin) . ")\n";
+        $info .= "  {$strings['supplemental']['civil_dawn']}\n\n";
     }
-    
-    // Daylight info (if Day & Night not selected)
+
     if (!$enabled['daylight']) {
-        $sunrise_time = date($time_format, $sun_info['sunrise']);
-        $sunset_time = date($time_format, $sun_info['sunset']);
-        $solar_noon_time = date($time_format, $sun_info['transit']);
-        $daylight_duration = format_duration($daylight_seconds);
-        
-        $info .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n";
-        $info .= "☀️ DAYLIGHT STATISTICS\\n";
-        $info .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n";
-        $info .= "Duration: {$daylight_duration} ({$daylight_pct}% of day)\\n";
-        $info .= "Period: {$sunrise_time} - {$sunset_time}\\n";
-        $info .= "Percentile: ⊕ {$daylight_percentile}th percentile\\n";
-        $info .= "            ({$daylight_percentile}% of days have less daylight)\\n";
+        $info .= "\n{$strings['headers']['daylight']}\n\n";
+        $info .= "{$strings['labels']['time']}: " . date($time_format, $sunrise) . ' - ' . date($time_format, $sunset) . ' (' . format_duration($daylight_seconds) . ", {$daylight_pct}%)\n";
+        $info .= "{$strings['supplemental']['daylight']}\n\n";
+        $info .= "{$strings['labels']['solar_noon']}: {$solar_noon_time}\n";
+        $info .= "{$strings['labels']['percentile']}: " . sprintf($strings['percentile_explanation']['daylight'], $daylight_percentile, $daylight_percentile) . "\n\n";
         if ($day_length_comparison) {
-            $info .= "vs Yesterday: {$day_length_comparison}\\n";
+            $info .= "{$strings['labels']['vs_yesterday']}: {$day_length_comparison}\n";
         }
-        $info .= "Solar Noon: {$solar_noon_time} (Sun at highest point)\\n\\n";
+        $winter_sign = ($diff_from_winter >= 0) ? '+' : '-';
+        $summer_sign = ($diff_from_summer >= 0) ? '+' : '-';
+        $info .= "{$strings['labels']['vs_winter_solstice']} ({$winter_solstice_info}): {$winter_sign}{$winter_comparison}\n";
+        $info .= "{$strings['labels']['vs_summer_solstice']} ({$summer_solstice_info}): {$summer_sign}{$summer_comparison}\n";
     }
-    
+
     return $info;
 }
 
-function build_dusk_supplemental($sun_info, $next_sun_info, $time_format, $enabled, $night_seconds, $night_pct, $night_percentile, $night_length_comparison, $moon_info, $current_event) {
-    $total_selected = count(array_filter($enabled));
-    
-    // Only add supplemental if not all 4 options are selected
-    if ($total_selected >= 4) {
-        return "";
+function build_dusk_supplemental($sunrise, $sunset, $civil_begin, $civil_end, $nautical_begin, $nautical_end, $astro_begin, $astro_end, $next_astro_begin, $time_format, $enabled, $night_seconds, $night_pct, $night_percentile, $night_length_comparison, $moon_info, $current_event, $strings)
+{
+    if (count(array_filter($enabled)) >= 4) {
+        return '';
     }
-    
-    $info = "\\n\\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n";
-    $info .= "🌙 COMPLETE EVENING & NIGHTTIME SCHEDULE\\n";
-    $info .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n";
-    
-    // Civil Dusk
-    if (!$enabled['civil'] && isset($sun_info['sunset']) && isset($sun_info['civil_twilight_end'])) {
-        $start = date($time_format, $sun_info['sunset']);
-        $end = date($time_format, $sun_info['civil_twilight_end']);
-        $duration = format_duration($sun_info['civil_twilight_end'] - $sun_info['sunset']);
-        
-        $bold_end = ($current_event === 'civil') ? "**{$end}**" : $end;
-        
-        $info .= "🌇 CIVIL DUSK (Last Light): {$start} - {$bold_end} ({$duration})\\n";
-        $info .= "   ▸ Before: Sun above horizon with full daylight.\\n";
-        $info .= "   ▸ During: Sun dips below horizon; golden hour for photography.\\n";
-        $info .= "   ▸ After: Artificial light becomes necessary; bright stars visible.\\n\\n";
+    $info = "\n\n{$strings['headers']['nighttime_schedule']}\n\n";
+
+    if (!$enabled['civil'] && isset($sunset) && isset($civil_end)) {
+        $info .= '🌇 Civil Dusk: ' . date($time_format, $sunset) . ' - ' . date($time_format, $civil_end) . ' (' . format_duration($civil_end - $sunset) . ")\n";
+        $info .= "  {$strings['supplemental']['civil_dusk']}\n\n";
     }
-    
-    // Nautical Dusk
-    if (!$enabled['nautical'] && isset($sun_info['civil_twilight_end']) && isset($sun_info['nautical_twilight_end'])) {
-        $start = date($time_format, $sun_info['civil_twilight_end']);
-        $end = date($time_format, $sun_info['nautical_twilight_end']);
-        $duration = format_duration($sun_info['nautical_twilight_end'] - $sun_info['civil_twilight_end']);
-        
-        $bold_end = ($current_event === 'nautical') ? "**{$end}**" : $end;
-        
-        $info .= "⚓ NAUTICAL DUSK: {$start} - {$bold_end} ({$duration})\\n";
-        $info .= "   ▸ Before: Still enough natural light for outdoor activities.\\n";
-        $info .= "   ▸ During: Sky darkens considerably; more stars become visible.\\n";
-        $info .= "   ▸ After: Horizon fades from view; artificial light necessary for activities.\\n\\n";
+
+    if (!$enabled['nautical'] && isset($civil_end) && isset($nautical_end)) {
+        $info .= '⚓ Nautical Dusk: ' . date($time_format, $civil_end) . ' - ' . date($time_format, $nautical_end) . ' (' . format_duration($nautical_end - $civil_end) . ")\n";
+        $info .= "  {$strings['supplemental']['nautical_dusk']}\n\n";
     }
-    
-    // Astronomical Dusk
-    if (!$enabled['astro'] && isset($sun_info['nautical_twilight_end']) && isset($sun_info['astronomical_twilight_end'])) {
-        $start = date($time_format, $sun_info['nautical_twilight_end']);
-        $end = date($time_format, $sun_info['astronomical_twilight_end']);
-        $duration = format_duration($sun_info['astronomical_twilight_end'] - $sun_info['nautical_twilight_end']);
-        
-        $bold_end = ($current_event === 'astro') ? "**{$end}**" : $end;
-        
-        $info .= "🌌 ASTRONOMICAL DUSK: {$start} - {$bold_end} ({$duration})\\n";
-        $info .= "   ▸ Before: Very dark with most stars visible and faint sky glow.\\n";
-        $info .= "   ▸ During: Last traces of sunlight fade; Milky Way becomes visible.\\n";
-        $info .= "   ▸ After: Complete darkness; optimal astronomy conditions.\\n\\n";
+
+    if (!$enabled['astro'] && isset($nautical_end) && isset($astro_end)) {
+        $info .= '🌌 Astronomical Dusk: ' . date($time_format, $nautical_end) . ' - ' . date($time_format, $astro_end) . ' (' . format_duration($astro_end - $nautical_end) . ")\n";
+        $info .= "  {$strings['supplemental']['astronomical_dusk']}\n\n";
     }
-    
-    // Night info (if Day & Night not selected)
-    if (!$enabled['daylight'] && isset($sun_info['astronomical_twilight_end']) && isset($next_sun_info['astronomical_twilight_begin'])) {
-        $night_start = date($time_format, $sun_info['astronomical_twilight_end']);
-        $night_end = date($time_format, $next_sun_info['astronomical_twilight_begin']);
-        $night_duration = format_duration($night_seconds);
-        
-        $solar_midnight = $sun_info['astronomical_twilight_end'] + (($next_sun_info['astronomical_twilight_begin'] - $sun_info['astronomical_twilight_end']) / 2);
-        $solar_midnight_time = date($time_format, $solar_midnight);
-        
-        $info .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n";
-        $info .= "🌙 NIGHT STATISTICS\\n";
-        $info .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n";
-        $info .= "Duration: {$night_duration} ({$night_pct}% of day)\\n";
-        $info .= "Period: {$night_start} - {$night_end}\\n";
-        $info .= "Percentile: ⊕ {$night_percentile}th percentile\\n";
-        $info .= "            ({$night_percentile}% of nights are longer)\\n";
+
+    if (!$enabled['daylight'] && isset($astro_end) && isset($next_astro_begin)) {
+        $solar_midnight = $astro_end + (($next_astro_begin - $astro_end) / 2);
+        $info .= "\n{$strings['headers']['night']}\n\n";
+        $info .= "{$strings['labels']['time']}: " . date($time_format, $astro_end) . ' - ' . date($time_format, $next_astro_begin) . ' (' . format_duration($night_seconds) . ", {$night_pct}%)\n";
+        $info .= "{$strings['supplemental']['night']}\n\n";
+        $info .= "{$strings['labels']['solar_midnight']}: " . date($time_format, $solar_midnight) . "\n";
+        $info .= "{$strings['labels']['percentile']}: " . sprintf($strings['percentile_explanation']['night'], $night_percentile, $night_percentile) . "\n\n";
         if ($night_length_comparison) {
-            $info .= "vs Yesterday: {$night_length_comparison}\\n";
+            $info .= "{$strings['labels']['vs_yesterday']}: {$night_length_comparison}\n\n";
         }
-        $info .= "Solar Midnight: {$solar_midnight_time} (Darkest point)\\n\\n";
-        
-        $info .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n";
-        $info .= "🌙 MOON PHASE\\n";
-        $info .= "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n";
-        $info .= "Current: {$moon_info['phase_name']} ({$moon_info['illumination']}% illuminated)\\n";
-        $info .= "Previous: {$moon_info['prev_phase']['name']} - {$moon_info['prev_phase']['date']}\\n";
-        $info .= "Next: {$moon_info['next_phase']['name']} - {$moon_info['next_phase']['date']}\\n\\n";
+        $info .= "{$strings['headers']['moon_phase']}\n\n";
+        $info .= "{$strings['labels']['current']}:  {$moon_info['phase_name']}\n";
+        $info .= "          " . sprintf($strings['comparisons']['lit'], $moon_info['illumination']) . "\n\n";
+        $info .= "{$strings['labels']['previous']}: {$moon_info['prev_phase']['name']}\n";
+        $info .= "          {$moon_info['prev_phase']['date']}\n\n";
+        $info .= "{$strings['labels']['next']}:     {$moon_info['next_phase']['name']}\n";
+        $info .= "          {$moon_info['next_phase']['date']}\n";
     }
-    
+
     return $info;
 }
 
-// Handle geocoding requests
 if (isset($_GET['geocode']) && isset($_GET['address'])) {
     header('Content-Type: application/json');
-    
     $address = sanitize_text($_GET['address'], 200);
-    
-    $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
-        'q' => $address,
-        'format' => 'json',
-        'limit' => 1,
-        'addressdetails' => 1
-    ]);
-    
-    $opts = [
-        'http' => [
-            'header' => 'User-Agent: Sun-Twilight-Calendar/7.0'
-        ]
-    ];
+    $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query(['q' => $address, 'format' => 'json', 'limit' => 1, 'addressdetails' => 1]);
+    $opts = ['http' => ['header' => 'User-Agent: Sun-Twilight-Calendar/7.3']];
     $context = stream_context_create($opts);
     $response = @file_get_contents($url, false, $context);
-    
     if ($response) {
         $data = json_decode($response, true);
-        if (!empty($data)) {
-            echo json_encode([
-                'success' => true,
-                'lat' => $data[0]['lat'],
-                'lon' => $data[0]['lon'],
-                'display_name' => $data[0]['display_name']
-            ]);
-        } else {
-            echo json_encode(['success' => false, 'error' => 'Location not found']);
-        }
+        echo json_encode(!empty($data) ? ['success' => true, 'lat' => $data[0]['lat'], 'lon' => $data[0]['lon'], 'display_name' => $data[0]['display_name']] : ['success' => false, 'error' => 'Location not found']);
     } else {
-        echo json_encode(['success' => false, 'error' => 'Geocoding service unavailable']);
+        echo json_encode(['success' => false, 'error' => 'Geocoding unavailable']);
     }
     exit;
 }
 
-// Handle reverse geocoding requests
 if (isset($_GET['reverse']) && isset($_GET['lat']) && isset($_GET['lon'])) {
     header('Content-Type: application/json');
-    
     $lat = sanitize_float($_GET['lat'], 0, -90, 90);
     $lon = sanitize_float($_GET['lon'], 0, -180, 180);
-    
-    $url = 'https://nominatim.openstreetmap.org/reverse?' . http_build_query([
-        'lat' => $lat,
-        'lon' => $lon,
-        'format' => 'json',
-        'zoom' => 10
-    ]);
-    
-    $opts = [
-        'http' => [
-            'header' => 'User-Agent: Sun-Twilight-Calendar/7.0'
-        ]
-    ];
+    $url = 'https://nominatim.openstreetmap.org/reverse?' . http_build_query(['lat' => $lat, 'lon' => $lon, 'format' => 'json', 'zoom' => 10]);
+    $opts = ['http' => ['header' => 'User-Agent: Sun-Twilight-Calendar/7.3']];
     $context = stream_context_create($opts);
     $response = @file_get_contents($url, false, $context);
-    
     if ($response) {
         $data = json_decode($response, true);
         if (!empty($data)) {
             $address = $data['address'];
             $name_parts = [];
-            
-            if (!empty($address['city'])) $name_parts[] = $address['city'];
-            elseif (!empty($address['town'])) $name_parts[] = $address['town'];
-            elseif (!empty($address['village'])) $name_parts[] = $address['village'];
-            elseif (!empty($address['municipality'])) $name_parts[] = $address['municipality'];
-            
-            if (!empty($address['state'])) $name_parts[] = $address['state'];
-            elseif (!empty($address['province'])) $name_parts[] = $address['province'];
-            
-            $location_name = !empty($name_parts) ? implode(', ', $name_parts) : $data['display_name'];
-            
-            echo json_encode([
-                'success' => true,
-                'name' => $location_name
-            ]);
+            if (!empty($address['city'])) {
+                $name_parts[] = $address['city'];
+            } elseif (!empty($address['town'])) {
+                $name_parts[] = $address['town'];
+            } elseif (!empty($address['village'])) {
+                $name_parts[] = $address['village'];
+            } elseif (!empty($address['municipality'])) {
+                $name_parts[] = $address['municipality'];
+            }
+            if (!empty($address['state'])) {
+                $name_parts[] = $address['state'];
+            } elseif (!empty($address['province'])) {
+                $name_parts[] = $address['province'];
+            }
+            echo json_encode(['success' => true, 'name' => !empty($name_parts) ? implode(', ', $name_parts) : $data['display_name']]);
         } else {
             echo json_encode(['success' => false]);
         }
@@ -626,37 +513,29 @@ if (isset($_GET['reverse']) && isset($_GET['lat']) && isset($_GET['lon'])) {
     exit;
 }
 
-// Handle calendar feed requests
 if (isset($_GET['feed']) && isset($_GET['token'])) {
-    require_once __DIR__ . '/calendar-generator.php';
+    require_once __DIR__ . '/src/calendar-generator.php';
     exit;
 }
 
-// Handle form submission
 if (isset($_POST['generate_url']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
     if (!verify_token($password)) {
         $error = 'Invalid password';
     } else {
-        $params = [
-            'feed' => '1',
-            'token' => AUTH_TOKEN,
-            'lat' => $_POST['lat'] ?? 41.9028,
-            'lon' => $_POST['lon'] ?? 12.4964,
-            'elev' => $_POST['elevation'] ?? 21,
-            'zone' => $_POST['zone'] ?? 'Europe/Rome',
-            'location' => $_POST['location'] ?? '',
-            'rise_off' => $_POST['rise_off'] ?? 0,
-            'set_off' => $_POST['set_off'] ?? 0,
-            'twelve' => isset($_POST['twelve']) ? '1' : '0',
-            'desc' => $_POST['description'] ?? '',
-        ];
-
-        if (isset($_POST['civil'])) $params['civil'] = '1';
-        if (isset($_POST['nautical'])) $params['nautical'] = '1';
-        if (isset($_POST['astro'])) $params['astro'] = '1';
-        if (isset($_POST['daynight'])) $params['daynight'] = '1';
-
+        $params = ['feed' => '1', 'token' => AUTH_TOKEN, 'lat' => $_POST['lat'] ?? 41.9028, 'lon' => $_POST['lon'] ?? 12.4964, 'zone' => $_POST['zone'] ?? 'Europe/Rome', 'location' => $_POST['location'] ?? '', 'rise_off' => $_POST['rise_off'] ?? 0, 'set_off' => $_POST['set_off'] ?? 0, 'desc' => $_POST['description'] ?? ''];
+        if (isset($_POST['civil'])) {
+            $params['civil'] = '1';
+        }
+        if (isset($_POST['nautical'])) {
+            $params['nautical'] = '1';
+        }
+        if (isset($_POST['astro'])) {
+            $params['astro'] = '1';
+        }
+        if (isset($_POST['daynight'])) {
+            $params['daynight'] = '1';
+        }
         $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
         $host = $_SERVER['HTTP_HOST'];
         $script = $_SERVER['SCRIPT_NAME'];
@@ -665,11 +544,9 @@ if (isset($_POST['generate_url']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-putenv("TZ=Europe/Rome");
+putenv('TZ=Europe/Rome');
 date_default_timezone_set('Europe/Rome');
 $default_lat = 41.9028;
 $default_lon = 12.4964;
-$sun_info = date_sun_info(time(), $default_lat, $default_lon);
 
-require_once __DIR__ . '/index.html.php';
-?>
+require_once __DIR__ . '/assets/index.html.php';

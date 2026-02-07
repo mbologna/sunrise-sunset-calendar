@@ -1,261 +1,337 @@
-# Enhanced Sun & Twilight Calendar Generator
+# Sun & Twilight Calendar Generator
 
-A PHP-based tool that generates dynamic iCalendar feeds with comprehensive sun position data, moon phases, and day length tracking for any location worldwide. Perfect for photographers, astronomers, outdoor enthusiasts, or anyone who wants automated sunrise/sunset/twilight notifications in their calendar app.
+[![PHP Version](https://img.shields.io/badge/PHP-7.4%2B-blue.svg)](https://www.php.net/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Current Version: 6.0** - Moon phases, day length comparison, enhanced descriptions
-
-## What's New in Version 6.0
-
-- 🌙 **Moon Phase Information**: Night events now include current moon phase, illumination percentage, and dates of previous/next phases
-- 📊 **Day Length Comparison**: See how today's daylight compares to yesterday (+2m 27s longer, etc.)
-- 📝 **Enhanced Descriptions**: More concise and informative event descriptions with BEFORE, DURING, and AFTER explanations
-- 🔄 **Reorganized Supplemental Info**: Daylight and Night information now appears after twilight events in supplemental sections
-- ✨ **Uniform Formatting**: Consistent formatting across all event types for easier reading
+A high-precision iCalendar feed generator for sunrise, sunset, and twilight times using the full NREL SPA (Solar Position Algorithm). Subscribe in any calendar app for daily solar event notifications.
 
 ## Features
 
-- ðŸŒ… **Multiple Event Types**: Civil, Nautical, and Astronomical twilight periods plus full day/night cycles
-- ðŸ"Š **Detailed Statistics**: Daylight duration, percentages, yearly percentiles, and day-to-day comparisons
-- 🌙 **Moon Phase Tracking**: Current phase, illumination, and dates of upcoming lunar events
-- ðŸ§  **Smart Single-Event Mode**: Select just one event type to get a clean calendar with all sun data in event notes
-- ðŸŒ **Any Location**: Works worldwide with latitude/longitude coordinates
-- â° **Custom Offsets**: Set reminders before/after actual sun events
-- ðŸ• **12/24 Hour Format**: Choose your preferred time display
-- ðŸ"„ **Auto-Updates**: Calendar refreshes daily with new events
-- ðŸ"' **Secure**: Password-protected with externalized configuration
-- ðŸ"± **Universal**: Works with Google Calendar, Apple Calendar, Outlook, and any iCal-compatible app
-
-## What You Get
-
-### Event Types (Select Any Combination):
-
-1. **ðŸŒŒ Astronomical Dawn/Dusk** - When stars appear/disappear (Sun 12-18Â° below horizon)
-2. **âš" Nautical Dawn/Dusk** - When horizon becomes visible/invisible at sea (Sun 6-12Â° below horizon)
-3. **ðŸŒ… Civil Dawn/Dusk** - First light to sunrise, sunset to last light (Sun 0-6Â° below horizon)
-4. **â˜€ï¸ Day & Night** - Complete daylight period + full night with statistics
-
-### Each Event Includes:
-
-- **BEFORE/DURING/AFTER descriptions** explaining what happens at each stage
-- **Concise explanations** - one sentence per stage for easy reading
-- **Solar events** (solar noon for day, solar midnight for night)
-- **Statistics** (duration, percentage of day, yearly percentile ranking)
-- **Day length comparison** (e.g., "+2m 27s longer than yesterday")
-- **Moon information** (phase, illumination, upcoming phase changes - in Night events)
-- **Complete sun schedule** (when selecting only one event type)
+- **High-Precision Solar Calculations** - Full NREL SPA algorithm accurate to ±30 seconds
+- **Multiple Twilight Types** - Civil, nautical, and astronomical twilight events
+- **Smart Supplemental Data** - Complete solar schedule in event notes when fewer types selected
+- **Day Length Statistics** - Percentiles, solstice comparisons, yearly trends
+- **Moon Phase Information** - Integrated lunar phase data
+- **Week Summaries** - Weekly daylight overviews every Sunday
+- **Location-Aware** - Special notes for polar, tropical, and equatorial regions
+- **Secure** - Token-based authentication
+- **Universal Format** - iCalendar (ICS) compatible with all calendar apps
 
 ## Quick Start
 
-### 1. Installation
-
 ```bash
-# Clone repository
+# Clone
 git clone https://github.com/yourusername/sun-twilight-calendar.git
 cd sun-twilight-calendar
 
-# Create config from example
-cp config.example.php config.php
+# Install dependencies
+composer install
 
-# Generate secure token (Linux/Mac)
-openssl rand -hex 32
+# Configure
+cp config/config.example.php config/config.php
+openssl rand -hex 32  # Generate secure token
+# Edit config/config.php and add token
 
-# Edit config.php and set your AUTH_TOKEN
-nano config.php
+# Deploy to web server and access via browser
 ```
 
-Your `config.php`:
-```php
-<?php
-define('AUTH_TOKEN', 'your_secure_random_token_here');
-define('CALENDAR_WINDOW_DAYS', 365);  // Days to generate
-define('UPDATE_INTERVAL', 86400);      // Refresh every 24 hours
-```
+## Requirements
 
-### 2. Deploy
+- PHP 7.4 or higher
+- Composer (dependency management)
+- Web server (Apache, Nginx)
+- HTTPS recommended
 
-Upload to your web server with PHP support (7.4+). Ensure `config.php` is not web-accessible or in `.gitignore`.
+## Installation
+
+### 1. Install Dependencies
 
 ```bash
-# Set permissions
-chmod 644 *.php
-chmod 600 config.php
+composer install
 ```
 
-### 3. Generate Calendar
+### 2. Configure
 
-1. Navigate to `https://yourdomain.com/sunrise-sunset-calendar.php`
-2. Enter your password (same as AUTH_TOKEN)
-3. Set your location (or click "Use My Current Location")
-4. Select event types - **Pro tip:** Select only ONE for a clean calendar with complete info
-5. Click "Generate Subscription URL"
+Edit `config/config.php`:
 
-### 4. Subscribe in Your Calendar App
+```php
+<?php
+define('AUTH_TOKEN', 'your-secure-random-string');  // Required
+define('CALENDAR_WINDOW_DAYS', 365);                // Optional
+define('UPDATE_INTERVAL', 86400);                   // Optional (24h)
+?>
+```
+
+### 2. Web Server Setup
+
+**Apache** - Add to `.htaccess`:
+```apache
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^(.*)$ sunrise-sunset-calendar.php [QSA,L]
+```
+
+**Nginx** - Add to server block:
+```nginx
+location / {
+    try_files $uri $uri/ /sunrise-sunset-calendar.php?$args;
+}
+```
+
+### 3. Access
+
+Navigate to `https://yourdomain.com/sunrise-sunset-calendar.php`
+
+## Usage
+
+### Web Interface
+
+1. Enter password (AUTH_TOKEN)
+2. Set location and preferences
+3. Generate subscription URL
+4. Add to calendar app
+
+### API Parameters
+
+```
+https://yourdomain.com/sunrise-sunset-calendar.php?
+  feed=1&                    # Required
+  token=YOUR_TOKEN&          # Required
+  lat=45.68&                 # Required (-90 to 90)
+  lon=9.55&                  # Required (-180 to 180)
+  zone=Europe/Rome&          # Required (PHP timezone)
+  civil=1&                   # Optional (include civil twilight)
+  nautical=1&                # Optional (include nautical twilight)
+  astro=1&                   # Optional (include astronomical twilight)
+  daynight=1&                # Optional (include day/night with stats)
+  location=MyCity&           # Optional (calendar title)
+  rise_off=0&                # Optional (morning offset minutes)
+  set_off=0&                 # Optional (evening offset minutes)
+  desc=Note                  # Optional (custom note in all events)
+```
+
+### Subscribe in Calendar Apps
 
 **Google Calendar:**
-1. Copy the subscription URL
-2. Google Calendar â†' "+" next to Other calendars â†' From URL
-3. Paste URL â†' Add calendar
+1. Copy webcal:// URL
+2. Settings → Add calendar → From URL → Paste
 
 **Apple Calendar:**
-1. Copy the webcal:// URL
-2. File â†' New Calendar Subscription â†' Paste URL
+1. File → New Calendar Subscription → Paste URL
 
 **Outlook:**
-1. Copy URL
-2. Add calendar â†' Subscribe from web â†' Paste URL
+1. Calendar → Add Calendar → From Internet → Paste https:// URL
 
-## Configuration Options
+## Event Types
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `lat` | Latitude (-90 to 90) | 41.9028 (Rome) |
-| `lon` | Longitude (-180 to 180) | 12.4964 (Rome) |
-| `elev` | Elevation in meters | 21 |
-| `zone` | Timezone | Europe/Rome |
-| `rise_off` | Morning event offset (minutes) | 0 |
-| `set_off` | Evening event offset (minutes) | 0 |
-| `twelve` | Use 12-hour format | 0 (24-hour) |
-| `civil` | Include civil twilight | 0 |
-| `nautical` | Include nautical twilight | 0 |
-| `astro` | Include astronomical twilight | 0 |
-| `sun` | Include day/night events | 0 |
-| `desc` | Custom description | Empty |
+| Type | Sun Angle | Description |
+|------|-----------|-------------|
+| ☀️ **Civil** | 0° to -6° | Outdoor activities, blue hour photography |
+| ⚓ **Nautical** | -6° to -12° | Horizon visible, marine navigation |
+| 🌌 **Astronomical** | -12° to -18° | Darkest twilight, astronomy begins/ends |
+| ☀️ **Daylight** | Above 0° | Full sun with statistics & percentiles |
+| 🌙 **Night** | Below -18° | Complete darkness with moon phases |
 
-## Smart Single-Event Mode
+## Development
 
-**The Secret Sauce:** When you select only ONE event type, all other sun times and statistics are automatically included in each event's description!
+### Run Tests
 
-**Example:** Select only "Civil Dawn/Dusk" â†' You get:
-- Clean calendar with just 2 events per day (dawn and dusk)
-- Each event contains: astronomical dawn, nautical dawn, sunrise, solar noon, sunset, nautical dusk, astronomical dusk
-- Plus complete daylight/night statistics
-- Moon phase information in evening events
-- Day length comparison with yesterday
-- All with emojis and concise descriptions for easy reading
+```bash
+# Run all PHPUnit tests
+./vendor/bin/phpunit
 
-Perfect for minimalist calendars with maximum information!
+# Run specific test suites
+./vendor/bin/phpunit --testsuite Unit           # Unit tests
+./vendor/bin/phpunit --testsuite Integration     # Integration tests
+./vendor/bin/phpunit --testsuite Reference       # Reference data validation
 
-## Understanding the Events
+# Run tests with detailed output
+./vendor/bin/phpunit --testdox
 
-### Dawn â†' Dusk Progression:
-```
-ðŸŒŒ Astronomical Dawn  â†' Stars fade, first light appears
-âš" Nautical Dawn       â†' Horizon becomes visible
-ðŸŒ… Civil Dawn          â†' Enough light for activities (First Light)
-â˜€ï¸ Sunrise            â†' Sun breaks horizon
-â˜€ï¸ Solar Noon         â†' Sun at highest point
-â˜€ï¸ Sunset             â†' Sun dips below horizon
-ðŸŒ‡ Civil Dusk          â†' Artificial light needed (Last Light)
-âš" Nautical Dusk       â†' Horizon fades from view
-ðŸŒŒ Astronomical Dusk   â†' Complete darkness
-ðŸŒ™ Night              â†' Optimal stargazing with moon phase info
+# Run comprehensive test suite (includes linting, syntax checks, PHPUnit tests)
+./tools/run-tests.sh
 ```
 
-## Moon Phase Information
+Test suites:
+- **Unit**: Solar calculations, percentiles, formatting, sanitization
+- **Integration**: iCalendar generation, RFC 5545 compliance
+- **Reference**: Real-world validation against authoritative sources (timeanddate.com, NOAA)
 
-Night events now include comprehensive moon data:
-- **Current Phase**: New Moon, Waxing Crescent, First Quarter, etc.
-- **Illumination**: Percentage of moon visible (0-100%)
-- **Previous Phase**: Date and time of last major phase
-- **Next Phase**: Date and time of upcoming major phase
+### Code Linting
 
-Example:
+```bash
+# Syntax check
+php -l sunrise-sunset-calendar.php
+
+# PSR-12 standard
+phpcs --standard=PSR12 *.php
+
+# Auto-fix
+phpcbf --standard=PSR12 *.php
 ```
-🌙 MOON: Waxing Gibbous (67.5% illuminated)
-   First Quarter: 26 Jan 2026, 05:47 (Previous Phase)
-   Full Moon: 1 Feb 2026, 23:09 (Next Phase)
+
+### Project Structure
+
+```
+.
+├── sunrise-sunset-calendar.php  # Main app + solar calculations
+├── assets/                      # Frontend assets
+│   ├── script.js               # Frontend JS
+│   ├── styles.css              # Styling
+│   └── index.html.php          # Web UI template
+├── src/                        # PHP source libraries
+│   ├── calendar-generator.php  # iCal event generator
+│   └── strings.php            # Localized text/strings
+├── config/                     # Configuration
+│   ├── config.example.php     # Config template
+│   └── config.php             # Actual config (gitignored)
+├── tests/                      # PHPUnit test suite
+│   ├── bootstrap.php          # PHPUnit bootstrap
+│   ├── BaseTest.php           # Base test class
+│   ├── Unit/                  # Unit tests
+│   │   ├── SolarCalculationsTest.php
+│   │   └── PercentileCalculationsTest.php
+│   ├── Integration/           # Integration tests
+│   │   └── ICalFormatTest.php
+│   ├── Reference/             # Reference data validation
+│   │   └── MapelloReferenceTest.php
+│   ├── Fixtures/              # Test data
+│   │   └── ReferenceLocations.php
+│   └── run-tests.php          # Legacy test runner
+├── tools/                      # Development tools
+│   ├── validate-ical.php      # iCal validator
+│   ├── validate-project.php   # Project validator
+│   └── run-tests.sh           # Full test runner
+├── .github/
+│   └── workflows/
+│       └── ci.yml             # CI pipeline
+├── .editorconfig
+├── .gitignore
+├── .php-cs-fixer.php          # Fixer config
+├── phpcs.xml                  # Linter config
+├── LICENSE
+├── README.md
+└── CLAUDE.md                  # Development guide
 ```
 
-## Day Length Tracking
+## Solar Calculations
 
-Each day's events now show how daylight duration compares to the previous day:
-- **+2m 27s longer** - Days are getting longer (spring/summer approach)
-- **-1m 45s shorter** - Days are getting shorter (fall/winter approach)
-- **same length as yesterday** - Near equinox or solstice
+Uses the full NREL SPA (Solar Position Algorithm) via `abbadon1334/sun-position-spa-php`:
 
-This helps you track the progression of seasons and plan accordingly!
+- **Algorithm**: NREL SPA by Ibrahim Reda & Afshin Andreas (2008 paper)
+- **Accuracy**: ±30 seconds for solar event times
+- **Precision**: ±0.0003° for solar positions
+- **Date Range**: Valid for years -2000 to 6000
+- **Twilight Angles**: Civil (-6°), Nautical (-12°), Astronomical (-18°)
+- **Refraction**: Standard atmospheric model (0.833° for sunrise/sunset)
 
-## Security
+This is the same algorithm used by NREL for authoritative solar research.
 
-- **Keep AUTH_TOKEN secret** - Never commit `config.php` to version control
-- **Use HTTPS** - Required by most calendar apps
-- **Unique tokens** - Generate a different token for each installation
-- **No data storage** - Everything calculated on-demand, nothing logged
+## Percentile Algorithm
+
+Shows where today's day length ranks among all 365 days:
+
+```
+percentile = (count of days with less daylight / 365) × 100
+```
+
+- **0th** - Shortest day (winter solstice)
+- **50th** - Median day length (near equinoxes)
+- **100th** - Longest day (summer solstice)
+
+**Note**: The percentile is calculated using the actual day length distribution for the entire year at your location. Results may differ from simplified estimates because they account for the full solar position throughout the year.
 
 ## Troubleshooting
 
-**Calendar not updating?**
-- Wait 24 hours for refresh or remove/re-add subscription
-- Check URL is still accessible in browser
+**Q: Calendar not updating?**
+A: Check UPDATE_INTERVAL in config/config.php, force refresh in calendar app
 
-**Wrong times?**
-- Verify coordinates and timezone are correct
-- Times calculated using PHP's astronomical algorithms (may differ slightly from other sources)
+**Q: Times off by 30+ seconds?**
+A: Check timezone is correct. Small variations can occur due to atmospheric refraction
 
-**Events not appearing?**
-- Ensure at least one event type is selected
-- Check calendar is visible/enabled in your app
-- Wait 5-10 minutes for initial sync
+**Q: Wrong percentile?**  
+A: Verify timezone, latitude, and longitude are correct
 
-**PHP errors?**
-```bash
-php -l sunrise-sunset-calendar.php  # Check syntax
-tail -f /var/log/nginx/error.log    # Check server logs
-```
+**Q: No events appear?**  
+A: Check token, ensure PHP 7.4+, review web server error logs
 
-## Finding Your Coordinates
+**Q: "Invalid token" error?**
+A: Verify token matches exactly in config/config.php and URL
 
-- **Web interface**: Click "Use My Current Location"
-- **Google Maps**: Right-click anywhere â†' coordinates appear
-- **Format**: Decimal degrees (e.g., 41.9028, 12.4964)
+## Security
 
-## Technical Details
+- Use strong random tokens (32+ characters)
+- Enable HTTPS in production
+- Rotate tokens periodically
+- Set restrictive file permissions:
+  ```bash
+  chmod 600 config/config.php
+  ```
+- Never commit config/config.php to version control
 
-- **Language**: PHP 7.4+
-- **Format**: iCalendar (RFC 5545)
-- **Calculations**: PHP `date_sun_info()` function
-- **Moon phases**: Astronomical formula based on synodic month (29.53 days)
-- **Performance**: <100ms for 365 days
-- **Storage**: Stateless, no database required
+## Performance
 
-## Example Use Cases
-
-- **Photographer**: Civil twilight only for golden/blue hour planning, track moon phases for night photography
-- **Astronomer**: Astronomical twilight + night for optimal observation windows with moon phase tracking
-- **Outdoor enthusiast**: All twilights for complete day planning with day length trends
-- **Minimalist**: Any single event type for clean calendar with full data in notes
-- **Lunar observer**: Night events for comprehensive moon phase information and predictions
-
-## Version History
-
-### Version 6.0 (2026)
-- Added moon phase information to night events
-- Day length comparison with previous day
-- Enhanced BEFORE/DURING/AFTER descriptions
-- Reorganized supplemental information
-- Uniform formatting across event types
-
-### Version 5.3 (2025)
-- Redesigned event structure with smart supplemental information
-- Dawn/Dusk naming convention
-- Enhanced statistics
-
-### Version 5.1 (2025)
-- Smart single-event mode
-- Improved event naming
-
-## License
-
-Free to use and modify. Originally by pdxvr, enhanced 2025-2026.
-
-## Support
-
-Check PHP error logs and verify configuration. The script is self-contained and requires minimal setup when properly configured.
+- **Generation**: <100ms for 365-day calendar
+- **Memory**: ~2-5 MB per request
+- **Bandwidth**: ~50-100 KB per feed
 
 ## Contributing
 
-Contributions welcome! Please ensure:
-- Moon phase calculations remain accurate
-- Day length comparisons handle edge cases (solstices, equinoxes)
-- Event descriptions remain concise and informative
-- Code follows existing formatting conventions
+1. Fork repository
+2. Create feature branch
+3. Make changes
+4. Run tests: `php tests/run-tests.php`
+5. Run linter: `phpcs --standard=PSR12 *.php`
+6. Commit with clear message
+7. Open Pull Request
+
+**Coding Standards**: PSR-12, meaningful names, documented functions
+
+## Known Limitations
+
+- Polar regions during polar day/night may have missing events
+- Atmospheric refraction uses standard model (not location-specific)
+- Elevation parameter removed in v8.0 (was never used in calculations)
+
+## License
+
+MIT License - see [LICENSE](LICENSE)
+
+## Acknowledgments
+
+- NREL Solar Position Algorithm
+- Jean Meeus - Astronomical Algorithms
+- OpenStreetMap Nominatim (geocoding)
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/yourusername/sun-twilight-calendar/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/sun-twilight-calendar/discussions)
+
+## Changelog
+
+### v8.0.0 (2026-02-01)
+- ✨ **Full NREL SPA algorithm** via external library (±30 second accuracy)
+- 📦 First Composer dependency: `abbadon1334/sun-position-spa-php`
+- 🗑️ Removed altitude/elevation parameter from UI (kept in API for backward compatibility)
+- ✅ Added MapelloReferenceTest.php for real-world validation
+- ⬆️ Improved accuracy from ±1-2 minutes to ±30 seconds
+- ♻️ Maintained backward compatibility with existing calendar URLs
+
+### v7.3.0 (2026-01-29)
+- ✨ High-precision NREL SPA-inspired calculations
+- ✨ Accurate percentile algorithm
+- ✨ Solstice comparisons in all events
+- ✨ Smart supplemental information
+- ✨ Week summaries & moon phases
+- ♻️ Clean refactored codebase
+- ✅ Comprehensive test suite
+- 🐛 Fixed percentile using hours not seconds
+- 🗑️ Removed unreliable UV index
+- 🕐 Always 24-hour format
+
+---
+
+**⭐ Star this repo if you find it useful!**
+
+Made with ☀️ for photographers, astronomers, and solar enthusiasts.

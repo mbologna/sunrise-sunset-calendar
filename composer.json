@@ -1,0 +1,27 @@
+{
+    "name": "michele/sunrise-sunset-calendar",
+    "description": "High-precision iCalendar feed generator for sunrise, sunset, and twilight times using NREL SPA algorithms",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": "^7.4 || ^8.0",
+        "abbadon1334/sun-position-spa-php": "^1.0"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^1.0",
+        "phpunit/phpunit": "^9.6 || ^10.0",
+        "squizlabs/php_codesniffer": "^3.7"
+    },
+    "autoload": {
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "sort-packages": true
+    }
+}

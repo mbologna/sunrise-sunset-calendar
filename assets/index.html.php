@@ -1,3 +1,7 @@
+<?php
+// This file is included by sunrise-sunset-calendar.php
+// It displays the web interface for generating calendar URLs
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -5,27 +9,50 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Enhanced Sun & Twilight Calendar</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="assets/styles.css">
 </head>
 
 <body>
     <div class="container">
-        <h1>🌅 Enhanced Sun & Twilight Calendar</h1>
+        <h1>🌅 Enhanced Sun & Twilight Calendar v8.0</h1>
 
         <div class="info-box">
             <strong>Today's Information (Rome, Italy)</strong><br>
-            <button class="time-format-toggle" onclick="toggleTimeFormat()">Switch to 12-hour format</button><br>
             Date: <?php echo date('F j, Y'); ?><br>
+            <?php
+            // Get today's sun times using high-precision calculations
+            $tz = new DateTimeZone('Europe/Rome');
+$dt = new DateTime('now', $tz);
+$utc_offset = $dt->getOffset() / 3600;
+$today = getdate();
+
+$sun_calc = calculate_sun_times($today['year'], $today['mon'], $today['mday'], 41.9028, 12.4964, $utc_offset);
+
+$astro_begin = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['astro_begin_frac']);
+$nautical_begin = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['nautical_begin_frac']);
+$civil_begin = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['civil_begin_frac']);
+$sunrise = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['sunrise_frac']);
+$solar_noon = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['solar_noon_frac']);
+$sunset = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['sunset_frac']);
+$civil_end = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['civil_end_frac']);
+$nautical_end = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['nautical_end_frac']);
+$astro_end = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['astro_end_frac']);
+
+$daylight_hours = $sun_calc['daylength_h'];
+$daylight_h = floor($daylight_hours);
+$daylight_m = round(($daylight_hours - $daylight_h) * 60);
+?>
             <span id="time-display">
-                Astronomical Dawn: <?php echo date('H:i', $sun_info['astronomical_twilight_begin']); ?><br>
-                Nautical Dawn: <?php echo date('H:i', $sun_info['nautical_twilight_begin']); ?><br>
-                Civil Dawn: <?php echo date('H:i', $sun_info['civil_twilight_begin']); ?><br>
-                Sunrise: <?php echo date('H:i', $sun_info['sunrise']); ?><br>
-                Solar Noon: <?php echo date('H:i', $sun_info['transit']); ?><br>
-                Sunset: <?php echo date('H:i', $sun_info['sunset']); ?><br>
-                Civil Dusk: <?php echo date('H:i', $sun_info['civil_twilight_end']); ?><br>
-                Nautical Dusk: <?php echo date('H:i', $sun_info['nautical_twilight_end']); ?><br>
-                Astronomical Dusk: <?php echo date('H:i', $sun_info['astronomical_twilight_end']); ?>
+                Astronomical Dawn: <?php echo date('H:i', $astro_begin); ?><br>
+                Nautical Dawn: <?php echo date('H:i', $nautical_begin); ?><br>
+                Civil Dawn: <?php echo date('H:i', $civil_begin); ?><br>
+                Sunrise: <?php echo date('H:i', $sunrise); ?><br>
+                Solar Noon: <?php echo date('H:i', $solar_noon); ?><br>
+                Sunset: <?php echo date('H:i', $sunset); ?><br>
+                Civil Dusk: <?php echo date('H:i', $civil_end); ?><br>
+                Nautical Dusk: <?php echo date('H:i', $nautical_end); ?><br>
+                Astronomical Dusk: <?php echo date('H:i', $astro_end); ?><br>
+                <strong>Day Length: <?php echo $daylight_h; ?>h <?php echo $daylight_m; ?>m</strong>
             </span>
         </div>
 
@@ -56,7 +83,6 @@
                     <li>Paste your subscription URL</li>
                     <li>Click <strong>"Add calendar"</strong></li>
                 </ol>
-                <p><strong>Tip:</strong> Select only one event type for smart organization!</p>
             </div>
         <?php endif; ?>
 
@@ -111,24 +137,18 @@
             </div>
 
             <div class="form-group">
-                <label for="elevation">Elevation (meters)</label>
-                <input type="number" name="elevation" id="elevation" step="1" min="-500" max="9000" value="21">
-                <div class="help-text">Above sea level (optional)</div>
-            </div>
-
-            <div class="form-group">
                 <label for="zone">Timezone <span class="required">*</span></label>
                 <select name="zone" id="zone" required>
                     <option value="Europe/Rome" selected>Europe/Rome (CET)</option>
                     <?php
-                    $zones = timezone_identifiers_list();
-                    foreach ($zones as $zone) {
-                        if ($zone !== 'Europe/Rome') {
-                            echo "<option value=\"" . htmlspecialchars($zone) . "\">" .
-                                htmlspecialchars($zone) . "</option>\n";
-                        }
-                    }
-                    ?>
+        $zones = timezone_identifiers_list();
+foreach ($zones as $zone) {
+    if ($zone !== 'Europe/Rome') {
+        echo '<option value="' . htmlspecialchars($zone) . '">' .
+            htmlspecialchars($zone) . "</option>\n";
+    }
+}
+?>
                 </select>
             </div>
 
@@ -136,7 +156,7 @@
 
             <div class="form-group">
                 <strong>Event Types <span class="required">*</span></strong>
-                <div class="help-text" style="margin-bottom: 10px;">💡 Each option creates 2 events (dawn + dusk). Select fewer options to get complete sun data embedded in notes!</div>
+                <div class="help-text" style="margin-bottom: 10px;">💡 Each creates 2 events (dawn + dusk). Select fewer to get complete data in notes!</div>
                 <div class="checkbox-group">
                     <input type="checkbox" name="civil" id="civil" checked>
                     <label for="civil">🌅 Civil Twilight - First Light → Sunrise | Sunset → Last Light</label>
@@ -147,11 +167,11 @@
                 </div>
                 <div class="checkbox-group">
                     <input type="checkbox" name="astro" id="astro">
-                    <label for="astro">🌌 Astronomical Twilight - Astronomical Dawn → Nautical Dawn | Nautical Dusk → Astronomical Dusk</label>
+                    <label for="astro">🌌 Astronomical Twilight - Astro Dawn → Nautical Dawn | Nautical Dusk → Astro Dusk</label>
                 </div>
                 <div class="checkbox-group">
                     <input type="checkbox" name="daynight" id="daynight" checked>
-                    <label for="daynight">☀️🌙 Day & Night - Daylight (with stats & solar noon) | Night (with stats & solar midnight)</label>
+                    <label for="daynight">☀️🌙 Day & Night - Daylight (with stats) | Night (with stats & moon phase)</label>
                 </div>
             </div>
 
@@ -172,13 +192,6 @@
             <hr>
 
             <div class="form-group">
-                <div class="checkbox-group">
-                    <input type="checkbox" name="twelve" id="twelve">
-                    <label for="twelve">Use 12-hour time format (AM/PM)</label>
-                </div>
-            </div>
-
-            <div class="form-group">
                 <label for="description">Custom Note (optional)</label>
                 <textarea name="description" id="description" rows="3"
                     placeholder="Add custom text to all events"></textarea>
@@ -188,36 +201,22 @@
         </form>
 
         <div class="footer">
+            <strong>High-Precision NREL Calculations v7.3:</strong>
+            <p>Uses NREL SPA-inspired algorithms for maximum accuracy. All times calculated with proper solar declination, equation of time, and atmospheric refraction. Always displays 24-hour time format.</p>
+            
             <strong>Astronomical Terminology:</strong>
             <ul>
-                <li><strong>Dawn/Dusk:</strong> Period of twilight before sunrise / after sunset</li>
                 <li><strong>Civil:</strong> Sun 0-6° below horizon - outdoor activities possible</li>
                 <li><strong>Nautical:</strong> Sun 6-12° below horizon - horizon visible at sea</li>
-                <li><strong>Astronomical:</strong> Sun 12-18° below horizon - last/first light</li>
+                <li><strong>Astronomical:</strong> Sun 12-18° below horizon - last/first astronomical light</li>
             </ul>
 
-            <strong>Smart Single-Event Mode:</strong>
-            <ul>
-                <li>Select only <strong>Sunrise & Sunset</strong> → Get all dawn events + day stats in sunrise notes, all dusk events + night stats in sunset notes</li>
-                <li>Clean calendar with complete astronomical data embedded!</li>
-            </ul>
+            <strong>Smart Mode:</strong>
+            <p>Select only <strong>Day & Night</strong> events to get all twilight times embedded in notes for a clean calendar!</p>
         </div>
     </div>
 
-    <script>
-        const sunInfo = {
-            astro_begin: <?php echo $sun_info['astronomical_twilight_begin']; ?>,
-            nautical_begin: <?php echo $sun_info['nautical_twilight_begin']; ?>,
-            civil_begin: <?php echo $sun_info['civil_twilight_begin']; ?>,
-            sunrise: <?php echo $sun_info['sunrise']; ?>,
-            transit: <?php echo $sun_info['transit']; ?>,
-            sunset: <?php echo $sun_info['sunset']; ?>,
-            civil_end: <?php echo $sun_info['civil_twilight_end']; ?>,
-            nautical_end: <?php echo $sun_info['nautical_twilight_end']; ?>,
-            astro_end: <?php echo $sun_info['astronomical_twilight_end']; ?>
-        };
-    </script>
-    <script src="script.js"></script>
+    <script src="assets/script.js"></script>
 </body>
 
 </html>
