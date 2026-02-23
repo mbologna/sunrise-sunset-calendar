@@ -12,8 +12,6 @@
         "phpunit/phpunit": "^9.6 || ^10.0",
         "squizlabs/php_codesniffer": "^3.7"
     },
-    "autoload": {
-    },
     "autoload-dev": {
         "psr-4": {
             "Tests\\": "tests/"
@@ -23,5 +21,16 @@
         "optimize-autoloader": true,
         "preferred-install": "dist",
         "sort-packages": true
+    },
+    "scripts": {
+        "test": "./vendor/bin/phpunit",
+        "test:unit": "./vendor/bin/phpunit --testsuite Unit",
+        "test:coverage": "./vendor/bin/phpunit --coverage-html coverage/",
+        "analyse": "./vendor/bin/phpstan analyse",
+        "lint": "./vendor/bin/phpcs --standard=PSR12 sunrise-sunset-calendar.php src/",
+        "lint:fix": "./vendor/bin/phpcbf --standard=PSR12 sunrise-sunset-calendar.php src/",
+        "check": "php tools/validate-project.php",
+        "check:ical": "php tools/validate-ical.php",
+        "check:all": ["@test", "@analyse", "@lint"]
     }
 }

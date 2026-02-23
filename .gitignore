@@ -52,5 +52,8 @@ NOTES.txt
 # PHPUnit cache
 .phpunit.cache/
 
+# PHP CS Fixer cache
+.php-cs-fixer.cache
+
 # Claude Code settings
 .claude/

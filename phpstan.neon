@@ -1,0 +1,26 @@
+parameters:
+    level: 5
+    paths:
+        - sunrise-sunset-calendar.php
+        - src/
+    excludePaths:
+        - vendor/
+    reportUnmatchedIgnoredErrors: false
+    ignoreErrors:
+        # Ignore missing iterable value types
+        - identifier: missingType.iterableValue
+        # Allow mixed return types from require statements
+        - '#Cannot access offset .* on mixed#'
+        # Global AUTH_TOKEN constant defined in config
+        - '#Constant AUTH_TOKEN not found#'
+        # Functions defined in other files that are included at runtime
+        - '#Function calculate_sun_times not found#'
+        - '#Function calculate_equinox_solstice not found#'
+        - '#Function get_accurate_moon_phase not found#'
+        - '#Function get_moon_phase_info not found#'
+        # PHPDoc variable name issues in auto-generated code patterns
+        - '#PHPDoc tag @var above assignment does not specify variable name#'
+        # isset() on always-existing variables (intentional safety checks)
+        - '#Variable .* in isset\(\) always exists#'
+        # Float to int conversions (safe truncation for durations/timestamps)
+        - '#expects int, float given#'

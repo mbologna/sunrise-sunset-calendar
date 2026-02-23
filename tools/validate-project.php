@@ -13,7 +13,7 @@ echo "╚═══════════════════════�
 $passed = 0;
 $failed = 0;
 
-function check($condition, $message)
+function check(bool $condition, string $message): bool
 {
     global $passed, $failed;
 
@@ -34,7 +34,7 @@ echo "Checking Files...\n";
 check(file_exists('sunrise-sunset-calendar.php'), 'sunrise-sunset-calendar.php exists');
 check(file_exists('src/calendar-generator.php'), 'src/calendar-generator.php exists');
 check(file_exists('src/strings.php'), 'src/strings.php exists');
-check(file_exists('src/solar-spa-wrapper.php'), 'src/solar-spa-wrapper.php exists');
+check(file_exists('src/astronomy.php'), 'src/astronomy.php exists');
 check(file_exists('assets/index.html.php'), 'assets/index.html.php exists');
 check(file_exists('assets/script.js'), 'assets/script.js exists');
 check(file_exists('assets/styles.css'), 'assets/styles.css exists');
@@ -47,7 +47,6 @@ check(file_exists('LICENSE'), 'LICENSE exists');
 check(file_exists('.gitignore'), '.gitignore exists');
 
 echo "\nChecking Tests...\n";
-check(file_exists('tests/run-tests.php'), 'Test runner exists');
 check(file_exists('tests/Unit/SolarCalculationsTest.php'), 'Solar calculations tests exist');
 check(file_exists('tests/Unit/PercentileCalculationsTest.php'), 'Percentile tests exist');
 check(file_exists('tests/Unit/FormatTest.php'), 'Format tests exist');
@@ -67,7 +66,7 @@ $files_to_check = [
     'sunrise-sunset-calendar.php',
     'src/calendar-generator.php',
     'src/strings.php',
-    'src/solar-spa-wrapper.php',
+    'src/astronomy.php',
 ];
 
 foreach ($files_to_check as $file) {
