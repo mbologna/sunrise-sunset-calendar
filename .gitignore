@@ -1,20 +1,56 @@
-# Configuration file with secret token
-config.php
+# Configuration
+config/config.php
 
-# macOS
-.DS_Store
-
-# IDE
+# IDE and Editor
 .vscode/
 .idea/
+*.sublime-*
 *.swp
 *.swo
 *~
 
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
 # Logs
 *.log
 error_log
+access_log
 
 # Temporary files
 *.tmp
+*.temp
+*.cache
+
+# Composer
+/vendor/
+
+# PHPUnit
+.phpunit.result.cache
+/coverage/
+
+# Node (if used for frontend tooling)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build artifacts
+/build/
+/dist/
+
+# Backup files
 *.bak
+*.backup
+*~
+
+# Personal notes
+TODO.txt
+NOTES.txt
+
+# PHPUnit cache
+.phpunit.cache/
+
+# Claude Code settings
+.claude/
