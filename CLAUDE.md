@@ -26,12 +26,15 @@ composer validate --strict
 
 ### Testing
 ```bash
-# Run all PHPUnit tests
+# Run all PHPUnit tests (via composer script)
+composer test
+
+# Or directly with PHPUnit
 ./vendor/bin/phpunit
 
 # Run specific test suites
+composer test:unit                               # Unit tests only
 ./vendor/bin/phpunit --testsuite Unit           # Unit tests
-./vendor/bin/phpunit --testsuite Integration     # Integration tests
 ./vendor/bin/phpunit --testsuite Reference       # Reference data validation
 
 # Run tests with detailed output
@@ -41,29 +44,20 @@ composer validate --strict
 ./vendor/bin/phpunit tests/Unit/SolarCalculationsTest.php
 
 # Run tests with code coverage (requires xdebug)
-./vendor/bin/phpunit --coverage-html coverage/
-
-# Run comprehensive test suite (includes linting, syntax checks, PHPUnit tests)
-./tools/run-tests.sh
-
-# Legacy test runner (for backward compatibility)
-php tests/run-tests.php
+composer test:coverage
 ```
 
 ### Linting & Code Quality
 ```bash
-# Check PHP syntax
-php -l sunrise-sunset-calendar.php
-php -l src/calendar-generator.php
-
-# Run PSR-12 linter (uses phpcs.xml config)
-phpcs --standard=PSR12 sunrise-sunset-calendar.php src/calendar-generator.php
+# Run PSR-12 linter (via composer script)
+composer lint
 
 # Auto-fix PSR-12 violations
-phpcbf --standard=PSR12 *.php
+composer lint:fix
 
-# Run custom linter (checks all rules)
-php tools/lint.php
+# Check PHP syntax manually
+php -l sunrise-sunset-calendar.php
+php -l src/calendar-generator.php
 ```
 
 ### Local Development
@@ -84,10 +78,10 @@ php -S localhost:8000
 ### Validation
 ```bash
 # Validate iCalendar output format
-php tools/validate-ical.php
+composer check:ical
 
 # Check project readiness for deployment
-php tools/validate-project.php
+composer check
 ```
 
 ## Architecture
@@ -98,6 +92,9 @@ php tools/validate-project.php
 - `sunrise-sunset-calendar.php` - Entry point, solar calculation functions, and core logic
 - `src/calendar-generator.php` - iCalendar event generation and formatting (requires `strings.php`)
 - `src/strings.php` - Centralized configuration for all user-facing text and event descriptions
+- `src/functions.php` - Shared utilities and caching (loaded via Composer autoload)
+- `src/solar-spa-wrapper.php` - High-precision NREL SPA wrapper
+- `src/meeus-astronomy.php` - Meeus algorithms for equinoxes, solstices, and moon phases
 - `assets/index.html.php` - Web UI for generating subscription URLs
 - `assets/script.js` - Frontend JavaScript for location search and URL generation
 - `assets/styles.css` - Styling for web interface
@@ -145,6 +142,7 @@ php tools/validate-project.php
 - Uses actual daylight duration distribution for the specific location
 - 0th percentile = winter solstice (shortest day)
 - 100th percentile = summer solstice (longest day)
+- **Performance**: Cached per location/year to avoid recalculating 365 days repeatedly (see `src/functions.php`)
 
 **iCalendar Generation:**
 - Must comply with RFC 5545 format

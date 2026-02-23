@@ -35,52 +35,190 @@ openssl rand -hex 32  # Generate secure token
 # Deploy to web server and access via browser
 ```
 
-## Requirements
-
-- PHP 7.4 or higher
-- Composer (dependency management)
-- Web server (Apache, Nginx)
-- HTTPS recommended
-
 ## Installation
 
-### 1. Install Dependencies
+```bash
+git clone https://github.com/yourusername/sun-twilight-calendar.git
+cd sun-twilight-calendar
+composer install
+cp config/config.example.php config/config.php
+# Edit config/config.php and set AUTH_TOKEN to a secure random string:
+# openssl rand -hex 32
+```
+
+## Requirements
+
+- PHP 7.4 or higher (tested through 8.2)
+- Composer (dependency management)
+- Web server (Apache, Nginx, or PHP built-in server)
+- HTTPS recommended for production
+
+## Deployment
+
+### Option 1: Shared Hosting
+
+1. **Upload files** via FTP/SFTP to your web root
+2. **Install dependencies** (if SSH available):
+   ```bash
+   composer install --no-dev --optimize-autoloader
+   ```
+   Or upload the `vendor/` folder from a local install.
+
+3. **Configure**:
+   ```bash
+   cp config/config.example.php config/config.php
+   # Generate a secure token
+   openssl rand -hex 32
+   # Edit config/config.php and add the token
+   ```
+
+4. **Set permissions**:
+   ```bash
+   chmod 600 config/config.php
+   chmod 755 sunrise-sunset-calendar.php
+   ```
+
+5. **Access** at `https://yourdomain.com/sunrise-sunset-calendar.php`
+
+### Option 2: VPS/Dedicated Server
+
+1. **Clone repository**:
+   ```bash
+   git clone https://github.com/yourusername/sun-twilight-calendar.git /var/www/sun-calendar
+   cd /var/www/sun-calendar
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   composer install --no-dev --optimize-autoloader
+   ```
+
+3. **Configure**:
+   ```bash
+   cp config/config.example.php config/config.php
+   openssl rand -hex 32  # Generate token
+   nano config/config.php  # Add token
+   chmod 600 config/config.php
+   ```
+
+4. **Web server setup**:
+
+   **Apache** - Create `/etc/apache2/sites-available/sun-calendar.conf`:
+   ```apache
+   <VirtualHost *:443>
+       ServerName sun.yourdomain.com
+       DocumentRoot /var/www/sun-calendar
+
+       <Directory /var/www/sun-calendar>
+           AllowOverride All
+           Require all granted
+       </Directory>
+
+       SSLEngine on
+       SSLCertificateFile /path/to/cert.pem
+       SSLCertificateKeyFile /path/to/key.pem
+   </VirtualHost>
+   ```
+
+   **Nginx** - Create `/etc/nginx/sites-available/sun-calendar`:
+   ```nginx
+   server {
+       listen 443 ssl;
+       server_name sun.yourdomain.com;
+       root /var/www/sun-calendar;
+       index sunrise-sunset-calendar.php;
+
+       ssl_certificate /path/to/cert.pem;
+       ssl_certificate_key /path/to/key.pem;
+
+       location / {
+           try_files $uri $uri/ /sunrise-sunset-calendar.php?$args;
+       }
+
+       location ~ \.php$ {
+           fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
+           fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+           include fastcgi_params;
+       }
+
+       # Block access to sensitive files
+       location ~ ^/(config|tests|tools|vendor/.*\.(php|md))$ {
+           deny all;
+       }
+   }
+   ```
+
+5. **Enable site and restart**:
+   ```bash
+   # Apache
+   a2ensite sun-calendar && systemctl restart apache2
+
+   # Nginx
+   ln -s /etc/nginx/sites-available/sun-calendar /etc/nginx/sites-enabled/
+   systemctl restart nginx
+   ```
+
+### Option 3: Docker
+
+```dockerfile
+FROM php:8.2-apache
+RUN apt-get update && apt-get install -y unzip
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+WORKDIR /var/www/html
+COPY . .
+RUN composer install --no-dev --optimize-autoloader
+RUN chmod 600 config/config.php
+EXPOSE 80
+```
+
+```bash
+docker build -t sun-calendar .
+docker run -p 8080:80 -v $(pwd)/config:/var/www/html/config sun-calendar
+```
+
+### Option 4: Local Development
 
 ```bash
 composer install
+cp config/config.example.php config/config.php
+# Edit config.php with a test token
+php -S localhost:8000
+# Visit http://localhost:8000/sunrise-sunset-calendar.php
 ```
 
-### 2. Configure
+## Configuration
 
 Edit `config/config.php`:
 
 ```php
 <?php
-define('AUTH_TOKEN', 'your-secure-random-string');  // Required
-define('CALENDAR_WINDOW_DAYS', 365);                // Optional
-define('UPDATE_INTERVAL', 86400);                   // Optional (24h)
-?>
+// Required: Secure random token (32+ characters recommended)
+define('AUTH_TOKEN', 'your-secure-random-string');
+
+// Optional: Number of days to generate (default: 365)
+define('CALENDAR_WINDOW_DAYS', 365);
+
+// Optional: Cache refresh interval in seconds (default: 86400 = 24h)
+define('UPDATE_INTERVAL', 86400);
 ```
 
-### 2. Web Server Setup
+## Health Check
 
-**Apache** - Add to `.htaccess`:
-```apache
-RewriteEngine On
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteRule ^(.*)$ sunrise-sunset-calendar.php [QSA,L]
+The application provides a health endpoint for monitoring:
+
+```bash
+curl https://yourdomain.com/sunrise-sunset-calendar.php?health=1
 ```
 
-**Nginx** - Add to server block:
-```nginx
-location / {
-    try_files $uri $uri/ /sunrise-sunset-calendar.php?$args;
+Response:
+```json
+{
+  "status": "ok",
+  "version": "10.0",
+  "php": "8.2.0",
+  "timestamp": 1707400000
 }
 ```
-
-### 3. Access
-
-Navigate to `https://yourdomain.com/sunrise-sunset-calendar.php`
 
 ## Usage
 
@@ -134,6 +272,22 @@ https://yourdomain.com/sunrise-sunset-calendar.php?
 
 ## Development
 
+### Composer Scripts
+
+```bash
+# Run all checks (tests + static analysis + linting)
+composer check:all
+
+# Individual commands
+composer test              # Run PHPUnit tests
+composer test:unit         # Run unit tests only
+composer analyse           # Run PHPStan static analysis
+composer lint              # Check PSR-12 compliance
+composer lint:fix          # Auto-fix PSR-12 violations
+composer check             # Validate project structure
+composer check:ical        # Validate iCalendar output
+```
+
 ### Run Tests
 
 ```bash
@@ -142,46 +296,58 @@ https://yourdomain.com/sunrise-sunset-calendar.php?
 
 # Run specific test suites
 ./vendor/bin/phpunit --testsuite Unit           # Unit tests
-./vendor/bin/phpunit --testsuite Integration     # Integration tests
-./vendor/bin/phpunit --testsuite Reference       # Reference data validation
+./vendor/bin/phpunit --testsuite Integration    # Integration tests
+./vendor/bin/phpunit --testsuite Reference      # Reference data validation
 
 # Run tests with detailed output
 ./vendor/bin/phpunit --testdox
 
-# Run comprehensive test suite (includes linting, syntax checks, PHPUnit tests)
-./tools/run-tests.sh
+# Run with code coverage
+composer test:coverage
 ```
 
 Test suites:
 - **Unit**: Solar calculations, percentiles, formatting, sanitization
-- **Integration**: iCalendar generation, RFC 5545 compliance
+- **Integration**: iCalendar generation, RFC 5545 compliance, health endpoint
 - **Reference**: Real-world validation against authoritative sources (timeanddate.com, NOAA)
+
+### Static Analysis
+
+```bash
+# Run PHPStan at level 5
+composer analyse
+
+# Or directly
+./vendor/bin/phpstan analyse
+```
 
 ### Code Linting
 
 ```bash
-# Syntax check
-php -l sunrise-sunset-calendar.php
+# Check PSR-12 compliance
+composer lint
 
-# PSR-12 standard
-phpcs --standard=PSR12 *.php
-
-# Auto-fix
-phpcbf --standard=PSR12 *.php
+# Auto-fix violations
+composer lint:fix
 ```
 
 ### Project Structure
 
 ```
 .
-├── sunrise-sunset-calendar.php  # Main app + solar calculations
+├── sunrise-sunset-calendar.php  # Main entry point & request routing
 ├── assets/                      # Frontend assets
-│   ├── script.js               # Frontend JS
+│   ├── script.js               # Frontend JavaScript
 │   ├── styles.css              # Styling
 │   └── index.html.php          # Web UI template
-├── src/                        # PHP source libraries
-│   ├── calendar-generator.php  # iCal event generator
-│   └── strings.php            # Localized text/strings
+├── src/                        # PHP source modules
+│   ├── astronomy.php           # Solar & moon calculations (NREL SPA)
+│   ├── Cache.php               # Caching singleton class
+│   ├── calendar-generator.php  # iCalendar event generation
+│   ├── functions.php           # Core utilities & sanitization
+│   ├── geocoding.php           # Location search (Nominatim API)
+│   ├── helpers.php             # Helper functions (percentiles, formatting)
+│   └── strings.php             # UI text configuration
 ├── config/                     # Configuration
 │   ├── config.example.php     # Config template
 │   └── config.php             # Actual config (gitignored)
@@ -189,29 +355,35 @@ phpcbf --standard=PSR12 *.php
 │   ├── bootstrap.php          # PHPUnit bootstrap
 │   ├── BaseTest.php           # Base test class
 │   ├── Unit/                  # Unit tests
+│   │   ├── FormatTest.php
 │   │   ├── SolarCalculationsTest.php
 │   │   └── PercentileCalculationsTest.php
 │   ├── Integration/           # Integration tests
-│   │   └── ICalFormatTest.php
+│   │   ├── ICalendarOutputTest.php
+│   │   └── HealthEndpointTest.php
 │   ├── Reference/             # Reference data validation
 │   │   └── MapelloReferenceTest.php
-│   ├── Fixtures/              # Test data
-│   │   └── ReferenceLocations.php
-│   └── run-tests.php          # Legacy test runner
+│   ├── Accuracy/              # Accuracy tests
+│   │   ├── EquinoxSolsticeAccuracyTest.php
+│   │   └── MoonPhaseAccuracyTest.php
+│   └── Fixtures/              # Test data
+│       ├── AstronomicalReferenceData.php
+│       └── ReferenceLocations.php
 ├── tools/                      # Development tools
-│   ├── validate-ical.php      # iCal validator
-│   ├── validate-project.php   # Project validator
-│   └── run-tests.sh           # Full test runner
+│   ├── validate-ical.php      # iCalendar format validator
+│   └── validate-project.php   # Project structure validator
 ├── .github/
 │   └── workflows/
-│       └── ci.yml             # CI pipeline
+│       └── ci.yml             # GitHub Actions CI pipeline
+├── composer.json              # Composer dependencies & scripts
+├── phpunit.xml                # PHPUnit configuration
+├── phpstan.neon               # PHPStan configuration (level 5)
 ├── .editorconfig
 ├── .gitignore
-├── .php-cs-fixer.php          # Fixer config
-├── phpcs.xml                  # Linter config
+├── .gitattributes
 ├── LICENSE
 ├── README.md
-└── CLAUDE.md                  # Development guide
+└── CLAUDE.md                  # AI development guide
 ```
 
 ## Solar Calculations
@@ -280,12 +452,11 @@ A: Verify token matches exactly in config/config.php and URL
 1. Fork repository
 2. Create feature branch
 3. Make changes
-4. Run tests: `php tests/run-tests.php`
-5. Run linter: `phpcs --standard=PSR12 *.php`
-6. Commit with clear message
-7. Open Pull Request
+4. Run all checks: `composer check:all`
+5. Commit with clear message
+6. Open Pull Request
 
-**Coding Standards**: PSR-12, meaningful names, documented functions
+**Coding Standards**: PSR-12, meaningful names, PHPDoc annotations, strict types
 
 ## Known Limitations
 
@@ -309,6 +480,18 @@ MIT License - see [LICENSE](LICENSE)
 - **Discussions**: [GitHub Discussions](https://github.com/yourusername/sun-twilight-calendar/discussions)
 
 ## Changelog
+
+### v10.0.0 (2026-02-08)
+- ✨ **Enhanced UI/UX** - Visual progress bars, separators, grouped sections
+- ✨ **Moon phase emojis** - Accurate phase icons (🌑🌒🌓🌔🌕🌖🌗🌘)
+- ✨ **Week-over-week comparison** - Compare to same week last year
+- ✨ **Day of year counter** - "Day 39 of 365" in events
+- ✨ **Health endpoint** - `?health=1` for monitoring
+- ♻️ **Modular architecture** - Cache class, helpers, cleaner separation
+- ♻️ **PHPStan level 5** - Static analysis with strict typing
+- ♻️ **Composer scripts** - `check:all`, `analyse`, unified commands
+- 📝 **Full word labels** - "9 hours 42 minutes" instead of "9h 42m"
+- 📝 **Structured descriptions** - "At a Glance", "Details", "Comparisons" sections
 
 ### v8.0.0 (2026-02-01)
 - ✨ **Full NREL SPA algorithm** via external library (±30 second accuracy)
