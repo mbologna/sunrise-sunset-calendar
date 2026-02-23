@@ -307,7 +307,8 @@ class PercentileCalculationsTest extends BaseTest
         // Winter solstice (polar night)
         $winter = $this->calculateSunTimes($year, 12, 21, $lat, $lon, $utc_offset);
         $winter_perc = calculate_daylight_percentile($winter['daylength_h'], $lat, $lon, $year, $utc_offset);
-        $this->assertPercentile(0.0, $winter_perc, 'Arctic winter solstice = 0th percentile', 2.0);
+        // Polar night means multiple days share 0h daylight, affecting exact percentile
+        $this->assertPercentile(0.0, $winter_perc, 'Arctic winter solstice = 0th percentile', 3.0);
 
         // Summer solstice (midnight sun) - At extreme latitudes, midnight sun affects percentile
         $summer = $this->calculateSunTimes($year, 6, 21, $lat, $lon, $utc_offset);

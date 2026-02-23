@@ -2,7 +2,7 @@
 
 use PHPUnit\Framework\TestCase;
 
-require_once __DIR__ . '/../../src/meeus-astronomy.php';
+// Functions are loaded via bootstrap.php
 require_once __DIR__ . '/../Fixtures/AstronomicalReferenceData.php';
 
 /**
