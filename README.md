@@ -101,7 +101,7 @@ php -S localhost:8000
 
 ## Requirements
 
-- PHP 7.4+
+- PHP 8.2+ (tested on 8.2, 8.3, 8.4, 8.5)
 - Composer
 
 ## Accuracy
