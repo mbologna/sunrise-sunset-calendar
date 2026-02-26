@@ -1,6 +1,6 @@
 # Sun & Twilight Calendar Generator
 
-[![PHP Version](https://img.shields.io/badge/PHP-7.4%2B-blue.svg)](https://www.php.net/)
+[![PHP Version](https://img.shields.io/badge/PHP-8.5%2B-blue.svg)](https://www.php.net/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 A high-precision iCalendar feed generator for sunrise, sunset, and twilight times using the full NREL SPA algorithm. Subscribe in any calendar app (Google Calendar, Apple Calendar, Outlook) for daily solar events.
