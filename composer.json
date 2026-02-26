@@ -4,7 +4,7 @@
     "type": "project",
     "license": "MIT",
     "require": {
-        "php": "^7.4 || ^8.0",
+        "php": "^8.2",
         "abbadon1334/sun-position-spa-php": "^1.0"
     },
     "require-dev": {

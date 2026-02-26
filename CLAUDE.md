@@ -169,7 +169,7 @@ composer check
 
 ## Important Constraints
 
-1. **PHP Version**: Minimum 7.4, tested through 8.2
+1. **PHP Version**: Minimum 8.2, tested on 8.2, 8.3, 8.4, 8.5
 2. **External Dependencies**: Requires Composer for `abbadon1334/sun-position-spa-php` (full NREL SPA implementation)
 3. **Polar Regions**: Events may be missing during polar day/night periods
 4. **Date Range**: Valid for years -2000 to 6000 (SPA library range)
@@ -180,7 +180,7 @@ composer check
 - Tests verify solar calculation accuracy against known values
 - Percentile tests check mathematical correctness
 - Format tests ensure RFC 5545 compliance (especially escape sequences)
-- Tests must pass on PHP 7.4, 8.0, 8.1, 8.2 (see `.github/workflows/ci.yml`)
+- Tests must pass on PHP 8.2, 8.3, 8.4, 8.5 (see `.github/workflows/ci.yml`)
 
 ## Common Development Patterns
 
