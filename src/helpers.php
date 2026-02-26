@@ -170,6 +170,7 @@ function format_percentile_bar(float $percentile, int $width = 10): string
     $filled = (int) round(($percentile / 100) * $width);
     $empty = $width - $filled;
     $bar = str_repeat('█', $filled) . str_repeat('░', $empty);
+
     return sprintf('[%s] %d%%', $bar, (int) round($percentile));
 }
 
@@ -191,6 +192,7 @@ function get_moon_phase_emoji(string $phaseName): string
         'Last Quarter' => '🌗',
         'Waning Crescent' => '🌘',
     ];
+
     return $emojis[$phaseName] ?? '🌙';
 }
 
@@ -368,7 +370,7 @@ function build_dawn_supplemental(array $ctx, array $strings): string
         $info .= "{$strings['summaries']['astronomical_dawn']}: "
             . date($time_format, $astro_begin) . ' - '
             . date($time_format, $nautical_begin) . ' ('
-            . sprintf('%dh %02dm', (int)floor(($nautical_begin - $astro_begin) / 3600), (int)floor((($nautical_begin - $astro_begin) % 3600) / 60)) . ")\n";
+            . sprintf('%dh %02dm', (int) floor(($nautical_begin - $astro_begin) / 3600), (int) floor((($nautical_begin - $astro_begin) % 3600) / 60)) . ")\n";
         $info .= "  {$strings['supplemental']['astronomical_dawn']}\n\n";
     }
 
@@ -376,7 +378,7 @@ function build_dawn_supplemental(array $ctx, array $strings): string
         $info .= "{$strings['summaries']['nautical_dawn']}: "
             . date($time_format, $nautical_begin) . ' - '
             . date($time_format, $civil_begin) . ' ('
-            . sprintf('%dh %02dm', (int)floor(($civil_begin - $nautical_begin) / 3600), (int)floor((($civil_begin - $nautical_begin) % 3600) / 60)) . ")\n";
+            . sprintf('%dh %02dm', (int) floor(($civil_begin - $nautical_begin) / 3600), (int) floor((($civil_begin - $nautical_begin) % 3600) / 60)) . ")\n";
         $info .= "  {$strings['supplemental']['nautical_dawn']}\n\n";
     }
 
@@ -384,7 +386,7 @@ function build_dawn_supplemental(array $ctx, array $strings): string
         $info .= "{$strings['summaries']['civil_dawn']}: "
             . date($time_format, $civil_begin) . ' - '
             . date($time_format, $sunrise) . ' ('
-            . sprintf('%dh %02dm', (int)floor(($sunrise - $civil_begin) / 3600), (int)floor((($sunrise - $civil_begin) % 3600) / 60)) . ")\n";
+            . sprintf('%dh %02dm', (int) floor(($sunrise - $civil_begin) / 3600), (int) floor((($sunrise - $civil_begin) % 3600) / 60)) . ")\n";
         $info .= "  {$strings['supplemental']['civil_dawn']}\n\n";
     }
 
@@ -394,7 +396,7 @@ function build_dawn_supplemental(array $ctx, array $strings): string
         $info .= "{$strings['labels']['time']}: "
             . date($time_format, $sunrise) . ' - '
             . date($time_format, $sunset) . ' ('
-            . sprintf('%dh %02dm', (int)floor($daylight_seconds / 3600), (int)floor(($daylight_seconds % 3600) / 60)) . ", {$daylight_pct}%)\n";
+            . sprintf('%dh %02dm', (int) floor($daylight_seconds / 3600), (int) floor(($daylight_seconds % 3600) / 60)) . ", {$daylight_pct}%)\n";
         $info .= "{$strings['labels']['solar_noon']}: {$solar_noon_time}\n";
         $info .= "{$strings['labels']['percentile']}: "
             . sprintf($strings['percentile_explanation']['daylight'], $daylight_percentile) . "\n\n";
@@ -457,7 +459,7 @@ function build_dusk_supplemental(array $ctx, array $strings): string
         $info .= "{$strings['summaries']['civil_dusk']}: "
             . date($time_format, $sunset) . ' - '
             . date($time_format, $civil_end) . ' ('
-            . sprintf('%dh %02dm', (int)floor(($civil_end - $sunset) / 3600), (int)floor((($civil_end - $sunset) % 3600) / 60)) . ")\n";
+            . sprintf('%dh %02dm', (int) floor(($civil_end - $sunset) / 3600), (int) floor((($civil_end - $sunset) % 3600) / 60)) . ")\n";
         $info .= "  {$strings['supplemental']['civil_dusk']}\n\n";
     }
 
@@ -465,7 +467,7 @@ function build_dusk_supplemental(array $ctx, array $strings): string
         $info .= "{$strings['summaries']['nautical_dusk']}: "
             . date($time_format, $civil_end) . ' - '
             . date($time_format, $nautical_end) . ' ('
-            . sprintf('%dh %02dm', (int)floor(($nautical_end - $civil_end) / 3600), (int)floor((($nautical_end - $civil_end) % 3600) / 60)) . ")\n";
+            . sprintf('%dh %02dm', (int) floor(($nautical_end - $civil_end) / 3600), (int) floor((($nautical_end - $civil_end) % 3600) / 60)) . ")\n";
         $info .= "  {$strings['supplemental']['nautical_dusk']}\n\n";
     }
 
@@ -473,18 +475,18 @@ function build_dusk_supplemental(array $ctx, array $strings): string
         $info .= "{$strings['summaries']['astronomical_dusk']}: "
             . date($time_format, $nautical_end) . ' - '
             . date($time_format, $astro_end) . ' ('
-            . sprintf('%dh %02dm', (int)floor(($astro_end - $nautical_end) / 3600), (int)floor((($astro_end - $nautical_end) % 3600) / 60)) . ")\n";
+            . sprintf('%dh %02dm', (int) floor(($astro_end - $nautical_end) / 3600), (int) floor((($astro_end - $nautical_end) % 3600) / 60)) . ")\n";
         $info .= "  {$strings['supplemental']['astronomical_dusk']}\n\n";
     }
 
     if (!$enabled['daylight'] && isset($astro_end) && isset($next_astro_begin)) {
-        $solar_midnight = $astro_end + (int)(($next_astro_begin - $astro_end) / 2);
+        $solar_midnight = $astro_end + (int) (($next_astro_begin - $astro_end) / 2);
         $info .= "\n{$strings['headers']['night']}\n\n";
         // All data first
         $info .= "{$strings['labels']['time']}: "
             . date($time_format, $astro_end) . ' - '
             . date($time_format, $next_astro_begin) . ' ('
-            . sprintf('%dh %02dm', (int)floor($night_seconds / 3600), (int)floor(($night_seconds % 3600) / 60)) . ", {$night_pct}%)\n";
+            . sprintf('%dh %02dm', (int) floor($night_seconds / 3600), (int) floor(($night_seconds % 3600) / 60)) . ", {$night_pct}%)\n";
         $info .= "{$strings['labels']['solar_midnight']}: " . date($time_format, $solar_midnight) . "\n";
         $info .= "{$strings['labels']['percentile']}: "
             . sprintf($strings['percentile_explanation']['night'], $night_percentile) . "\n\n";
