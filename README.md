@@ -97,6 +97,7 @@ php -S localhost:8000
 │   └── config.php                # User config (not in repo)
 ├── tests/                        # PHPUnit test suites
 └── vendor/                       # Composer dependencies
+```
 
 ## Requirements
 
