@@ -86,37 +86,35 @@ return [
 
     // Event descriptions - concise, practical context for each phase
     'twilight_descriptions' => [
-        'civil_dawn' => 'Bright enough for most outdoor activities without artificial light — '
-            . 'driving, walking, and reading outside. The sky lightens rapidly as sunrise approaches. '
-            . '(Sun 0°–6° below the horizon)',
+        'civil_dawn' => 'The sky transitions from dim twilight to bright enough for outdoor activities '
+            . 'without artificial light. Driving, walking, and reading outside are comfortable. '
+            . 'By the end, full sunrise light arrives.',
 
-        'nautical_dawn' => 'The horizon becomes visible against the brightening sky — historically the '
-            . 'beginning of safe celestial navigation for sailors. Still too dim for most outdoor '
-            . 'activities without artificial light; stars are fading but still visible. '
-            . '(Sun 6°–12° below the horizon)',
+        'nautical_dawn' => 'The sky transitions as the horizon becomes clearly visible — traditionally '
+            . 'when sailors could navigate by stars. Still too dim for most outdoor activities without '
+            . 'artificial light, but stars are fading as brightness increases.',
 
-        'astronomical_dawn' => 'The first faint traces of sunlight appear on the eastern horizon, ending '
-            . 'true darkness. Only the subtlest brightening of the sky is visible — the faintest stars '
-            . 'begin to fade. Good for deep-sky observation before the sky brightens further. '
-            . '(Sun 12°–18° below the horizon)',
+        'astronomical_dawn' => 'The sky transitions from true darkness as first sunlight traces appear '
+            . 'on the eastern horizon. The faintest stars begin to fade as the sky subtly brightens. '
+            . 'Ideal for deep-sky observation before brightness increases further.',
 
-        'civil_dusk' => 'Still bright enough for most outdoor activities without artificial light — '
-            . 'driving, walking, and reading outside remain comfortable. The sky gradually deepens after '
-            . 'sunset; headlights become useful toward the end of this period. '
-            . '(Sun 0°–6° below the horizon)',
+        'civil_dusk' => 'The sky transitions from bright to dimmer as the sun sinks below the horizon. '
+            . 'Still bright enough for outdoor activities without artificial light, but gradually '
+            . 'darkening. Headlights become useful toward the end of this period.',
 
-        'nautical_dusk' => 'The horizon fades as the sky darkens. Stars become clearly visible and '
-            . 'celestial navigation by stars is possible. Most outdoor activities now require '
-            . 'artificial light. (Sun 6°–12° below the horizon)',
+        'nautical_dusk' => 'The sky transitions as the horizon fades and darkness deepens. Stars become '
+            . 'clearly visible and celestial navigation by stars becomes possible. Most outdoor '
+            . 'activities now require artificial light.',
 
-        'astronomical_dusk' => 'The last faint traces of sunlight fade as the sky approaches true '
-            . 'darkness. Conditions are improving for deep-sky observation, with the best views coming '
-            . 'once this period ends. (Sun 12°–18° below the horizon)',
+        'astronomical_dusk' => 'The sky transitions as the last sunlight fades and true darkness '
+            . 'approaches. Conditions improve rapidly for deep-sky observation, with the very best '
+            . 'views arriving once this period ends.',
 
-        'daylight' => 'The sun is above the horizon. Full natural illumination for all outdoor activities.',
+        'daylight' => 'The sun rises above the horizon, providing full natural illumination for all '
+            . 'outdoor activities, until it sets again.',
 
-        'night' => 'Complete astronomical darkness — the sun is more than 18° below the horizon and '
-            . 'no solar illumination remains. Optimal conditions for stargazing and deep-sky observation.',
+        'night' => 'Complete astronomical darkness — no solar illumination remains. Optimal conditions '
+            . 'for stargazing and deep-sky observation of faint objects.',
     ],
 
     // Supplemental schedule descriptions (brief one-line summaries)
