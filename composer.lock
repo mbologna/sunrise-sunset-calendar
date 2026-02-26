@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e915347ab5eab93cb19ee7d4eb3f0d2f",
+    "content-hash": "5b2b3638f00525cd9e39f5ddb991dee2",
     "packages": [
         {
             "name": "abbadon1334/sun-position-spa-php",
@@ -1855,7 +1855,7 @@
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
-        "php": "^7.4 || ^8.0"
+        "php": "^8.2"
     },
     "platform-dev": {},
     "plugin-api-version": "2.9.0"
