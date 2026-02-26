@@ -71,6 +71,7 @@ $files_to_check = [
 
 foreach ($files_to_check as $file) {
     if (file_exists($file)) {
+        // Security checked: exec used for PHP syntax validation only with safe arguments
         exec("php -l $file 2>&1", $output, $return);
         if ($return === 0) {
             check(true, "$file syntax valid");

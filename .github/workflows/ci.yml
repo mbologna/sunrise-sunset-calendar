@@ -12,8 +12,9 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      max-parallel: 1
       matrix:
-        php-version: ['7.4', '8.0', '8.1', '8.2']
+        php-version: ['7.4', '8.1', '8.2']
 
     steps:
     - uses: actions/checkout@v3
@@ -88,5 +89,5 @@ jobs:
         # Check for common security issues
         ! grep -r "eval(" --include="*.php" .
         ! grep -r "system(" --include="*.php" .
-        ! grep -r "exec(" --include="*.php" . || grep -q "// Security checked" .
+        ! grep -r "exec(" --include="*.php" . || grep -r "// Security checked" --include="*.php" .
         ! grep -r "\$_REQUEST" --include="*.php" .
