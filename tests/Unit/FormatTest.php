@@ -10,26 +10,6 @@ use Tests\BaseTest;
  */
 class FormatTest extends BaseTest
 {
-    public function testDurationFormatting9Hours36Minutes(): void
-    {
-        $this->assertEquals('9h 36m', format_duration(9 * 3600 + 36 * 60));
-    }
-
-    public function testDurationFormatting30Minutes(): void
-    {
-        $this->assertEquals('0h 30m', format_duration(30 * 60));
-    }
-
-    public function testDurationFormatting24Hours(): void
-    {
-        $this->assertEquals('24h 00m', format_duration(24 * 3600));
-    }
-
-    public function testDurationFormattingZero(): void
-    {
-        $this->assertEquals('0h 00m', format_duration(0));
-    }
-
     public function testShortDurationFormatting2Hours30Minutes(): void
     {
         $this->assertEquals('2h 30m', format_duration_short(2 * 3600 + 30 * 60));

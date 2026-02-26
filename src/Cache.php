@@ -33,7 +33,7 @@ class Cache
     /** @var array<string, array> Solar calculation cache */
     private array $solarCalcCache = [];
 
-    /** @var array<int, array> Moon phase cache */
+    /** @var array<string, array> Moon phase cache keyed by "year-month" */
     private array $moonPhaseCache = [];
 
     /**
@@ -86,7 +86,7 @@ class Cache
      */
     public function getDaylightLengths(float $lat, float $lon, int $year, float $utcOffset): array
     {
-        $cacheKey = sprintf('%.4f:%.4f:%d', $lat, $lon, $year);
+        $cacheKey = sprintf('%.4f:%.4f:%d:%.2f', $lat, $lon, $year, $utcOffset);
 
         if (!isset($this->percentileCache[$cacheKey])) {
             $daylightLengths = [];
@@ -126,7 +126,7 @@ class Cache
     public function getWeekSummary(int $weekStart, float $lat, float $lon, float $utcOffset): ?array
     {
         $strings = $this->getStrings();
-        $cacheKey = sprintf('%d:%.4f:%.4f', $weekStart, $lat, $lon);
+        $cacheKey = sprintf('%d:%.4f:%.4f:%.2f', $weekStart, $lat, $lon, $utcOffset);
 
         if (isset($this->weekSummaryCache[$cacheKey])) {
             return $this->weekSummaryCache[$cacheKey];
@@ -221,24 +221,24 @@ class Cache
     /**
      * Get cached moon phase.
      *
-     * @param int $timestamp Timestamp
+     * @param string $key Cache key in format "year-month"
      * @return array|null Cached data or null
      */
-    public function getMoonPhase(int $timestamp): ?array
+    public function getMoonPhase(string $key): ?array
     {
-        return $this->moonPhaseCache[$timestamp] ?? null;
+        return $this->moonPhaseCache[$key] ?? null;
     }
 
     /**
      * Set cached moon phase.
      *
-     * @param int $timestamp Timestamp
+     * @param string $key Cache key in format "year-month"
      * @param array $data Data to cache
      */
-    public function setMoonPhase(int $timestamp, array $data): void
+    public function setMoonPhase(string $key, array $data): void
     {
         $this->enforceCacheLimit('moonPhaseCache');
-        $this->moonPhaseCache[$timestamp] = $data;
+        $this->moonPhaseCache[$key] = $data;
     }
 
     /**

@@ -325,58 +325,39 @@ function format_day_length_comparison(int $diffSeconds, string $type = 'day'): s
 /**
  * Build dawn supplemental information.
  *
- * @param int|null $sunrise Sunrise timestamp
- * @param int|null $sunset Sunset timestamp
- * @param int|null $solar_noon Solar noon timestamp
- * @param int|null $civil_begin Civil twilight begin timestamp
- * @param int|null $civil_end Civil twilight end timestamp
- * @param int|null $nautical_begin Nautical twilight begin timestamp
- * @param int|null $nautical_end Nautical twilight end timestamp
- * @param int|null $astro_begin Astronomical twilight begin timestamp
- * @param int|null $astro_end Astronomical twilight end timestamp
- * @param string $time_format Time format string
- * @param array $enabled Enabled event types
- * @param int $daylight_seconds Daylight duration in seconds
- * @param float $daylight_pct Daylight percentage
- * @param float $daylight_percentile Daylight percentile
- * @param string $day_length_comparison Day length comparison string
- * @param string $winter_comparison Winter comparison string
- * @param string $summer_comparison Summer comparison string
- * @param string $solar_noon_time Solar noon time string
- * @param string $winter_solstice_info Winter solstice info
- * @param string $summer_solstice_info Summer solstice info
- * @param int $diff_from_winter Difference from winter solstice
- * @param int $diff_from_summer Difference from summer solstice
- * @param string $current_event Current astronomical event
+ * @param array $ctx Context array with keys:
+ *                   - times: timestamps array (sunrise, sunset, solar_noon, etc.)
+ *                   - format: time format string
+ *                   - enabled: enabled event types array
+ *                   - daylight: daylight statistics array
  * @param array $strings Strings configuration
  * @return string Formatted supplemental information
  */
-function build_dawn_supplemental(
-    ?int $sunrise,
-    ?int $sunset,
-    ?int $solar_noon,
-    ?int $civil_begin,
-    ?int $civil_end,
-    ?int $nautical_begin,
-    ?int $nautical_end,
-    ?int $astro_begin,
-    ?int $astro_end,
-    string $time_format,
-    array $enabled,
-    int $daylight_seconds,
-    float $daylight_pct,
-    float $daylight_percentile,
-    string $day_length_comparison,
-    string $winter_comparison,
-    string $summer_comparison,
-    string $solar_noon_time,
-    string $winter_solstice_info,
-    string $summer_solstice_info,
-    int $diff_from_winter,
-    int $diff_from_summer,
-    string $current_event,
-    array $strings
-): string {
+function build_dawn_supplemental(array $ctx, array $strings): string
+{
+    $sunrise = $ctx['times']['sunrise'] ?? null;
+    $sunset = $ctx['times']['sunset'] ?? null;
+    $solar_noon = $ctx['times']['solar_noon'] ?? null;
+    $civil_begin = $ctx['times']['civil_begin'] ?? null;
+    $civil_end = $ctx['times']['civil_end'] ?? null;
+    $nautical_begin = $ctx['times']['nautical_begin'] ?? null;
+    $nautical_end = $ctx['times']['nautical_end'] ?? null;
+    $astro_begin = $ctx['times']['astro_begin'] ?? null;
+    $astro_end = $ctx['times']['astro_end'] ?? null;
+
+    $time_format = $ctx['format'];
+    $enabled = $ctx['enabled'];
+    $daylight_seconds = $ctx['daylight']['daylight_seconds'];
+    $daylight_pct = $ctx['daylight']['daylight_pct'];
+    $daylight_percentile = $ctx['daylight']['daylight_percentile'];
+    $day_length_comparison = $ctx['daylight']['day_length_comparison'];
+    $winter_comparison = $ctx['daylight']['winter_comparison'];
+    $summer_comparison = $ctx['daylight']['summer_comparison'];
+    $solar_noon_time = $ctx['daylight']['solar_noon_time'];
+    $winter_solstice_info = $ctx['daylight']['winter_solstice_info'];
+    $summer_solstice_info = $ctx['daylight']['summer_solstice_info'];
+    $diff_from_winter = $ctx['daylight']['diff_from_winter'];
+    $diff_from_summer = $ctx['daylight']['diff_from_summer'];
     if (count(array_filter($enabled)) >= 4) {
         return '';
     }
@@ -387,7 +368,7 @@ function build_dawn_supplemental(
         $info .= "{$strings['summaries']['astronomical_dawn']}: "
             . date($time_format, $astro_begin) . ' - '
             . date($time_format, $nautical_begin) . ' ('
-            . format_duration($nautical_begin - $astro_begin) . ")\n";
+            . sprintf('%dh %02dm', (int)floor(($nautical_begin - $astro_begin) / 3600), (int)floor((($nautical_begin - $astro_begin) % 3600) / 60)) . ")\n";
         $info .= "  {$strings['supplemental']['astronomical_dawn']}\n\n";
     }
 
@@ -395,7 +376,7 @@ function build_dawn_supplemental(
         $info .= "{$strings['summaries']['nautical_dawn']}: "
             . date($time_format, $nautical_begin) . ' - '
             . date($time_format, $civil_begin) . ' ('
-            . format_duration($civil_begin - $nautical_begin) . ")\n";
+            . sprintf('%dh %02dm', (int)floor(($civil_begin - $nautical_begin) / 3600), (int)floor((($civil_begin - $nautical_begin) % 3600) / 60)) . ")\n";
         $info .= "  {$strings['supplemental']['nautical_dawn']}\n\n";
     }
 
@@ -403,7 +384,7 @@ function build_dawn_supplemental(
         $info .= "{$strings['summaries']['civil_dawn']}: "
             . date($time_format, $civil_begin) . ' - '
             . date($time_format, $sunrise) . ' ('
-            . format_duration($sunrise - $civil_begin) . ")\n";
+            . sprintf('%dh %02dm', (int)floor(($sunrise - $civil_begin) / 3600), (int)floor((($sunrise - $civil_begin) % 3600) / 60)) . ")\n";
         $info .= "  {$strings['supplemental']['civil_dawn']}\n\n";
     }
 
@@ -413,7 +394,7 @@ function build_dawn_supplemental(
         $info .= "{$strings['labels']['time']}: "
             . date($time_format, $sunrise) . ' - '
             . date($time_format, $sunset) . ' ('
-            . format_duration($daylight_seconds) . ", {$daylight_pct}%)\n";
+            . sprintf('%dh %02dm', (int)floor($daylight_seconds / 3600), (int)floor(($daylight_seconds % 3600) / 60)) . ", {$daylight_pct}%)\n";
         $info .= "{$strings['labels']['solar_noon']}: {$solar_noon_time}\n";
         $info .= "{$strings['labels']['percentile']}: "
             . sprintf($strings['percentile_explanation']['daylight'], $daylight_percentile) . "\n\n";
@@ -439,46 +420,33 @@ function build_dawn_supplemental(
 /**
  * Build dusk supplemental information.
  *
- * @param int|null $sunrise Sunrise timestamp
- * @param int|null $sunset Sunset timestamp
- * @param int|null $civil_begin Civil twilight begin timestamp
- * @param int|null $civil_end Civil twilight end timestamp
- * @param int|null $nautical_begin Nautical twilight begin timestamp
- * @param int|null $nautical_end Nautical twilight end timestamp
- * @param int|null $astro_begin Astronomical twilight begin timestamp
- * @param int|null $astro_end Astronomical twilight end timestamp
- * @param int|null $next_astro_begin Next day's astronomical twilight begin
- * @param string $time_format Time format string
- * @param array $enabled Enabled event types
- * @param int $night_seconds Night duration in seconds
- * @param float $night_pct Night percentage
- * @param float $night_percentile Night percentile
- * @param string $night_length_comparison Night length comparison string
- * @param array $moon_info Moon phase information
- * @param string $current_event Current astronomical event
+ * @param array $ctx Context array with keys:
+ *                   - times: timestamps array (sunrise, sunset, twilight times, next_astro_begin)
+ *                   - format: time format string
+ *                   - enabled: enabled event types array
+ *                   - night: night statistics array
  * @param array $strings Strings configuration
  * @return string Formatted supplemental information
  */
-function build_dusk_supplemental(
-    ?int $sunrise,
-    ?int $sunset,
-    ?int $civil_begin,
-    ?int $civil_end,
-    ?int $nautical_begin,
-    ?int $nautical_end,
-    ?int $astro_begin,
-    ?int $astro_end,
-    ?int $next_astro_begin,
-    string $time_format,
-    array $enabled,
-    int $night_seconds,
-    float $night_pct,
-    float $night_percentile,
-    string $night_length_comparison,
-    array $moon_info,
-    string $current_event,
-    array $strings
-): string {
+function build_dusk_supplemental(array $ctx, array $strings): string
+{
+    $sunrise = $ctx['times']['sunrise'] ?? null;
+    $sunset = $ctx['times']['sunset'] ?? null;
+    $civil_begin = $ctx['times']['civil_begin'] ?? null;
+    $civil_end = $ctx['times']['civil_end'] ?? null;
+    $nautical_begin = $ctx['times']['nautical_begin'] ?? null;
+    $nautical_end = $ctx['times']['nautical_end'] ?? null;
+    $astro_begin = $ctx['times']['astro_begin'] ?? null;
+    $astro_end = $ctx['times']['astro_end'] ?? null;
+    $next_astro_begin = $ctx['times']['next_astro_begin'] ?? null;
+
+    $time_format = $ctx['format'];
+    $enabled = $ctx['enabled'];
+    $night_seconds = $ctx['night']['night_seconds'];
+    $night_pct = $ctx['night']['night_pct'];
+    $night_percentile = $ctx['night']['night_percentile'];
+    $night_length_comparison = $ctx['night']['night_length_comparison'];
+    $moon_info = $ctx['night']['moon_info'];
     if (count(array_filter($enabled)) >= 4) {
         return '';
     }
@@ -489,7 +457,7 @@ function build_dusk_supplemental(
         $info .= "{$strings['summaries']['civil_dusk']}: "
             . date($time_format, $sunset) . ' - '
             . date($time_format, $civil_end) . ' ('
-            . format_duration($civil_end - $sunset) . ")\n";
+            . sprintf('%dh %02dm', (int)floor(($civil_end - $sunset) / 3600), (int)floor((($civil_end - $sunset) % 3600) / 60)) . ")\n";
         $info .= "  {$strings['supplemental']['civil_dusk']}\n\n";
     }
 
@@ -497,7 +465,7 @@ function build_dusk_supplemental(
         $info .= "{$strings['summaries']['nautical_dusk']}: "
             . date($time_format, $civil_end) . ' - '
             . date($time_format, $nautical_end) . ' ('
-            . format_duration($nautical_end - $civil_end) . ")\n";
+            . sprintf('%dh %02dm', (int)floor(($nautical_end - $civil_end) / 3600), (int)floor((($nautical_end - $civil_end) % 3600) / 60)) . ")\n";
         $info .= "  {$strings['supplemental']['nautical_dusk']}\n\n";
     }
 
@@ -505,7 +473,7 @@ function build_dusk_supplemental(
         $info .= "{$strings['summaries']['astronomical_dusk']}: "
             . date($time_format, $nautical_end) . ' - '
             . date($time_format, $astro_end) . ' ('
-            . format_duration($astro_end - $nautical_end) . ")\n";
+            . sprintf('%dh %02dm', (int)floor(($astro_end - $nautical_end) / 3600), (int)floor((($astro_end - $nautical_end) % 3600) / 60)) . ")\n";
         $info .= "  {$strings['supplemental']['astronomical_dusk']}\n\n";
     }
 
@@ -516,7 +484,7 @@ function build_dusk_supplemental(
         $info .= "{$strings['labels']['time']}: "
             . date($time_format, $astro_end) . ' - '
             . date($time_format, $next_astro_begin) . ' ('
-            . format_duration($night_seconds) . ", {$night_pct}%)\n";
+            . sprintf('%dh %02dm', (int)floor($night_seconds / 3600), (int)floor(($night_seconds % 3600) / 60)) . ", {$night_pct}%)\n";
         $info .= "{$strings['labels']['solar_midnight']}: " . date($time_format, $solar_midnight) . "\n";
         $info .= "{$strings['labels']['percentile']}: "
             . sprintf($strings['percentile_explanation']['night'], $night_percentile) . "\n\n";

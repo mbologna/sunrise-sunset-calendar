@@ -204,6 +204,59 @@ while ($current_day <= $end) {
 
     $solar_noon_time = date($time_format, $solar_noon);
 
+    // Build context arrays for supplemental information
+    $dawn_ctx = [
+        'times' => compact(
+            'sunrise',
+            'sunset',
+            'solar_noon',
+            'civil_begin',
+            'civil_end',
+            'nautical_begin',
+            'nautical_end',
+            'astro_begin',
+            'astro_end'
+        ),
+        'format' => $time_format,
+        'enabled' => $enabled,
+        'daylight' => compact(
+            'daylight_seconds',
+            'daylight_pct',
+            'daylight_percentile',
+            'day_length_comparison',
+            'solar_noon_time',
+            'winter_comparison',
+            'summer_comparison',
+            'winter_solstice_info',
+            'summer_solstice_info',
+            'diff_from_winter',
+            'diff_from_summer'
+        ),
+    ];
+
+    $dusk_ctx = [
+        'times' => compact(
+            'sunrise',
+            'sunset',
+            'civil_begin',
+            'civil_end',
+            'nautical_begin',
+            'nautical_end',
+            'astro_begin',
+            'astro_end',
+            'next_astro_begin'
+        ),
+        'format' => $time_format,
+        'enabled' => $enabled,
+        'night' => compact(
+            'night_seconds',
+            'night_pct',
+            'night_percentile',
+            'night_length_comparison',
+            'moon_info'
+        ),
+    ];
+
     // Check for week summary (Sundays)
     $day_of_week = date('w', $current_day);
     if ($day_of_week == 0 && $include_daynight) {
@@ -298,32 +351,7 @@ while ($current_day <= $end) {
         $end_time = $sunrise + $rise_offset;
         $duration = format_duration_full($sunrise - $civil_begin);
 
-        $supplemental = build_dawn_supplemental(
-            $sunrise,
-            $sunset,
-            $solar_noon,
-            $civil_begin,
-            $civil_end,
-            $nautical_begin,
-            $nautical_end,
-            $astro_begin,
-            $astro_end,
-            $time_format,
-            $enabled,
-            $daylight_seconds,
-            $daylight_pct,
-            $daylight_percentile,
-            $day_length_comparison,
-            $winter_comparison,
-            $summer_comparison,
-            $solar_noon_time,
-            $winter_solstice_info,
-            $summer_solstice_info,
-            $diff_from_winter,
-            $diff_from_summer,
-            'civil',
-            $STRINGS
-        );
+        $supplemental = build_dawn_supplemental($dawn_ctx, $STRINGS);
 
         echo "BEGIN:VEVENT\r\n";
         echo "UID:civil-dawn-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";
@@ -360,32 +388,7 @@ while ($current_day <= $end) {
         $end_time = $civil_begin + $rise_offset;
         $duration = format_duration_full($civil_begin - $nautical_begin);
 
-        $supplemental = build_dawn_supplemental(
-            $sunrise,
-            $sunset,
-            $solar_noon,
-            $civil_begin,
-            $civil_end,
-            $nautical_begin,
-            $nautical_end,
-            $astro_begin,
-            $astro_end,
-            $time_format,
-            $enabled,
-            $daylight_seconds,
-            $daylight_pct,
-            $daylight_percentile,
-            $day_length_comparison,
-            $winter_comparison,
-            $summer_comparison,
-            $solar_noon_time,
-            $winter_solstice_info,
-            $summer_solstice_info,
-            $diff_from_winter,
-            $diff_from_summer,
-            'nautical',
-            $STRINGS
-        );
+        $supplemental = build_dawn_supplemental($dawn_ctx, $STRINGS);
 
         echo "BEGIN:VEVENT\r\n";
         echo "UID:nautical-dawn-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";
@@ -422,32 +425,7 @@ while ($current_day <= $end) {
         $end_time = $nautical_begin + $rise_offset;
         $duration = format_duration_full($nautical_begin - $astro_begin);
 
-        $supplemental = build_dawn_supplemental(
-            $sunrise,
-            $sunset,
-            $solar_noon,
-            $civil_begin,
-            $civil_end,
-            $nautical_begin,
-            $nautical_end,
-            $astro_begin,
-            $astro_end,
-            $time_format,
-            $enabled,
-            $daylight_seconds,
-            $daylight_pct,
-            $daylight_percentile,
-            $day_length_comparison,
-            $winter_comparison,
-            $summer_comparison,
-            $solar_noon_time,
-            $winter_solstice_info,
-            $summer_solstice_info,
-            $diff_from_winter,
-            $diff_from_summer,
-            'astro',
-            $STRINGS
-        );
+        $supplemental = build_dawn_supplemental($dawn_ctx, $STRINGS);
 
         echo "BEGIN:VEVENT\r\n";
         echo "UID:astro-dawn-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";
@@ -540,26 +518,7 @@ while ($current_day <= $end) {
         $end_time = $civil_end + $set_offset;
         $duration = format_duration_full($civil_end - $sunset);
 
-        $supplemental = build_dusk_supplemental(
-            $sunrise,
-            $sunset,
-            $civil_begin,
-            $civil_end,
-            $nautical_begin,
-            $nautical_end,
-            $astro_begin,
-            $astro_end,
-            $next_astro_begin,
-            $time_format,
-            $enabled,
-            $night_seconds,
-            $night_pct,
-            $night_percentile,
-            $night_length_comparison,
-            $moon_info,
-            'civil',
-            $STRINGS
-        );
+        $supplemental = build_dusk_supplemental($dusk_ctx, $STRINGS);
 
         echo "BEGIN:VEVENT\r\n";
         echo "UID:civil-dusk-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";
@@ -596,26 +555,7 @@ while ($current_day <= $end) {
         $end_time = $nautical_end + $set_offset;
         $duration = format_duration_full($nautical_end - $civil_end);
 
-        $supplemental = build_dusk_supplemental(
-            $sunrise,
-            $sunset,
-            $civil_begin,
-            $civil_end,
-            $nautical_begin,
-            $nautical_end,
-            $astro_begin,
-            $astro_end,
-            $next_astro_begin,
-            $time_format,
-            $enabled,
-            $night_seconds,
-            $night_pct,
-            $night_percentile,
-            $night_length_comparison,
-            $moon_info,
-            'nautical',
-            $STRINGS
-        );
+        $supplemental = build_dusk_supplemental($dusk_ctx, $STRINGS);
 
         echo "BEGIN:VEVENT\r\n";
         echo "UID:nautical-dusk-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";
@@ -652,26 +592,7 @@ while ($current_day <= $end) {
         $end_time = $astro_end + $set_offset;
         $duration = format_duration_full($astro_end - $nautical_end);
 
-        $supplemental = build_dusk_supplemental(
-            $sunrise,
-            $sunset,
-            $civil_begin,
-            $civil_end,
-            $nautical_begin,
-            $nautical_end,
-            $astro_begin,
-            $astro_end,
-            $next_astro_begin,
-            $time_format,
-            $enabled,
-            $night_seconds,
-            $night_pct,
-            $night_percentile,
-            $night_length_comparison,
-            $moon_info,
-            'astro',
-            $STRINGS
-        );
+        $supplemental = build_dusk_supplemental($dusk_ctx, $STRINGS);
 
         echo "BEGIN:VEVENT\r\n";
         echo "UID:astro-dusk-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";

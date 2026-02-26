@@ -13,6 +13,8 @@
 
 declare(strict_types=1);
 
+use SunCalendar\Cache;
+
 // ============================================================================
 // ERROR HANDLING
 // ============================================================================
@@ -56,8 +58,9 @@ function calculate_sun_times_spa(
 ): array {
     // Check cache first
     $cacheKey = sprintf('%d-%d-%d:%.4f:%.4f:%.2f', $y, $m, $d, $lat, $lon, $utc_offset);
-    if (isset($GLOBALS['SOLAR_CALC_CACHE'][$cacheKey])) {
-        return $GLOBALS['SOLAR_CALC_CACHE'][$cacheKey];
+    $cached = Cache::getInstance()->getSolarCalc($cacheKey);
+    if ($cached !== null) {
+        return $cached;
     }
 
     if (!class_exists('SolarData\SunPosition')) {
@@ -142,7 +145,7 @@ function calculate_sun_times_spa(
     });
 
     // Cache the result
-    $GLOBALS['SOLAR_CALC_CACHE'][$cacheKey] = $result;
+    Cache::getInstance()->setSolarCalc($cacheKey, $result);
 
     return $result;
 }
@@ -238,8 +241,9 @@ function apply_periodic_corrections(float $JDE0): float
 function calculate_moon_phases_for_month(int $year, int $month): array
 {
     $cacheKey = "$year-$month";
-    if (isset($GLOBALS['MOON_PHASE_CACHE'][$cacheKey])) {
-        return $GLOBALS['MOON_PHASE_CACHE'][$cacheKey];
+    $cached = Cache::getInstance()->getMoonPhase($cacheKey);
+    if ($cached !== null) {
+        return $cached;
     }
 
     $k = (int) floor(($year + ($month - 0.5) / 12 - 2000) * 12.3685);
@@ -263,7 +267,7 @@ function calculate_moon_phases_for_month(int $year, int $month): array
     $phases = array_values(array_filter($phases, fn($phase) =>
         $phase['timestamp'] >= $early_start && $phase['timestamp'] <= $late_end));
 
-    $GLOBALS['MOON_PHASE_CACHE'][$cacheKey] = $phases;
+    Cache::getInstance()->setMoonPhase($cacheKey, $phases);
     return $phases;
 }
 

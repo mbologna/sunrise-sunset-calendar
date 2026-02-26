@@ -198,32 +198,37 @@ class CalendarGenerationTest extends TestCase
             'daylight' => true,
         ];
 
-        $result = build_dawn_supplemental(
-            1707400000, // sunrise
-            1707440000, // sunset
-            1707420000, // solar_noon
-            1707398000, // civil_begin
-            1707442000, // civil_end
-            1707396000, // nautical_begin
-            1707444000, // nautical_end
-            1707394000, // astro_begin
-            1707446000, // astro_end
-            'H:i',
-            $enabled,
-            40000, // daylight_seconds
-            46.3, // daylight_pct
-            65.0, // daylight_percentile
-            '+2m 30s', // day_length_comparison
-            '1h 30m', // winter_comparison
-            '-3h 15m', // summer_comparison
-            '12:30', // solar_noon_time
-            'Dec 21, 12:00', // winter_solstice_info
-            'Jun 21, 12:00', // summer_solstice_info
-            5400, // diff_from_winter
-            -11700, // diff_from_summer
-            'daylight', // current_event
-            $strings
-        );
+        $sunrise = 1707400000;
+        $sunset = 1707440000;
+        $solar_noon = 1707420000;
+        $civil_begin = 1707398000;
+        $civil_end = 1707442000;
+        $nautical_begin = 1707396000;
+        $nautical_end = 1707444000;
+        $astro_begin = 1707394000;
+        $astro_end = 1707446000;
+
+        $ctx = [
+            'times' => compact('sunrise', 'sunset', 'solar_noon', 'civil_begin', 'civil_end',
+                               'nautical_begin', 'nautical_end', 'astro_begin', 'astro_end'),
+            'format' => 'H:i',
+            'enabled' => $enabled,
+            'daylight' => [
+                'daylight_seconds' => 40000,
+                'daylight_pct' => 46.3,
+                'daylight_percentile' => 65.0,
+                'day_length_comparison' => '+2m 30s',
+                'solar_noon_time' => '12:30',
+                'winter_comparison' => '1h 30m',
+                'summer_comparison' => '-3h 15m',
+                'winter_solstice_info' => 'Dec 21',
+                'summer_solstice_info' => 'Jun 21',
+                'diff_from_winter' => 5400,
+                'diff_from_summer' => -11700,
+            ],
+        ];
+
+        $result = build_dawn_supplemental($ctx, $strings);
 
         $this->assertIsString($result);
     }

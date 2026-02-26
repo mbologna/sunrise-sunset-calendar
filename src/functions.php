@@ -190,19 +190,6 @@ function verify_token(string $providedToken): bool
 // ============================================================================
 
 /**
- * Format duration in hours and minutes.
- *
- * @param int $seconds Duration in seconds
- * @return string Formatted duration
- */
-function format_duration(int $seconds): string
-{
-    $hours = (int) floor($seconds / 3600);
-    $minutes = (int) floor(($seconds % 3600) / 60);
-    return sprintf('%dh %02dm', $hours, $minutes);
-}
-
-/**
  * Format duration in short form.
  *
  * @param int $seconds Duration in seconds

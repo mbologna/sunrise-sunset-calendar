@@ -22,9 +22,19 @@ function geocode_address(string $address): array
         'addressdetails' => 1,
     ]);
 
-    $opts = ['http' => ['header' => 'User-Agent: Sun-Twilight-Calendar/9.0']];
+    $opts = [
+        'http' => [
+            'header' => 'User-Agent: Sun-Twilight-Calendar/10.0',
+            'timeout' => 5,
+        ],
+    ];
     $context = stream_context_create($opts);
-    $response = @file_get_contents($url, false, $context);
+
+    try {
+        $response = file_get_contents($url, false, $context);
+    } catch (Exception $e) {
+        return ['success' => false, 'error' => 'Geocoding unavailable'];
+    }
 
     if (!$response) {
         return ['success' => false, 'error' => 'Geocoding unavailable'];
@@ -59,9 +69,19 @@ function reverse_geocode(float $lat, float $lon): array
         'zoom' => 10,
     ]);
 
-    $opts = ['http' => ['header' => 'User-Agent: Sun-Twilight-Calendar/9.0']];
+    $opts = [
+        'http' => [
+            'header' => 'User-Agent: Sun-Twilight-Calendar/10.0',
+            'timeout' => 5,
+        ],
+    ];
     $context = stream_context_create($opts);
-    $response = @file_get_contents($url, false, $context);
+
+    try {
+        $response = file_get_contents($url, false, $context);
+    } catch (Exception $e) {
+        return ['success' => false];
+    }
 
     if (!$response) {
         return ['success' => false];
