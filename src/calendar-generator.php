@@ -368,6 +368,7 @@ while ($current_day <= $end) {
         // DETAILS section with sunrise/sunset context
         $desc .= "{$STRINGS['headers']['details']}\n\n";
 
+        $desc .= "{$STRINGS['labels']['first_light']}: " . date($time_format, $civil_begin) . "\n";
         $desc .= "{$STRINGS['labels']['sunrise']}: " . date($time_format, $sunrise) . "\n";
         $desc .= "{$STRINGS['labels']['sunset']}: " . date($time_format, $sunset) . "\n\n";
 
@@ -536,7 +537,8 @@ while ($current_day <= $end) {
         $desc .= "{$STRINGS['headers']['details']}\n\n";
 
         $desc .= "{$STRINGS['labels']['sunrise']}: " . date($time_format, $sunrise) . "\n";
-        $desc .= "{$STRINGS['labels']['sunset']}: " . date($time_format, $sunset) . "\n\n";
+        $desc .= "{$STRINGS['labels']['sunset']}: " . date($time_format, $sunset) . "\n";
+        $desc .= "{$STRINGS['labels']['last_light']}: " . date($time_format, $civil_end) . "\n\n";
 
         // CONTEXT section
         $desc .= "{$STRINGS['headers']['context']}\n\n";
@@ -660,19 +662,16 @@ while ($current_day <= $end) {
         }
 
         // MOON PHASE section with emoji
-        $desc .= "{$STRINGS['headers']['moon_phase']}\n";
+        $desc .= "{$STRINGS['headers']['moon_phase']}\n\n";
 
-        $desc .= "{$STRINGS['labels']['current']}: {$moon_emoji} {$moon_info['phase_name']}\n";
-        $illum = number_format((float) $moon_info['illumination'], 0);
-        $desc .= "{$STRINGS['labels']['illumination']}: {$illum}%\n";
+        $illum = number_format((float) $moon_info['illumination'], 1);
+        $desc .= "{$STRINGS['labels']['current']}: {$moon_emoji} {$moon_info['phase_name']} ({$illum}% lit)\n";
         $prev_emoji = get_moon_phase_emoji($moon_info['prev_phase']['name']);
         $prev_name = $moon_info['prev_phase']['name'];
-        $desc .= "{$STRINGS['labels']['previous']}: {$prev_emoji} {$prev_name}\n";
-        $desc .= "  {$moon_info['prev_phase']['date']}\n";
+        $desc .= "{$STRINGS['labels']['previous']}: {$prev_emoji} {$prev_name} ({$moon_info['prev_phase']['date']})\n";
         $next_emoji = get_moon_phase_emoji($moon_info['next_phase']['name']);
         $next_name = $moon_info['next_phase']['name'];
-        $desc .= "{$STRINGS['labels']['next']}: {$next_emoji} {$next_name}\n";
-        $desc .= "  {$moon_info['next_phase']['date']}\n\n";
+        $desc .= "{$STRINGS['labels']['next']}: {$next_emoji} {$next_name} ({$moon_info['next_phase']['date']})\n\n";
 
         // CONTEXT section
         $desc .= "{$STRINGS['headers']['context']}\n\n";
