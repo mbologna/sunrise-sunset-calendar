@@ -191,30 +191,37 @@ class MoonPhaseAccuracyTest extends TestCase
 
     /**
      * Test get_accurate_moon_phase() function for a specific date.
+     *
+     * February 1, 2026 at 22:09 UTC is Full Moon.
+     * A timestamp on the same calendar day (20:00 UTC) should recognise the
+     * current phase as "Full Moon" via the same-day detection, and report the
+     * *next* named phase (Last Quarter, ~Feb 9) rather than duplicating the
+     * same-day Full Moon in the "next" slot.
      */
     public function testGetAccurateMoonPhaseForFebruary1_2026()
     {
-        // February 1, 2026 at 22:09 UTC is Full Moon
-        // Test a timestamp just before the full moon
+        // 20:00 UTC — 2 hours before the Full Moon on the same calendar day
         $test_timestamp = strtotime('2026-02-01 20:00:00 UTC');
 
         $moon_info = get_accurate_moon_phase($test_timestamp);
 
-        // Should detect it's approaching Full Moon
         $this->assertNotNull($moon_info);
-        $this->assertNotNull($moon_info['next_phase']);
 
-        // Next phase should be Full Moon on Feb 1
-        $this->assertEquals('Full Moon', $moon_info['next_phase']['name']);
+        // Current phase should be "Full Moon" via same-day detection
+        $this->assertEquals('Full Moon', $moon_info['phase_name']);
+
+        // Next phase must NOT be the same-day Full Moon — it should be Last Quarter (~Feb 9)
+        $this->assertNotNull($moon_info['next_phase']);
+        $this->assertEquals('Last Quarter', $moon_info['next_phase']['name']);
 
         $next_ts = $moon_info['next_phase']['timestamp'];
-        $expected = strtotime('2026-02-01 22:09:00 UTC');
+        $expected = strtotime('2026-02-09 12:43:00 UTC');
 
         $this->assertEqualsWithDelta(
             $expected,
             $next_ts,
-            180,
-            'Next phase should be Full Moon at 22:09 UTC'
+            300,
+            'Next phase after same-day Full Moon should be Last Quarter ~Feb 9'
         );
     }
 

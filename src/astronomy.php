@@ -432,6 +432,19 @@ function get_accurate_moon_phase(int $timestamp): array
         }
     }
 
+    // If $next falls on the same calendar day, it is already represented as "current".
+    // Advance $next to the actual next phase after the same-day one.
+    if ($next && $next['timestamp'] >= $dayStart && $next['timestamp'] <= $dayEnd) {
+        $same_day_ts = $next['timestamp'];
+        $next = null;
+        foreach ($phases as $p) {
+            if ($p['timestamp'] > $same_day_ts) {
+                $next = $p;
+                break;
+            }
+        }
+    }
+
     if ($prev && $next) {
         $new_moon_ts = null;
         foreach (array_reverse($phases) as $phase) {

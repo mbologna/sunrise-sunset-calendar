@@ -501,17 +501,17 @@ function build_dusk_supplemental(array $ctx, array $strings): string
         $moon_emoji_supp = get_moon_phase_emoji($moon_info['phase_name']);
         $illum_supp = number_format((float) $moon_info['illumination'], 1);
         $info .= "{$strings['headers']['moon_phase']}\n\n";
-        $phase_lit = "{$moon_info['phase_name']} ({$illum_supp}% lit)";
-        $info .= "{$strings['labels']['current']}: {$moon_emoji_supp} {$phase_lit}\n";
+        $info .= "{$strings['labels']['current']}: {$moon_emoji_supp} {$moon_info['phase_name']}"
+            . " ({$illum_supp}% lit)\n";
         if ($moon_info['prev_phase']) {
             $prev_emoji_supp = get_moon_phase_emoji($moon_info['prev_phase']['name']);
-            $info .= "{$strings['labels']['previous']}: {$prev_emoji_supp} {$moon_info['prev_phase']['name']}\n";
-            $info .= "  {$moon_info['prev_phase']['date']}\n";
+            $info .= "{$strings['labels']['previous']}: {$prev_emoji_supp} {$moon_info['prev_phase']['name']}"
+                . " ({$moon_info['prev_phase']['date']})\n";
         }
         if ($moon_info['next_phase']) {
             $next_emoji_supp = get_moon_phase_emoji($moon_info['next_phase']['name']);
-            $info .= "{$strings['labels']['next']}: {$next_emoji_supp} {$moon_info['next_phase']['name']}\n";
-            $info .= "  {$moon_info['next_phase']['date']}\n";
+            $info .= "{$strings['labels']['next']}: {$next_emoji_supp} {$moon_info['next_phase']['name']}"
+                . " ({$moon_info['next_phase']['date']})\n";
         }
     }
 

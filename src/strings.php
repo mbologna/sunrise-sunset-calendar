@@ -75,6 +75,8 @@ return [
         'sunrise' => 'Sunrise',
         'sunset' => 'Sunset',
         'illumination' => 'Illumination',
+        'first_light' => 'First Light',
+        'last_light' => 'Last Light',
         'of_day' => 'of the day',
     ],
 
@@ -126,7 +128,7 @@ return [
         'nautical_dusk' => 'Horizon fading at sea, star navigation possible',
         'astronomical_dusk' => 'Fading to true darkness, stars becoming visible',
         'daylight' => 'Sun above the horizon, full natural illumination',
-        'night' => 'True darkness (sun >18° below horizon), optimal for astronomy',
+        'night' => 'Complete astronomical darkness, optimal for stargazing and deep-sky observation',
     ],
 
     // Percentile explanations
