@@ -16,10 +16,16 @@ if (!defined('AUTH_TOKEN')) {
     define('AUTH_TOKEN', 'CHANGE_ME_TO_A_RANDOM_STRING');
 }
 
-// OPTIONAL: Number of days to generate in calendar feed
-// Default: 365 (one year)
+// OPTIONAL: Number of days to generate in calendar feed (future)
+// Default: 400 (~13 months, ensures a full year ahead is always visible)
 if (!defined('CALENDAR_WINDOW_DAYS')) {
-    define('CALENDAR_WINDOW_DAYS', 365);
+    define('CALENDAR_WINDOW_DAYS', 400);
+}
+
+// OPTIONAL: Number of past days to include in calendar feed
+// Default: 30 (one month of history)
+if (!defined('CALENDAR_PAST_DAYS')) {
+    define('CALENDAR_PAST_DAYS', 30);
 }
 
 // OPTIONAL: Update interval in seconds

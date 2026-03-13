@@ -33,6 +33,9 @@ if (!defined('AUTH_TOKEN') || AUTH_TOKEN === 'CHANGE_ME_TO_A_RANDOM_STRING') {
 if (!defined('CALENDAR_WINDOW_DAYS')) {
     define('CALENDAR_WINDOW_DAYS', 400);
 }
+if (!defined('CALENDAR_PAST_DAYS')) {
+    define('CALENDAR_PAST_DAYS', 30);
+}
 if (!defined('UPDATE_INTERVAL')) {
     define('UPDATE_INTERVAL', 86400);
 }

@@ -53,7 +53,7 @@ echo "X-WR-TIMEZONE:{$timezone}\r\n";
 echo 'X-PUBLISHED-TTL:PT' . (UPDATE_INTERVAL / 3600) . "H\r\n";
 echo 'REFRESH-INTERVAL;VALUE=DURATION:PT' . (UPDATE_INTERVAL / 3600) . "H\r\n";
 
-$start = strtotime('-30 days');
+$start = strtotime('-' . CALENDAR_PAST_DAYS . ' days');
 $end = strtotime('+' . CALENDAR_WINDOW_DAYS . ' days');
 $current_day = $start;
 
