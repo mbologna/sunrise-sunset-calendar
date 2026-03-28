@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+tests/
+tools/
+config/
+vendor/
+phpunit.xml
+phpstan.neon
+.php-cs-fixer.php
+.editorconfig
+.gitignore
+.gitattributes
+README.md
