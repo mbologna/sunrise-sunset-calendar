@@ -5,7 +5,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
-        "abbadon1334/sun-position-spa-php": "^1.0"
+        "abbadon1334/sun-position-spa-php": "^2.0"
     },
     "require-dev": {
         "phpstan/phpstan": "^2.1",
