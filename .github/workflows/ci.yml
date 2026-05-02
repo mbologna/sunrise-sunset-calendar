@@ -1,117 +1,92 @@
 name: CI
 
-on:
+"on":
   push:
     branches: ["**"]
   pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     name: Test PHP ${{ matrix.php-version }}
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
     strategy:
       max-parallel: 1
       matrix:
-        php-version: ['8.2', '8.3', '8.4', '8.5']
-
+        php-version: ["8.2", "8.3", "8.4", "8.5"]
     steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-    - name: Cache Composer dependencies
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
-      with:
-        path: vendor
-        key: ${{ runner.os }}-php-${{ matrix.php-version }}-${{ hashFiles('**/composer.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-php-${{ matrix.php-version }}-
-          ${{ runner.os }}-php-
-
-    - name: Setup PHP
-      uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2
-      with:
-        php-version: ${{ matrix.php-version }}
-        extensions: mbstring, json
-        coverage: none
-        tools: composer
-
-    - name: Validate Composer
-      run: composer validate --strict
-
-    - name: Install dependencies
-      run: composer install --prefer-dist --no-progress --no-interaction
-
-    - name: Validate PHP syntax
-      run: |
-        php -l sunrise-sunset-calendar.php
-        php -l src/calendar-generator.php
-
-    - name: Create test config
-      run: |
-        mkdir -p config
-        echo '<?php define("AUTH_TOKEN", "test-token-for-ci"); ?>' > config/config.php
-
-    - name: Run PHPUnit tests
-      run: ./vendor/bin/phpunit --testdox
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Cache Composer dependencies
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: vendor
+          key: ${{ runner.os }}-php-${{ matrix.php-version }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-${{ matrix.php-version }}-
+            ${{ runner.os }}-php-
+      - uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          extensions: mbstring, json
+          coverage: none
+          tools: composer
+      - run: composer validate --strict
+      - run: composer install --prefer-dist --no-progress --no-interaction
+      - name: Validate PHP syntax
+        run: |
+          php -l sunrise-sunset-calendar.php
+          php -l src/calendar-generator.php
+      - name: Create test config
+        run: |
+          mkdir -p config
+          echo '<?php define("AUTH_TOKEN", "test-token-for-ci"); ?>' > config/config.php
+      - run: ./vendor/bin/phpunit --testdox
 
   lint:
-    name: Lint Code
+    name: Lint PHP
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
     steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-    - name: Setup PHP
-      uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2
-      with:
-        php-version: '8.1'
-        tools: php-cs-fixer
-
-    - name: Run PHP-CS-Fixer (check only)
-      run: php-cs-fixer fix --dry-run --diff --verbose
-      continue-on-error: true
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2
+        with:
+          php-version: "8.1"
+          tools: php-cs-fixer
+      - name: Run PHP-CS-Fixer (check only)
+        run: php-cs-fixer fix --dry-run --diff --verbose
+        continue-on-error: true
 
   security:
     name: Security Scan
     runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
-    - name: Setup PHP
-      uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2
-      with:
-        php-version: '8.1'
-
-    - name: Check for security vulnerabilities
-      run: |
-        # Check for common security issues
-        ! grep -r "eval(" --include="*.php" .
-        ! grep -r "system(" --include="*.php" .
-        ! grep -r "exec(" --include="*.php" . || grep -r "// Security checked" --include="*.php" .
-        ! grep -r "\$_REQUEST" --include="*.php" .
-
-  build-image:
-    needs: [test, lint]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
     permissions:
       contents: read
-      packages: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
-      - uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+      - uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/sunrise-sunset-calendar:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/sunrise-sunset-calendar:latest
+          php-version: "8.1"
+      - name: Check for security vulnerabilities
+        run: |
+          ! grep -r "eval(" --include="*.php" .
+          ! grep -r "system(" --include="*.php" .
+          ! grep -r "exec(" --include="*.php" . || grep -r "// Security checked" --include="*.php" .
+          ! grep -r "\$_REQUEST" --include="*.php" .
+
+  docker:
+    needs: [test, lint]
+    uses: mbologna/.github/.github/workflows/docker-build-scan-push.yml@main
+    with:
+      image_name: sunrise-sunset-calendar
+      push_to_dockerhub: false
+      enable_grype: true
+      enable_cosign: true
+      enable_release_drafter: true
+    secrets: inherit
+
