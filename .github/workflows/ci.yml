@@ -81,7 +81,7 @@ jobs:
 
   docker:
     needs: [test, lint]
-    uses: mbologna/.github/.github/workflows/docker-build-scan-push.yml@main
+    uses: mbologna/.github/.github/workflows/docker-build-scan-push.yml@2df71813e45b4fb3b071c35d6c6a05a5dd9827c2 # main
     with:
       image_name: sunrise-sunset-calendar
       push_to_dockerhub: false
