@@ -19,9 +19,8 @@ class MoonPhaseAccuracyTest extends TestCase
 {
     /**
      * Test accuracy for all 2026 moon phases.
-     *
-     * @dataProvider moonPhase2026Provider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('moonPhase2026Provider')]
     public function testMoonPhase2026Accuracy($expected_phase, $expected_datestring)
     {
         // Parse expected date
@@ -76,7 +75,7 @@ class MoonPhaseAccuracyTest extends TestCase
     /**
      * Provide all 2026 moon phase test cases.
      */
-    public function moonPhase2026Provider()
+    public static function moonPhase2026Provider()
     {
         $phases = AstronomicalReferenceData::getMoonPhases2026();
         $test_cases = [];

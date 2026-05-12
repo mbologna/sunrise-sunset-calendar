@@ -17,9 +17,8 @@ class EquinoxSolsticeAccuracyTest extends TestCase
 {
     /**
      * Test accuracy for all equinoxes and solstices 2024-2030.
-     *
-     * @dataProvider equinoxSolsticeProvider
      */
+    #[\PHPUnit\Framework\Attributes\DataProvider('equinoxSolsticeProvider')]
     public function testEquinoxSolsticeAccuracy($year, $event, $expected_datestring)
     {
         // Calculate using Meeus algorithm
@@ -53,7 +52,7 @@ class EquinoxSolsticeAccuracyTest extends TestCase
     /**
      * Provide all equinox/solstice test cases for 2024-2030.
      */
-    public function equinoxSolsticeProvider()
+    public static function equinoxSolsticeProvider()
     {
         $reference_data = AstronomicalReferenceData::getEquinoxesSolstices();
         $test_cases = [];
