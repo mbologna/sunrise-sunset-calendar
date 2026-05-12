@@ -9,6 +9,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+  security-events: write
+
+env:
+  AR_IMAGE: europe-west1-docker.pkg.dev/sunrise-sunset-cal/calendar/app
+
 jobs:
   test:
     name: Test PHP ${{ matrix.php-version }}
@@ -55,7 +65,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2
         with:
-          php-version: "8.1"
+          php-version: "8.5"
           tools: php-cs-fixer
       - name: Run PHP-CS-Fixer (check only)
         run: php-cs-fixer fix --dry-run --diff --verbose
@@ -70,7 +80,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - uses: shivammathur/setup-php@accd6127cb78bee3e8082180cb391013d204ef9f # v2
         with:
-          php-version: "8.1"
+          php-version: "8.5"
       - name: Check for security vulnerabilities
         run: |
           ! grep -r "eval(" --include="*.php" .
@@ -89,3 +99,29 @@ jobs:
       enable_release_drafter: true
     secrets: inherit
 
+  deploy:
+    needs: [docker]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Compute short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+      - name: Mirror to Artifact Registry
+        run: |
+          docker buildx imagetools create \
+            --tag ${{ env.AR_IMAGE }}:sha-${{ steps.sha.outputs.short }} \
+            --tag ${{ env.AR_IMAGE }}:latest \
+            ghcr.io/${{ github.repository_owner }}/sunrise-sunset-calendar:sha-${{ steps.sha.outputs.short }}
+      - uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: sunrise-sunset-calendar
+          image: ${{ env.AR_IMAGE }}:sha-${{ steps.sha.outputs.short }}
+          region: europe-west1

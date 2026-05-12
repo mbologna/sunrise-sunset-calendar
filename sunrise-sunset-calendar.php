@@ -9,11 +9,28 @@
 
 declare(strict_types=1);
 
-$configFile = __DIR__ . '/config/config.php';
-if (!file_exists($configFile)) {
-    die('Error: config/config.php not found');
+// ============================================================================
+// CONFIGURATION
+// Environment variables take precedence (Cloud Run / container deployments).
+// config/config.php is loaded afterwards as an override for local/self-hosted use.
+// ============================================================================
+
+foreach ([
+    'AUTH_TOKEN'           => fn($v) => $v,
+    'CALENDAR_WINDOW_DAYS' => fn($v) => (int) $v,
+    'CALENDAR_PAST_DAYS'   => fn($v) => (int) $v,
+    'UPDATE_INTERVAL'      => fn($v) => (int) $v,
+] as $name => $cast) {
+    $env = getenv($name);
+    if ($env !== false && !defined($name)) {
+        define($name, $cast($env));
+    }
 }
-require_once $configFile;
+
+$configFile = __DIR__ . '/config/config.php';
+if (file_exists($configFile)) {
+    require_once $configFile;
+}
 
 // Load Composer autoloader
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
@@ -27,7 +44,7 @@ require_once __DIR__ . '/src/geocoding.php';
 require_once __DIR__ . '/src/helpers.php';
 
 if (!defined('AUTH_TOKEN') || AUTH_TOKEN === 'CHANGE_ME_TO_A_RANDOM_STRING') {
-    die('Error: Please set AUTH_TOKEN in config.php');
+    die('Error: Please set AUTH_TOKEN via environment variable or config/config.php');
 }
 
 if (!defined('CALENDAR_WINDOW_DAYS')) {
