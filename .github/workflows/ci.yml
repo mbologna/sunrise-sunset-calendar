@@ -120,7 +120,7 @@ jobs:
             --tag ${{ env.AR_IMAGE }}:sha-${{ steps.sha.outputs.short }} \
             --tag ${{ env.AR_IMAGE }}:latest \
             ghcr.io/${{ github.repository_owner }}/sunrise-sunset-calendar:sha-${{ steps.sha.outputs.short }}
-      - uses: google-github-actions/deploy-cloudrun@251330ba9a8a34bfbc1622895f42e1d53fd14522 # v2
+      - uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3
         with:
           service: sunrise-sunset-calendar
           image: ${{ env.AR_IMAGE }}:sha-${{ steps.sha.outputs.short }}
