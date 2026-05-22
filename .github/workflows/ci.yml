@@ -17,7 +17,7 @@ permissions:
   security-events: write
 
 env:
-  AR_IMAGE: europe-west1-docker.pkg.dev/sunrise-sunset-cal/calendar/app
+  AR_IMAGE: us-central1-docker.pkg.dev/sunrise-sunset-cal/calendar/app
 
 jobs:
   test:
@@ -113,7 +113,7 @@ jobs:
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
       - name: Mirror to Artifact Registry
         run: |
           docker buildx imagetools create \
@@ -124,4 +124,4 @@ jobs:
         with:
           service: sunrise-sunset-calendar
           image: ${{ env.AR_IMAGE }}:sha-${{ steps.sha.outputs.short }}
-          region: europe-west1
+          region: us-central1
