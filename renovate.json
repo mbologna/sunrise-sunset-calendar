@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
     "github>mbologna/renovate-config"
-  ]
+  ],
+  "ignoreDeps": ["abbadon1334/sun-position-spa-php"]
 }
