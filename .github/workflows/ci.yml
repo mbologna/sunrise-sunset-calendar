@@ -16,9 +16,6 @@ permissions:
   attestations: write
   security-events: write
 
-env:
-  AR_IMAGE: us-central1-docker.pkg.dev/sunrise-sunset-cal/calendar/app
-
 jobs:
   test:
     name: Test PHP ${{ matrix.php-version }}
@@ -90,10 +87,10 @@ jobs:
 
   docker:
     needs: [test, lint]
-    uses: mbologna/.github/.github/workflows/docker-ci.yml@a8b58a8b6a171a867fda7e7a9ab74c85d3ca60dd # main
+    uses: mbologna/.github/.github/workflows/docker-ci.yml@main
     with:
       image_name: sunrise-sunset-calendar
-      push_to_dockerhub: false
+      push_to_dockerhub: true
       enable_grype: true
       enable_cosign: true
       enable_release_drafter: true
@@ -101,27 +98,11 @@ jobs:
 
   deploy:
     needs: [docker]
-    runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Compute short SHA
-        id: sha
-        run: echo "short=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
-      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
-      - name: Mirror to Artifact Registry
-        run: |
-          docker buildx imagetools create \
-            --tag ${{ env.AR_IMAGE }}:sha-${{ steps.sha.outputs.short }} \
-            --tag ${{ env.AR_IMAGE }}:latest \
-            ghcr.io/${{ github.repository_owner }}/sunrise-sunset-calendar:sha-${{ steps.sha.outputs.short }}
-      - uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3
-        with:
-          service: sunrise-sunset-calendar
-          image: ${{ env.AR_IMAGE }}:sha-${{ steps.sha.outputs.short }}
-          region: us-central1
+    uses: mbologna/.github/.github/workflows/gcp-deploy.yml@main
+    with:
+      image_name: sunrise-sunset-calendar
+      deploy_type: service
+      deploy_name: sunrise-sunset-calendar
+      region: us-central1
+    secrets: inherit
