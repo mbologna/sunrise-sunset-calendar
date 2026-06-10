@@ -102,7 +102,7 @@ jobs:
 
   deploy:
     needs: [docker]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule'
     uses: mbologna/.github/.github/workflows/gcp-deploy.yml@af64a3169c2eb27c42434346d87d7116b44ec401 # main
     with:
       image_name: sunrise-sunset-calendar
