@@ -3,7 +3,10 @@ name: CI
 "on":
   push:
     branches: ["**"]
+    tags: ["v*.*.*"]
   pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -86,6 +89,15 @@ jobs:
       enable_grype: true
       enable_cosign: true
       enable_release_drafter: true
+    secrets: inherit
+
+  auto-release:
+    if: github.event_name == 'schedule'
+    needs: [docker]
+    uses: mbologna/.github/.github/workflows/auto-release.yml@b76cd3762a1b6787ae79e88f7c012b2dc848f325 # main
+    with:
+      strategy: docker
+      image: docker.io/mbologna/sunrise-sunset-calendar
     secrets: inherit
 
   deploy:
