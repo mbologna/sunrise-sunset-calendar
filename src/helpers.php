@@ -88,6 +88,13 @@ function calculate_daylight_percentile(
         }
     }
 
+    // When today is the longest day of the year, return exactly 100%.
+    // Without this, the solstice would score 364/365 = 99.7% because no day
+    // is strictly shorter than itself.
+    if ($targetDaylightHours >= max($daylightLengths)) {
+        return 100.0;
+    }
+
     return round(($countBelow / count($daylightLengths)) * 100, 1);
 }
 
