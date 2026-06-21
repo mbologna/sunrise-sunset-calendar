@@ -60,8 +60,8 @@ class PercentileCalculationsTest extends BaseTest
         $summer = $this->calculateSunTimes($year, 6, 21, $lat, $lon, $utc_offset);
         $percentile = calculate_daylight_percentile($summer['daylength_h'], $lat, $lon, $year, $utc_offset);
 
-        // Should be very close to 100th percentile
-        $this->assertPercentile(100.0, $percentile, 'Rome summer solstice ~100th percentile', 2.0);
+        // Should be exactly 100th percentile
+        $this->assertPercentile(100.0, $percentile, 'Rome summer solstice = 100th percentile', 0.0);
 
         // Test that it's the highest percentile in the year
         $this->assertGreaterThan(95.0, $percentile, 'Summer solstice > 95th percentile');
@@ -413,6 +413,22 @@ class PercentileCalculationsTest extends BaseTest
         $dec31 = $this->calculateSunTimes($year, 12, 31, $lat, $lon, $utc_offset);
         $dec31_perc = calculate_daylight_percentile($dec31['daylength_h'], $lat, $lon, $year, $utc_offset);
         $this->assertInRange($dec31_perc, 0.0, 10.0, 'Dec 31 percentile low (0-10%)');
+    }
+
+    public function testSummerSolsticeIsExactly100PercentBergamo(): void
+    {
+        // Regression test: June 21 was showing 99.7% instead of 100% because
+        // the percentile counted days with *strictly less* daylight (< instead of <=),
+        // so the solstice itself was never counted, giving 364/365 = 99.7%.
+        $lat = 45.6983;
+        $lon = 9.6773;
+        $utc_offset = 2; // CEST
+        $year = 2026;
+
+        $summer = $this->calculateSunTimes($year, 6, 21, $lat, $lon, $utc_offset);
+        $percentile = calculate_daylight_percentile($summer['daylength_h'], $lat, $lon, $year, $utc_offset);
+
+        $this->assertSame(100.0, $percentile, 'Bergamo summer solstice must be exactly 100th percentile');
     }
 
     public function testEdgeCaseSolsticePlusMinus1Day(): void
