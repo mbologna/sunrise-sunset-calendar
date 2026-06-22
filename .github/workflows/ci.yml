@@ -86,7 +86,6 @@ jobs:
     with:
       image_name: sunrise-sunset-calendar
       push_to_dockerhub: true
-      enable_grype: true
       enable_cosign: true
       enable_release_drafter: true
     secrets: inherit
