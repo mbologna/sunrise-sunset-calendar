@@ -21,64 +21,29 @@ permissions:
 
 jobs:
   test:
-    name: Test PHP ${{ matrix.php-version }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    strategy:
-      matrix:
-        php-version: ["8.5"]
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - name: Cache Composer dependencies
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
-        with:
-          path: vendor
-          key: ${{ runner.os }}-php-${{ matrix.php-version }}-${{ hashFiles('**/composer.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-php-${{ matrix.php-version }}-
-            ${{ runner.os }}-php-
-      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
-        with:
-          php-version: ${{ matrix.php-version }}
-          extensions: mbstring, json
-          coverage: none
-          tools: composer
-      - run: composer validate --strict
-      - run: composer install --prefer-dist --no-progress --no-interaction
-      - name: Validate PHP syntax
-        run: |
-          php -l sunrise-sunset-calendar.php
-          php -l src/calendar-generator.php
-      - name: Create test config
-        run: |
-          mkdir -p config
-          echo '<?php define("AUTH_TOKEN", "test-token-for-ci"); ?>' > config/config.php
-      - run: ./vendor/bin/phpunit --testdox
+    uses: mbologna/.github/.github/workflows/php-ci.yml@main
+    with:
+      php_version: "8.5"
+      php_extensions: "mbstring, json"
+      enable_test: true
+      enable_composer_cache: true
+      pre_test_command: "mkdir -p config && echo '<?php define(\"AUTH_TOKEN\", \"test-token-for-ci\"); ?>' > config/config.php"
+      test_command: vendor/bin/phpunit --testdox
 
   lint:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@17e62b3f3f9e7985d155f652d47162ffada15cb6 # main
+    uses: mbologna/.github/.github/workflows/php-ci.yml@main
     with:
       php_version: "8.5"
       enable_test: false
       enable_lint: true
-
-  security:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
-        with:
-          php-version: "8.5"
-      - name: Check for security vulnerabilities
-        run: |
-          ! grep -r "eval(" --include="*.php" .
-          ! grep -r "system(" --include="*.php" .
-          ! grep -r "exec(" --include="*.php" . || grep -r "// Security checked" --include="*.php" .
-          ! grep -r "\$_REQUEST" --include="*.php" .
+      lint_tools: ""
+      lint_command: >-
+        php -l sunrise-sunset-calendar.php &&
+        php -l src/calendar-generator.php &&
+        ! grep -r "eval(" --include="*.php" . &&
+        ! grep -r "system(" --include="*.php" . &&
+        (! grep -r "exec(" --include="*.php" . || grep -r "// Security checked" --include="*.php" .) &&
+        ! grep -r "\$_REQUEST" --include="*.php" .
 
   docker:
     needs: [test, lint]
