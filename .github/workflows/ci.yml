@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   test:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@b84e24e2ad726629e7d50cd30cdaca387dcdc3a1 # main
+    uses: mbologna/.github/.github/workflows/php-ci.yml@7db69c646b42efd904a52154bf076a5912397c45 # main
     with:
       php_version: "8.5"
       php_extensions: "mbstring, json"
@@ -31,7 +31,7 @@ jobs:
       test_command: vendor/bin/phpunit --testdox
 
   lint:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@b84e24e2ad726629e7d50cd30cdaca387dcdc3a1 # main
+    uses: mbologna/.github/.github/workflows/php-ci.yml@7db69c646b42efd904a52154bf076a5912397c45 # main
     with:
       php_version: "8.5"
       enable_test: false
@@ -47,7 +47,7 @@ jobs:
 
   docker:
     needs: [test, lint]
-    uses: mbologna/.github/.github/workflows/docker-ci.yml@b84e24e2ad726629e7d50cd30cdaca387dcdc3a1 # main
+    uses: mbologna/.github/.github/workflows/docker-ci.yml@7db69c646b42efd904a52154bf076a5912397c45 # main
     with:
       image_name: sunrise-sunset-calendar
       push_to_dockerhub: true
@@ -58,7 +58,7 @@ jobs:
   auto-release:
     if: github.event_name == 'schedule'
     needs: [docker]
-    uses: mbologna/.github/.github/workflows/auto-release.yml@b84e24e2ad726629e7d50cd30cdaca387dcdc3a1 # main
+    uses: mbologna/.github/.github/workflows/auto-release.yml@7db69c646b42efd904a52154bf076a5912397c45 # main
     with:
       strategy: docker
       image: docker.io/mbologna/sunrise-sunset-calendar
@@ -67,7 +67,7 @@ jobs:
   deploy:
     needs: [docker]
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule'
-    uses: mbologna/.github/.github/workflows/gcp-deploy.yml@b84e24e2ad726629e7d50cd30cdaca387dcdc3a1 # main
+    uses: mbologna/.github/.github/workflows/gcp-deploy.yml@7db69c646b42efd904a52154bf076a5912397c45 # main
     with:
       image_name: sunrise-sunset-calendar
       deploy_type: service
