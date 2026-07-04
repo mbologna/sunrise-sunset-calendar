@@ -74,3 +74,11 @@ jobs:
       deploy_name: sunrise-sunset-calendar
       region: us-central1
     secrets: inherit
+
+  cache-cleanup:
+    if: github.event_name == 'schedule'
+    uses: mbologna/.github/.github/workflows/cache-cleanup.yml@7db69c646b42efd904a52154bf076a5912397c45 # main
+    with:
+      max_age_days: 7
+    permissions:
+      actions: write
