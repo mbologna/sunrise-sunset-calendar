@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Composer and production dependencies
-COPY --from=composer:2@sha256:c86b98f6dc6a29987e54652b30cb6771ecebfe12724140f104fb2074d4cfa381 /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2@sha256:629d4ef35e75349d452851637d37a40ac33a09d6ac010139020603d79713d9bf /usr/bin/composer /usr/bin/composer
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --optimize-autoloader --no-interaction \
     && chown -R www-data:www-data vendor/
