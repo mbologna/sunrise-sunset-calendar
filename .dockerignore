@@ -2,12 +2,11 @@
 .github
 .claude
 tests/
-tools/
 config/
 vendor/
 phpunit.xml
 phpstan.neon
-.php-cs-fixer.php
+phpcs.xml.dist
 .editorconfig
 .gitignore
 .gitattributes
