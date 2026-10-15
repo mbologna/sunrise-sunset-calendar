@@ -28,8 +28,7 @@ jobs:
       php_extensions: "mbstring, json"
       enable_test: true
       enable_composer_cache: true
-      pre_test_command: "mkdir -p config && echo '<?php define(\"AUTH_TOKEN\", \"test-token-for-ci\"); ?>' > config/config.php"
-      test_command: vendor/bin/phpunit --testdox
+      test_command: vendor/bin/phpunit --testdox && composer analyse && composer lint
 
   lint:
     uses: mbologna/.github/.github/workflows/php-ci.yml@a1347014e8a5dd90f8d7d2682c5445ddbb8364da # main
@@ -39,12 +38,9 @@ jobs:
       enable_lint: true
       lint_tools: ""
       lint_command: >-
-        php -l sunrise-sunset-calendar.php &&
-        php -l src/calendar-generator.php &&
-        ! grep -r "eval(" --include="*.php" . &&
-        ! grep -r "system(" --include="*.php" . &&
-        (! grep -r "exec(" --include="*.php" . || grep -r "// Security checked" --include="*.php" .) &&
-        ! grep -r "\$_REQUEST" --include="*.php" .
+        find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l > /dev/null &&
+        ! grep -rEn '\b(eval|exec|system|shell_exec|passthru)\(' --include='*.php' --exclude-dir=vendor . &&
+        ! grep -rn '\$_REQUEST' --include='*.php' --exclude-dir=vendor .
 
   docker:
     needs: [test, lint]
