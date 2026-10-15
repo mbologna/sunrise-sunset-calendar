@@ -34,9 +34,3 @@ if (!defined('CALENDAR_PAST_DAYS')) {
 if (!defined('UPDATE_INTERVAL')) {
     define('UPDATE_INTERVAL', 86400);
 }
-
-// OPTIONAL: Default location (used for web interface display)
-// These are not used in calculations, just for display
-// define('DEFAULT_LATITUDE', 41.9028);
-// define('DEFAULT_LONGITUDE', 12.4964);
-// define('DEFAULT_TIMEZONE', 'Europe/Rome');

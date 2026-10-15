@@ -11,7 +11,6 @@ declare(strict_types=1);
 
 return [
     // Calendar metadata
-    'calendar_name_suffix' => 'Sun, Twilight & Moon',
     'calendar_prodid' => '-//Sun\, Twilight & Moon Calendar//EN',
     'calendar_name_format' => '🌅☀️🌙 Sun, Twilight & Moon - %s', // %s = location name
 
@@ -25,18 +24,13 @@ return [
         'nautical_dusk' => '⚓ Nautical Dusk',
         'astronomical_dusk' => '🌌 Astronomical Dusk',
         'night' => '🌙 Night',
-        'week_summary' => '📅 Week Summary',
     ],
 
     // Section headers
     'headers' => [
-        'civil_twilight' => '🌅 Civil Twilight',
-        'nautical_twilight' => '⚓ Nautical Twilight',
-        'astronomical_twilight' => '🌌 Astronomical Twilight',
         'daylight' => '☀️ Daylight',
         'night' => '🌙 Night',
         'moon_phase' => '🌙 Moon Phase',
-        'week_overview' => '📊 Week Overview',
         'location_notes' => '📍 Location Notes',
         'astronomical_event' => '🌍 Astronomical Event',
         'daytime_schedule' => '☀️ Daytime Schedule',
@@ -53,7 +47,6 @@ return [
         'duration' => 'Duration',
         'solar_noon' => 'Solar Noon',
         'solar_midnight' => 'Solar Midnight',
-        'period' => 'Period',
         'percentile' => 'Percentile',
         'progress' => 'Percentile',
         'vs_yesterday' => 'Compared to Yesterday',
@@ -71,10 +64,8 @@ return [
         'next' => 'Next',
         'event' => 'Event',
         'date' => 'Date',
-        'day_of_year' => 'Day of Year',
         'sunrise' => 'Sunrise',
         'sunset' => 'Sunset',
-        'illumination' => 'Illumination',
         'first_light' => 'First Light',
         'last_light' => 'Last Light',
         'of_day' => 'of the day',
@@ -83,7 +74,6 @@ return [
     // Week summary
     'week_summary' => [
         'title_format' => '📅 Week Summary (%s - %s)', // %s = start date, end date
-        'header' => '📊 Week Overview',
     ],
 
     // Event descriptions - concise, practical context for each phase
@@ -143,11 +133,6 @@ return [
 
     // Comparison text templates
     'comparisons' => [
-        'percentile_simple' => '%s%% percentile',
-        'percentile_full' => '%s%% of days have less daylight (0%% = shortest, 100%% = longest)',
-        'of_day' => '(%s%% of day)',
-        'mon_to_sun' => '(Mon to Sun)',
-        'lit' => '(%s%% lit)',
         'same_length' => 'same length as yesterday',
     ],
 

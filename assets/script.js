@@ -3,6 +3,19 @@ function showAddressSearch() {
     searchDiv.style.display = searchDiv.style.display === 'none' ? 'block' : 'none';
 }
 
+// Address lookups go from the browser straight to OpenStreetMap Nominatim
+// (https://operations.osmfoundation.org/policies/nominatim/), so the server
+// relays nothing to third parties for unauthenticated visitors.
+const NOMINATIM = 'https://nominatim.openstreetmap.org/';
+
+async function nominatim(endpoint, params) {
+    const response = await fetch(NOMINATIM + endpoint + '?' + new URLSearchParams({ ...params, format: 'json' }));
+    if (!response.ok) {
+        throw new Error('Nominatim returned ' + response.status);
+    }
+    return response.json();
+}
+
 async function geocodeAddress() {
     const address = document.getElementById('address-input').value;
     const status = document.getElementById('geocode-status');
@@ -18,19 +31,18 @@ async function geocodeAddress() {
     status.textContent = 'Searching...';
 
     try {
-        const response = await fetch('?geocode=1&address=' + encodeURIComponent(address));
-        const data = await response.json();
+        const [place] = await nominatim('search', { q: address, limit: 1 });
 
-        if (data.success) {
-            document.getElementById('lat').value = parseFloat(data.lat).toFixed(6);
-            document.getElementById('lon').value = parseFloat(data.lon).toFixed(6);
-            document.getElementById('location').value = data.display_name.split(',')[0];
+        if (place) {
+            document.getElementById('lat').value = parseFloat(place.lat).toFixed(6);
+            document.getElementById('lon').value = parseFloat(place.lon).toFixed(6);
+            document.getElementById('location').value = place.display_name.split(',')[0];
 
             status.className = 'success';
-            status.textContent = '✓ Location found: ' + data.display_name;
+            status.textContent = '✓ Location found: ' + place.display_name;
         } else {
             status.className = 'error';
-            status.textContent = '✗ ' + (data.error || 'Location not found');
+            status.textContent = '✗ Location not found';
         }
     } catch (error) {
         status.className = 'error';
@@ -48,12 +60,15 @@ async function reverseGeocode() {
     }
 
     try {
-        const response = await fetch('?reverse=1&lat=' + lat + '&lon=' + lon);
-        const data = await response.json();
+        const data = await nominatim('reverse', { lat, lon, zoom: 10 });
+        const a = data.address || {};
+        const name = [a.city || a.town || a.village || a.municipality, a.state || a.province]
+            .filter(Boolean)
+            .join(', ') || data.display_name;
 
-        if (data.success) {
-            locationField.value = data.name;
-            locationField.placeholder = data.name;
+        if (name) {
+            locationField.value = name;
+            locationField.placeholder = name;
         }
     } catch (error) {
         // Silently fail
@@ -126,13 +141,11 @@ function validateForm() {
     return true;
 }
 
-function copyToClipboard(elementId) {
-    const element = document.getElementById(elementId);
-    const text = element.textContent;
+function copyToClipboard(elementId, button) {
+    const text = document.getElementById(elementId).textContent;
 
     navigator.clipboard.writeText(text).then(
         function () {
-            const button = event.target;
             const originalText = button.textContent;
             button.textContent = '✓ Copied!';
             button.style.background = '#28a745';
@@ -149,6 +162,13 @@ function copyToClipboard(elementId) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+    // Default the timezone to the browser's own, when the list has it
+    const zone = document.getElementById('zone');
+    const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (zone && [...zone.options].some(option => option.value === browserZone)) {
+        zone.value = browserZone;
+    }
+
     const addressInput = document.getElementById('address-input');
     if (addressInput) {
         addressInput.addEventListener('keypress', function (e) {

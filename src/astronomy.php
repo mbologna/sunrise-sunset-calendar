@@ -48,7 +48,7 @@ function suppress_deprecations(callable $callback): mixed
  * Uses the SolarData\SunPosition library (NREL SPA implementation)
  * for ±30 second accuracy in solar position calculations.
  */
-function calculate_sun_times_spa(
+function calculate_sun_times(
     int $y,
     int $m,
     int $d,
@@ -88,42 +88,41 @@ function calculate_sun_times_spa(
         // Calculate sunrise/set times using SPA (sets properties on the object)
         $spa->calcSunRiseTransitSet();
 
-        // Get sunrise/sunset/transit in LOCAL hours (0-24)
-        // The library's _DayFracToHours with local=true properly handles timezone
+        // Sunrise/sunset/transit in LOCAL hours, which the library wraps into 0-24
         $sunriseHours = $spa->_DayFracToHours($spa->DayFractionSunrise, true);
         $sunsetHours = $spa->_DayFracToHours($spa->DayFractionSunset, true);
         $transitHours = $spa->_DayFracToHours($spa->DayFractionTransit, true);
-
-        // Convert local hours back to day fractions (0-1)
-        $sunriseFrac = $sunriseHours / 24.0;
-        $sunsetFrac = $sunsetHours / 24.0;
         $solarNoon = $transitHours / 24.0;
-
-        // Calculate daylength (sunset hours - sunrise hours)
-        $daylengthH = $sunsetHours - $sunriseHours;
-
-        // Get declination for polar region check and twilight calculations
         $decl = $spa->{'δ°'};
 
-        // Handle polar regions (no sunrise/sunset)
-        if ($spa->DayFractionSunrise === null || $spa->DayFractionSunset === null) {
-            // Check if it's polar day or polar night using sun elevation at noon
-            // Sun elevation at local noon = 90 - |latitude - declination|
-            $sunElevationAtNoon = 90 - abs($lat - $decl);
-            if ($sunElevationAtNoon > 0) {
-                // Sun is above horizon at noon = polar day
-                $daylengthH = 24.0;
-                $sunriseFrac = 0.0;
-                $sunsetFrac = 1.0;
-            } else {
-                // Sun is below horizon at noon = polar night
-                $daylengthH = 0.0;
-                $sunriseFrac = 0.5;  // Set to noon (no actual sunrise)
-                $sunsetFrac = 0.5;   // Set to noon (no actual sunset)
+        // Polar day/night: the sun never crosses the horizon. Rise/set are null and
+        // 'polar' records which case applies. Near the polar-day threshold the
+        // library still interpolates spurious crossings, so the analytic hour angle
+        // (as used for twilight below) decides whether crossings exist at all.
+        $polar = null;
+        $noRiseSet = $spa->DayFractionSunrise === null || $spa->DayFractionSunset === null;
+        if ($noRiseSet || sunriseHourAngle($lat, $decl, -0.8333) === null) {
+            $polar = (90 - abs($lat - $decl)) > 0 ? 'day' : 'night';
+            $daylengthH = $polar === 'day' ? 24.0 : 0.0;
+            $sunriseFrac = null;
+            $sunsetFrac = null;
+        } else {
+            // Undo the 0-24 wrap: sunrise precedes transit and sunset follows it,
+            // even when one of them falls on the neighbouring calendar day
+            if ($sunriseHours > $transitHours) {
+                $sunriseHours -= 24;
             }
+            if ($sunsetHours < $transitHours) {
+                $sunsetHours += 24;
+            }
+            $sunriseFrac = $sunriseHours / 24.0;
+            $sunsetFrac = $sunsetHours / 24.0;
+            $daylengthH = $sunsetHours - $sunriseHours;
         }
 
-        // Calculate hour angles for twilight types using the declination
+        // Twilight boundaries are null when the sun never reaches that depression
+        $begin = fn(?float $ha) => $ha === null ? null : $solarNoon - $ha / 360;
+        $end = fn(?float $ha) => $ha === null ? null : $solarNoon + $ha / 360;
         $HA_civil = sunriseHourAngle($lat, $decl, -6.0);
         $HA_nautical = sunriseHourAngle($lat, $decl, -12.0);
         $HA_astro = sunriseHourAngle($lat, $decl, -18.0);
@@ -135,12 +134,13 @@ function calculate_sun_times_spa(
             'sunset_frac' => $sunsetFrac,
             'solar_noon_frac' => $solarNoon,
             'daylength_h' => $daylengthH,
-            'civil_begin_frac' => $solarNoon - ($HA_civil * 4) / 1440,
-            'civil_end_frac' => $solarNoon + ($HA_civil * 4) / 1440,
-            'nautical_begin_frac' => $solarNoon - ($HA_nautical * 4) / 1440,
-            'nautical_end_frac' => $solarNoon + ($HA_nautical * 4) / 1440,
-            'astro_begin_frac' => $solarNoon - ($HA_astro * 4) / 1440,
-            'astro_end_frac' => $solarNoon + ($HA_astro * 4) / 1440,
+            'polar' => $polar,
+            'civil_begin_frac' => $begin($HA_civil),
+            'civil_end_frac' => $end($HA_civil),
+            'nautical_begin_frac' => $begin($HA_nautical),
+            'nautical_end_frac' => $end($HA_nautical),
+            'astro_begin_frac' => $begin($HA_astro),
+            'astro_end_frac' => $end($HA_astro),
         ];
     });
 
@@ -148,6 +148,71 @@ function calculate_sun_times_spa(
     Cache::getInstance()->setSolarCalc($cacheKey, $result);
 
     return $result;
+}
+
+/**
+ * Hour angle (degrees) at which the sun crosses the given altitude.
+ *
+ * Returns null when the sun never crosses it that day: it stays entirely above
+ * (e.g. twilight never ends during white nights) or entirely below.
+ */
+function sunriseHourAngle(float $lat, float $decl, float $alt): ?float
+{
+    $latr = deg2rad($lat);
+    $declr = deg2rad($decl);
+    $cosHa = (sin(deg2rad($alt)) - sin($latr) * sin($declr)) / (cos($latr) * cos($declr));
+
+    return abs($cosHa) > 1 ? null : rad2deg(acos($cosHa));
+}
+
+/**
+ * Convert a day fraction in a fixed UTC offset to a Unix timestamp.
+ *
+ * Anchoring on UTC midnight keeps the result exact on DST transition days,
+ * where local midnight + N hours would be off by the shift.
+ */
+function fraction_to_timestamp(int $y, int $m, int $d, float $frac, float $utcOffset): int
+{
+    return gmmktime(0, 0, 0, $m, $d, $y) + (int) round(($frac * 24 - $utcOffset) * 3600);
+}
+
+/**
+ * Solar event timestamps for one local calendar date.
+ *
+ * Uses the UTC offset in effect on that date in the date's own time zone, so
+ * feeds that span DST changes stay correct. Events the sun does not reach that
+ * day are null.
+ *
+ * @param DateTimeImmutable $date Local date (time of day is ignored)
+ * @return array{
+ *     sunrise: ?int, sunset: ?int, solar_noon: int,
+ *     civil_begin: ?int, civil_end: ?int, nautical_begin: ?int, nautical_end: ?int,
+ *     astro_begin: ?int, astro_end: ?int, daylength_h: float, polar: ?string,
+ *     declination: float, utc_offset: float
+ * }
+ */
+function sun_events(DateTimeImmutable $date, float $lat, float $lon): array
+{
+    [$y, $m, $d] = array_map('intval', explode('-', $date->format('Y-n-j')));
+    $offset = $date->setTime(12, 0)->getOffset() / 3600;
+    $calc = calculate_sun_times($y, $m, $d, $lat, $lon, $offset);
+    $ts = fn(?float $frac) => $frac === null ? null : fraction_to_timestamp($y, $m, $d, $frac, $offset);
+
+    return [
+        'sunrise' => $ts($calc['sunrise_frac']),
+        'sunset' => $ts($calc['sunset_frac']),
+        'solar_noon' => $ts($calc['solar_noon_frac']),
+        'civil_begin' => $ts($calc['civil_begin_frac']),
+        'civil_end' => $ts($calc['civil_end_frac']),
+        'nautical_begin' => $ts($calc['nautical_begin_frac']),
+        'nautical_end' => $ts($calc['nautical_end_frac']),
+        'astro_begin' => $ts($calc['astro_begin_frac']),
+        'astro_end' => $ts($calc['astro_end_frac']),
+        'daylength_h' => $calc['daylength_h'],
+        'polar' => $calc['polar'],
+        'declination' => $calc['declination_deg'],
+        'utc_offset' => $offset,
+    ];
 }
 
 // ============================================================================
@@ -399,13 +464,11 @@ function get_accurate_moon_phase(int $timestamp): array
     $next = null;
 
     foreach ($phases as $phase) {
-        if ($phase['timestamp'] <= $timestamp) {
-            $prev = $phase;
-        }
-        if ($phase['timestamp'] > $timestamp && $next === null) {
+        if ($phase['timestamp'] > $timestamp) {
             $next = $phase;
             break;
         }
+        $prev = $phase;
     }
 
     $intermediate_phases = [
@@ -541,32 +604,4 @@ function jde_to_unix(float $jde, ?int $year = null): int
     }
 
     return (int) round($unix_td);
-}
-
-// ============================================================================
-// PUBLIC API WRAPPERS
-// ============================================================================
-
-/**
- * Calculate sun times - main public API wrapper.
- *
- * @param int $y Year
- * @param int $m Month (1-12)
- * @param int $d Day of month
- * @param float $lat Latitude in degrees (-90 to 90)
- * @param float $lon Longitude in degrees (-180 to 180)
- * @param float $utc_offset UTC offset in hours
- * @return array Solar times and parameters
- */
-function calculate_sun_times(int $y, int $m, int $d, float $lat, float $lon, float $utc_offset): array
-{
-    return calculate_sun_times_spa($y, $m, $d, $lat, $lon, $utc_offset);
-}
-
-/**
- * Get moon phase info - wrapper for Meeus algorithm.
- */
-function get_moon_phase_info(int $timestamp): array
-{
-    return get_accurate_moon_phase($timestamp);
 }

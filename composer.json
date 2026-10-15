@@ -4,13 +4,24 @@
     "type": "project",
     "license": "MIT",
     "require": {
-        "php": "^8.5.11",
+        "php": "^8.5",
         "abbadon1334/sun-position-spa-php": "^2.0"
     },
     "require-dev": {
         "phpstan/phpstan": "^2.2.17",
         "phpunit/phpunit": "^9.6 || ^10.0 || ^13.0",
         "squizlabs/php_codesniffer": "^4.0.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "SunCalendar\\": "src/"
+        },
+        "files": [
+            "src/functions.php",
+            "src/astronomy.php",
+            "src/helpers.php",
+            "src/calendar-generator.php"
+        ]
     },
     "autoload-dev": {
         "psr-4": {
@@ -27,10 +38,12 @@
         "test:unit": "./vendor/bin/phpunit --testsuite Unit",
         "test:coverage": "./vendor/bin/phpunit --coverage-html coverage/",
         "analyse": "./vendor/bin/phpstan analyse",
-        "lint": "./vendor/bin/phpcs --standard=PSR12 sunrise-sunset-calendar.php src/",
-        "lint:fix": "./vendor/bin/phpcbf --standard=PSR12 sunrise-sunset-calendar.php src/",
-        "check": "php tools/validate-project.php",
-        "check:ical": "php tools/validate-ical.php",
-        "check:all": ["@test", "@analyse", "@lint"]
+        "lint": "./vendor/bin/phpcs",
+        "lint:fix": "./vendor/bin/phpcbf",
+        "check:all": [
+            "@test",
+            "@analyse",
+            "@lint"
+        ]
     }
 }

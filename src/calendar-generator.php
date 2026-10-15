@@ -1,693 +1,384 @@
 <?php
 
 /**
- * Calendar Generation Logic
- * Version 8.0 - Full NREL SPA precision.
- *
- * Note: format_ical_description() is defined in helpers.php
+ * iCalendar feed generation.
  */
 
 declare(strict_types=1);
 
-// Load strings configuration via lazy-loading function
-$STRINGS = get_strings();
+/**
+ * Split one day into calendar spans, from astronomical dawn to night.
+ *
+ * Each twilight band lies between two solar altitudes. When the sun never
+ * crosses one of them, solar noon (the sun peaks inside the band) or solar
+ * midnight (it bottoms out inside it) stands in, so polar days and white
+ * nights yield continuous, well-ordered spans instead of empty or inverted ones.
+ *
+ * @param array $ev sun_events() for the day
+ * @param array $next sun_events() for the following day
+ * @param float $lat Latitude in degrees
+ * @return array<string, array{0: int, 1: int}|null> Start/end timestamps keyed like strings['summaries']
+ */
+function solar_spans(array $ev, array $next, float $lat): array
+{
+    $noon = $ev['solar_noon'];
+    $noonElevation = 90 - abs($lat - $ev['declination']);
+    $midnightElevation = abs($lat + $ev['declination']) - 90;
 
-if (!verify_token($_GET['token'])) {
-    http_response_code(403);
-    die('Invalid authentication token');
+    // Altitude with its rising and setting crossing times, deepest first
+    $crossings = [
+        [-18.0, $ev['astro_begin'], $ev['astro_end']],
+        [-12.0, $ev['nautical_begin'], $ev['nautical_end']],
+        [-6.0, $ev['civil_begin'], $ev['civil_end']],
+        [0.0, $ev['sunrise'], $ev['sunset']],
+    ];
+
+    $spans = [];
+    foreach (['astronomical', 'nautical', 'civil'] as $i => $band) {
+        [$lowAltitude, $lowRise, $lowSet] = $crossings[$i];
+        [$highAltitude, $highRise, $highSet] = $crossings[$i + 1];
+
+        if ($lowRise === null && $highRise === null) {
+            // Neither altitude crossed: the sun is inside the band all day, or never
+            $inBand = $midnightElevation > $lowAltitude && $noonElevation < $highAltitude;
+            $spans["{$band}_dawn"] = $inBand ? [$noon - 43200, $noon] : null;
+            $spans["{$band}_dusk"] = $inBand ? [$noon, $noon + 43200] : null;
+        } else {
+            $spans["{$band}_dawn"] = [$lowRise ?? $noon - 43200, $highRise ?? $noon];
+            $spans["{$band}_dusk"] = [$highSet ?? $noon, $lowSet ?? $noon + 43200];
+        }
+    }
+
+    $daylight = null;
+    if ($ev['sunrise'] !== null && $ev['sunset'] !== null) {
+        $daylight = [$ev['sunrise'], $ev['sunset']];
+    } elseif ($ev['polar'] === 'day') {
+        $daylight = [$noon - 43200, $noon + 43200];
+    }
+
+    $night = ($ev['astro_end'] !== null && $next['astro_begin'] !== null)
+        ? [$ev['astro_end'], $next['astro_begin']]
+        : null;
+
+    return $spans + ['daylight' => $daylight, 'night' => $night];
 }
 
-$lat = sanitize_float($_GET['lat'] ?? '', 41.9028, -90, 90);
-$lon = sanitize_float($_GET['lon'] ?? '', 12.4964, -180, 180);
-$timezone = sanitize_timezone($_GET['zone'] ?? 'Europe/Rome');
-$location_name = sanitize_text($_GET['location'] ?? '');
-$rise_offset = sanitize_int($_GET['rise_off'] ?? 0, 0) * 60;
-$set_offset = sanitize_int($_GET['set_off'] ?? 0, 0) * 60;
-$description = sanitize_text($_GET['desc'] ?? '');
-
-$include_civil = isset($_GET['civil']) && $_GET['civil'] === '1';
-$include_nautical = isset($_GET['nautical']) && $_GET['nautical'] === '1';
-$include_astro = isset($_GET['astro']) && $_GET['astro'] === '1';
-$include_daynight = isset($_GET['daynight']) && $_GET['daynight'] === '1';
-
-putenv("TZ={$timezone}");
-date_default_timezone_set($timezone);
-
-// Get UTC offset for calculations
-$tz = new DateTimeZone($timezone);
-$dt_ref = new DateTime('now', $tz);
-$utc_offset_hours = $dt_ref->getOffset() / 3600;
-
-header('Content-Type: text/calendar; charset=utf-8');
-header('Cache-Control: max-age=' . UPDATE_INTERVAL);
-
-$calendar_name = $location_name ?: "$lat, $lon";
-
-echo "BEGIN:VCALENDAR\r\n";
-echo "VERSION:2.0\r\n";
-echo "PRODID:{$STRINGS['calendar_prodid']}\r\n";
-echo "CALSCALE:GREGORIAN\r\n";
-echo "METHOD:PUBLISH\r\n";
-echo 'X-WR-CALNAME:' . sprintf($STRINGS['calendar_name_format'], $calendar_name) . "\r\n";
-echo "X-WR-TIMEZONE:{$timezone}\r\n";
-echo 'X-PUBLISHED-TTL:PT' . (UPDATE_INTERVAL / 3600) . "H\r\n";
-echo 'REFRESH-INTERVAL;VALUE=DURATION:PT' . (UPDATE_INTERVAL / 3600) . "H\r\n";
-
-$start = strtotime('-' . CALENDAR_PAST_DAYS . ' days');
-$end = strtotime('+' . CALENDAR_WINDOW_DAYS . ' days');
-$current_day = $start;
-
-// Get special events and location notes
-$year = (int) date('Y', $start);
-$special_events = get_special_astronomical_events($year);
-$location_notes = get_location_notes($lat);
-$notes_shown = false;
-
-while ($current_day <= $end) {
-    $date_parts = getdate($current_day);
-    $date_str = date('Ymd', $current_day);
-    $year = $date_parts['year'];
-
-    // Calculate sun times using high-precision algorithm
-    $sun_calc = calculate_sun_times(
-        $date_parts['year'],
-        $date_parts['mon'],
-        $date_parts['mday'],
-        $lat,
-        $lon,
-        $utc_offset_hours
-    );
-
-    // Convert to timestamps - use shorter variable names for readability
-    $y = $date_parts['year'];
-    $m = $date_parts['mon'];
-    $d = $date_parts['mday'];
-    $sunrise = fraction_to_timestamp($y, $m, $d, $sun_calc['sunrise_frac']);
-    $sunset = fraction_to_timestamp($y, $m, $d, $sun_calc['sunset_frac']);
-    $solar_noon = fraction_to_timestamp($y, $m, $d, $sun_calc['solar_noon_frac']);
-    $civil_begin = fraction_to_timestamp($y, $m, $d, $sun_calc['civil_begin_frac']);
-    $civil_end = fraction_to_timestamp($y, $m, $d, $sun_calc['civil_end_frac']);
-    $nautical_begin = fraction_to_timestamp($y, $m, $d, $sun_calc['nautical_begin_frac']);
-    $nautical_end = fraction_to_timestamp($y, $m, $d, $sun_calc['nautical_end_frac']);
-    $astro_begin = fraction_to_timestamp($y, $m, $d, $sun_calc['astro_begin_frac']);
-    $astro_end = fraction_to_timestamp($y, $m, $d, $sun_calc['astro_end_frac']);
-
-    $daylight_hours = $sun_calc['daylength_h'];
-    $daylight_seconds = (int) round($daylight_hours * 3600);
-
-    // Get next and previous day calculations
-    $next_date_parts = getdate(strtotime('+1 day', $current_day));
-    $next_sun_calc = calculate_sun_times(
-        $next_date_parts['year'],
-        $next_date_parts['mon'],
-        $next_date_parts['mday'],
-        $lat,
-        $lon,
-        $utc_offset_hours
-    );
-    $next_astro_begin = fraction_to_timestamp(
-        $next_date_parts['year'],
-        $next_date_parts['mon'],
-        $next_date_parts['mday'],
-        $next_sun_calc['astro_begin_frac']
-    );
-
-    $prev_date_parts = getdate(strtotime('-1 day', $current_day));
-    $prev_sun_calc = calculate_sun_times(
-        $prev_date_parts['year'],
-        $prev_date_parts['mon'],
-        $prev_date_parts['mday'],
-        $lat,
-        $lon,
-        $utc_offset_hours
-    );
-    $prev_daylight_hours = $prev_sun_calc['daylength_h'];
-
-    // Calculate statistics
-    $night_seconds = 86400 - $daylight_seconds;
-    $daylight_pct = round(($daylight_seconds / 86400) * 100, 1);
-    $night_pct = round(($night_seconds / 86400) * 100, 1);
-
-    // Calculate percentile using hours (not seconds!)
-    $daylight_percentile = calculate_daylight_percentile($daylight_hours, $lat, $lon, $year, $utc_offset_hours);
-    $night_percentile = 100 - $daylight_percentile;
-
-    // Day/night length comparisons
-    $prev_daylight_seconds = (int) round($prev_daylight_hours * 3600);
-    $prev_night_seconds = 86400 - $prev_daylight_seconds;
-    $day_length_diff = (int) ($daylight_seconds - $prev_daylight_seconds);
-    $night_length_diff = (int) ($night_seconds - $prev_night_seconds);
-    $day_length_comparison = format_day_length_comparison($day_length_diff, 'day');
-    $night_length_comparison = format_day_length_comparison($night_length_diff, 'night');
-
-    // Solstice comparisons - use actual solstice dates for the year
-    $solstice_dates = get_solstice_dates($year);
-
-    $winter_solstice_date_parts = getdate($solstice_dates['dec_solstice']);
-    $winter_solstice_calc = calculate_sun_times(
-        $winter_solstice_date_parts['year'],
-        $winter_solstice_date_parts['mon'],
-        $winter_solstice_date_parts['mday'],
-        $lat,
-        $lon,
-        $utc_offset_hours
-    );
-
-    $summer_solstice_date_parts = getdate($solstice_dates['june_solstice']);
-    $summer_solstice_calc = calculate_sun_times(
-        $summer_solstice_date_parts['year'],
-        $summer_solstice_date_parts['mon'],
-        $summer_solstice_date_parts['mday'],
-        $lat,
-        $lon,
-        $utc_offset_hours
-    );
-
-    // Get solar noon times for solstices
-    $winter_solar_noon = fraction_to_timestamp(
-        $winter_solstice_date_parts['year'],
-        $winter_solstice_date_parts['mon'],
-        $winter_solstice_date_parts['mday'],
-        $winter_solstice_calc['solar_noon_frac']
-    );
-    $summer_solar_noon = fraction_to_timestamp(
-        $summer_solstice_date_parts['year'],
-        $summer_solstice_date_parts['mon'],
-        $summer_solstice_date_parts['mday'],
-        $summer_solstice_calc['solar_noon_frac']
-    );
-
-    // Format solstice info with date only
-    $winter_solstice_info = date('M j', $solstice_dates['dec_solstice']);
-    $summer_solstice_info = date('M j', $solstice_dates['june_solstice']);
-
-    $winter_daylight_seconds = (int) round($winter_solstice_calc['daylength_h'] * 3600);
-    $summer_daylight_seconds = (int) round($summer_solstice_calc['daylength_h'] * 3600);
-
-    $diff_from_winter = $daylight_seconds - $winter_daylight_seconds;
-    $winter_comparison = format_duration_short((int) abs($diff_from_winter));
-
-    $diff_from_summer = $daylight_seconds - $summer_daylight_seconds;
-    $summer_comparison = format_duration_short((int) abs($diff_from_summer));
-
-    $time_format = 'H:i'; // Always 24-hour format
-
-    $enabled = [
-        'civil' => $include_civil,
-        'nautical' => $include_nautical,
-        'astro' => $include_astro,
-        'daylight' => $include_daynight,
-    ];
-
-    // Get moon phase
-    $moon_info = get_moon_phase_info($current_day);
-
-    $solar_noon_time = date($time_format, $solar_noon);
-
-    // Build context arrays for supplemental information
-    $dawn_ctx = [
-        'times' => compact(
-            'sunrise',
-            'sunset',
-            'solar_noon',
-            'civil_begin',
-            'civil_end',
-            'nautical_begin',
-            'nautical_end',
-            'astro_begin',
-            'astro_end'
-        ),
-        'format' => $time_format,
-        'enabled' => $enabled,
-        'daylight' => compact(
-            'daylight_seconds',
-            'daylight_pct',
-            'daylight_percentile',
-            'day_length_comparison',
-            'solar_noon_time',
-            'winter_comparison',
-            'summer_comparison',
-            'winter_solstice_info',
-            'summer_solstice_info',
-            'diff_from_winter',
-            'diff_from_summer'
-        ),
-    ];
-
-    $dusk_ctx = [
-        'times' => compact(
-            'sunrise',
-            'sunset',
-            'civil_begin',
-            'civil_end',
-            'nautical_begin',
-            'nautical_end',
-            'astro_begin',
-            'astro_end',
-            'next_astro_begin'
-        ),
-        'format' => $time_format,
-        'enabled' => $enabled,
-        'night' => compact(
-            'night_seconds',
-            'night_pct',
-            'night_percentile',
-            'night_length_comparison',
-            'moon_info'
-        ),
-    ];
-
-    // Check for week summary (Sundays)
-    $day_of_week = date('w', $current_day);
-    if ($day_of_week == 0 && $include_daynight) {
-        $week_data = get_cached_week_summary($current_day, $lat, $lon, $utc_offset_hours, $STRINGS);
-
-        if ($week_data) {
-            $week_end_date = date('M j', strtotime('+6 days', $current_day));
-            $start_date = date('M j', $current_day);
-            $moon_emoji = get_moon_phase_emoji($week_data['moon_phase']);
-
-            // Get last year's week data for comparison
-            $last_year_data = get_last_year_week_data($current_day, $lat, $lon, $utc_offset_hours);
-
-            echo "BEGIN:VEVENT\r\n";
-            echo "UID:week-summary-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";
-            echo 'DTSTAMP:' . gmdate('Ymd\THis\Z') . "\r\n";
-            echo 'DTSTART;VALUE=DATE:' . date('Ymd', $current_day) . "\r\n";
-            echo 'DTEND;VALUE=DATE:' . date('Ymd', strtotime('+1 day', $current_day)) . "\r\n";
-            echo 'SUMMARY:' . sprintf($STRINGS['week_summary']['title_format'], $start_date, $week_end_date) . "\r\n";
-
-            // AT A GLANCE section
-            $desc = "{$STRINGS['headers']['at_a_glance']}\n\n";
-            $desc .= "{$STRINGS['labels']['trend']}: {$week_data['trend_emoji']} {$week_data['trend']}\n";
-            $avg_formatted = format_duration_full((int) $week_data['avg_length']);
-            $desc .= "{$STRINGS['labels']['average']}: {$avg_formatted}\n\n";
-
-            // DETAILS section
-            $desc .= "{$STRINGS['headers']['details']}\n\n";
-            $week_sign = ($week_data['total_change'] >= 0) ? '+' : '';
-            $change_formatted = format_duration_short((int) abs($week_data['total_change']));
-            $desc .= "{$STRINGS['labels']['change']}: {$week_sign}{$change_formatted}\n";
-            $desc .= "{$STRINGS['labels']['shortest']}: " . date('l, M j', $week_data['shortest_day']) . "\n";
-            $desc .= "  " . format_duration_full((int) $week_data['min_length']) . "\n";
-            $desc .= "{$STRINGS['labels']['longest']}: " . date('l, M j', $week_data['longest_day']) . "\n";
-            $desc .= "  " . format_duration_full((int) $week_data['max_length']) . "\n\n";
-
-            // COMPARISONS section
-            $desc .= "{$STRINGS['headers']['comparisons']}\n\n";
-            if ($last_year_data) {
-                $diff_from_last_year = $week_data['avg_length'] - $last_year_data['avg_length'];
-                $last_year_sign = ($diff_from_last_year >= 0) ? '+' : '-';
-                $diff_formatted = format_duration_short((int) abs($diff_from_last_year));
-                $desc .= "{$STRINGS['labels']['vs_last_year']}: {$last_year_sign}{$diff_formatted}\n";
-                $last_year_week = date('M j, Y', $last_year_data['week_start']);
-                $desc .= "  (Week of {$last_year_week})\n\n";
-            }
-
-            // MOON section with emoji
-            $desc .= "{$STRINGS['labels']['moon']}: {$moon_emoji} {$week_data['moon_phase']}";
-
-            // Add location notes (only first week)
-            if (!$notes_shown && !empty($location_notes)) {
-                $desc .= "\n\n{$STRINGS['headers']['location_notes']}\n";
-                foreach ($location_notes as $note) {
-                    $desc .= $note . "\n";
-                }
-                $notes_shown = true;
-            }
-
-            echo format_ical_description($desc);
-            echo "TRANSP:TRANSPARENT\r\n";
-            echo "END:VEVENT\r\n";
-        }
-    }
-
-    // Special astronomical events
-    foreach ($special_events as $special_event) {
-        if (date('Y-m-d', $current_day) == date('Y-m-d', $special_event['date'])) {
-            echo "BEGIN:VEVENT\r\n";
-            $event_slug = strtolower(str_replace(' ', '-', $special_event['name']));
-            echo "UID:special-{$event_slug}-{$date_str}@sun-calendar\r\n";
-            echo 'DTSTAMP:' . gmdate('Ymd\THis\Z') . "\r\n";
-            echo 'DTSTART;VALUE=DATE:' . date('Ymd', $special_event['date']) . "\r\n";
-            echo 'DTEND;VALUE=DATE:' . date('Ymd', strtotime('+1 day', $special_event['date'])) . "\r\n";
-            echo "SUMMARY:{$special_event['emoji']} {$special_event['name']}\r\n";
-
-            $desc = "{$STRINGS['headers']['astronomical_event']}\n";
-            $desc .= "   {$STRINGS['labels']['event']}\n\n";
-            $desc .= "{$STRINGS['labels']['event']}: {$special_event['name']}\n";
-            $desc .= "{$STRINGS['labels']['date']}:  " . date('F j, Y', $special_event['date']) . "\n\n";
-            $desc .= "{$special_event['description']}";
-
-            echo format_ical_description($desc);
-            echo "TRANSP:TRANSPARENT\r\n";
-            echo "END:VEVENT\r\n";
-        }
-    }
-
-    // CIVIL DAWN
-    if ($include_civil && isset($civil_begin) && isset($sunrise)) {
-        $start_time = $civil_begin + $rise_offset;
-        $end_time = $sunrise + $rise_offset;
-        $duration = format_duration_full($sunrise - $civil_begin);
-
-        $supplemental = build_dawn_supplemental($dawn_ctx, $STRINGS);
-
-        echo "BEGIN:VEVENT\r\n";
-        echo "UID:civil-dawn-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";
-        echo 'DTSTAMP:' . gmdate('Ymd\THis\Z') . "\r\n";
-        echo 'DTSTART:' . gmdate('Ymd\THis\Z', $start_time) . "\r\n";
-        echo 'DTEND:' . gmdate('Ymd\THis\Z', $end_time) . "\r\n";
-        echo "SUMMARY:{$STRINGS['summaries']['civil_dawn']}\r\n";
-
-        // AT A GLANCE section
-        $desc = "{$STRINGS['headers']['at_a_glance']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['duration']}: {$duration}\n\n";
-
-        // DETAILS section with sunrise/sunset context
-        $desc .= "{$STRINGS['headers']['details']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['first_light']}: " . date($time_format, $civil_begin) . "\n";
-        $desc .= "{$STRINGS['labels']['sunrise']}: " . date($time_format, $sunrise) . "\n";
-        $desc .= "{$STRINGS['labels']['sunset']}: " . date($time_format, $sunset) . "\n\n";
-
-        // CONTEXT section
-        $desc .= "{$STRINGS['headers']['context']}\n\n";
-
-        $desc .= "{$STRINGS['twilight_descriptions']['civil_dawn']}";
-        $desc .= $supplemental;
-
-        echo format_ical_description($desc);
-        echo "TRANSP:TRANSPARENT\r\n";
-        echo "END:VEVENT\r\n";
-    }
-
-    // NAUTICAL DAWN
-    if ($include_nautical && isset($nautical_begin) && isset($civil_begin)) {
-        $start_time = $nautical_begin + $rise_offset;
-        $end_time = $civil_begin + $rise_offset;
-        $duration = format_duration_full($civil_begin - $nautical_begin);
-
-        $supplemental = build_dawn_supplemental($dawn_ctx, $STRINGS);
-
-        echo "BEGIN:VEVENT\r\n";
-        echo "UID:nautical-dawn-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";
-        echo 'DTSTAMP:' . gmdate('Ymd\THis\Z') . "\r\n";
-        echo 'DTSTART:' . gmdate('Ymd\THis\Z', $start_time) . "\r\n";
-        echo 'DTEND:' . gmdate('Ymd\THis\Z', $end_time) . "\r\n";
-        echo "SUMMARY:{$STRINGS['summaries']['nautical_dawn']}\r\n";
-
-        // AT A GLANCE section
-        $desc = "{$STRINGS['headers']['at_a_glance']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['duration']}: {$duration}\n\n";
-
-        // DETAILS section
-        $desc .= "{$STRINGS['headers']['details']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['sunrise']}: " . date($time_format, $sunrise) . "\n";
-        $desc .= "{$STRINGS['labels']['sunset']}: " . date($time_format, $sunset) . "\n\n";
-
-        // CONTEXT section
-        $desc .= "{$STRINGS['headers']['context']}\n\n";
-
-        $desc .= "{$STRINGS['twilight_descriptions']['nautical_dawn']}";
-        $desc .= $supplemental;
-
-        echo format_ical_description($desc);
-        echo "TRANSP:TRANSPARENT\r\n";
-        echo "END:VEVENT\r\n";
-    }
-
-    // ASTRONOMICAL DAWN
-    if ($include_astro && isset($astro_begin) && isset($nautical_begin)) {
-        $start_time = $astro_begin + $rise_offset;
-        $end_time = $nautical_begin + $rise_offset;
-        $duration = format_duration_full($nautical_begin - $astro_begin);
-
-        $supplemental = build_dawn_supplemental($dawn_ctx, $STRINGS);
-
-        echo "BEGIN:VEVENT\r\n";
-        echo "UID:astro-dawn-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";
-        echo 'DTSTAMP:' . gmdate('Ymd\THis\Z') . "\r\n";
-        echo 'DTSTART:' . gmdate('Ymd\THis\Z', $start_time) . "\r\n";
-        echo 'DTEND:' . gmdate('Ymd\THis\Z', $end_time) . "\r\n";
-        echo "SUMMARY:{$STRINGS['summaries']['astronomical_dawn']}\r\n";
-
-        // AT A GLANCE section
-        $desc = "{$STRINGS['headers']['at_a_glance']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['duration']}: {$duration}\n\n";
-
-        // DETAILS section
-        $desc .= "{$STRINGS['headers']['details']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['sunrise']}: " . date($time_format, $sunrise) . "\n";
-        $desc .= "{$STRINGS['labels']['sunset']}: " . date($time_format, $sunset) . "\n\n";
-
-        // CONTEXT section
-        $desc .= "{$STRINGS['headers']['context']}\n\n";
-
-        $desc .= "{$STRINGS['twilight_descriptions']['astronomical_dawn']}";
-        $desc .= $supplemental;
-
-        echo format_ical_description($desc);
-        echo "TRANSP:TRANSPARENT\r\n";
-        echo "END:VEVENT\r\n";
-    }
-
-    // DAYLIGHT
-    if ($include_daynight && isset($sunrise) && isset($sunset)) {
-        $start_time = $sunrise + $rise_offset;
-        $end_time = $sunset + $set_offset;
-        $daylight_duration = format_duration_full((int) $daylight_seconds);
-        $sunrise_time = date($time_format, $sunrise);
-        $sunset_time = date($time_format, $sunset);
-
-        echo "BEGIN:VEVENT\r\n";
-        echo "UID:daylight-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";
-        echo 'DTSTAMP:' . gmdate('Ymd\THis\Z') . "\r\n";
-        echo 'DTSTART:' . gmdate('Ymd\THis\Z', $start_time) . "\r\n";
-        echo 'DTEND:' . gmdate('Ymd\THis\Z', $end_time) . "\r\n";
-        echo "SUMMARY:{$STRINGS['summaries']['daylight']}\r\n";
-
-        // AT A GLANCE section
-        $desc = "{$STRINGS['headers']['at_a_glance']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['duration']}: {$daylight_duration}\n";
-        $desc .= "{$STRINGS['labels']['progress']}: " . format_percentile_bar($daylight_percentile) . "\n\n";
-
-        // DETAILS section
-        $desc .= "{$STRINGS['headers']['details']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['sunrise']}: {$sunrise_time}\n";
-        $desc .= "{$STRINGS['labels']['sunset']}: {$sunset_time}\n";
-        $desc .= "{$STRINGS['labels']['solar_noon']}: {$solar_noon_time}\n";
-        $desc .= "{$STRINGS['labels']['of_day']}: " . number_format($daylight_pct, 1) . "%\n\n";
-
-        // COMPARISONS section
-        $desc .= "{$STRINGS['headers']['comparisons']}\n\n";
-
-        if ($day_length_comparison) {
-            $desc .= "{$STRINGS['labels']['vs_yesterday']}: {$day_length_comparison}\n";
-        }
-        $winter_sign = ($diff_from_winter >= 0) ? '+' : '-';
-        $summer_sign = ($diff_from_summer >= 0) ? '+' : '-';
-        $desc .= "{$STRINGS['labels']['vs_winter_solstice']}: {$winter_sign}{$winter_comparison}\n";
-        $desc .= "  ({$winter_solstice_info})\n";
-        $desc .= "{$STRINGS['labels']['vs_summer_solstice']}: {$summer_sign}{$summer_comparison}\n";
-        $desc .= "  ({$summer_solstice_info})\n\n";
-
-        // CONTEXT section
-        $desc .= "{$STRINGS['headers']['context']}\n\n";
-
-        $desc .= "{$STRINGS['twilight_descriptions']['daylight']}";
-
-        if ($description) {
-            $desc .= "\n\n" . $description;
-        }
-
-        echo format_ical_description($desc);
-        echo "TRANSP:TRANSPARENT\r\n";
-        echo "END:VEVENT\r\n";
-    }
-
-    // CIVIL DUSK
-    if ($include_civil && isset($sunset) && isset($civil_end)) {
-        $start_time = $sunset + $set_offset;
-        $end_time = $civil_end + $set_offset;
-        $duration = format_duration_full($civil_end - $sunset);
-
-        $supplemental = build_dusk_supplemental($dusk_ctx, $STRINGS);
-
-        echo "BEGIN:VEVENT\r\n";
-        echo "UID:civil-dusk-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";
-        echo 'DTSTAMP:' . gmdate('Ymd\THis\Z') . "\r\n";
-        echo 'DTSTART:' . gmdate('Ymd\THis\Z', $start_time) . "\r\n";
-        echo 'DTEND:' . gmdate('Ymd\THis\Z', $end_time) . "\r\n";
-        echo "SUMMARY:{$STRINGS['summaries']['civil_dusk']}\r\n";
-
-        // AT A GLANCE section
-        $desc = "{$STRINGS['headers']['at_a_glance']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['duration']}: {$duration}\n\n";
-
-        // DETAILS section
-        $desc .= "{$STRINGS['headers']['details']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['sunrise']}: " . date($time_format, $sunrise) . "\n";
-        $desc .= "{$STRINGS['labels']['sunset']}: " . date($time_format, $sunset) . "\n";
-        $desc .= "{$STRINGS['labels']['last_light']}: " . date($time_format, $civil_end) . "\n\n";
-
-        // CONTEXT section
-        $desc .= "{$STRINGS['headers']['context']}\n\n";
-
-        $desc .= "{$STRINGS['twilight_descriptions']['civil_dusk']}";
-        $desc .= $supplemental;
-
-        echo format_ical_description($desc);
-        echo "TRANSP:TRANSPARENT\r\n";
-        echo "END:VEVENT\r\n";
-    }
-
-    // NAUTICAL DUSK
-    if ($include_nautical && isset($civil_end) && isset($nautical_end)) {
-        $start_time = $civil_end + $set_offset;
-        $end_time = $nautical_end + $set_offset;
-        $duration = format_duration_full($nautical_end - $civil_end);
-
-        $supplemental = build_dusk_supplemental($dusk_ctx, $STRINGS);
-
-        echo "BEGIN:VEVENT\r\n";
-        echo "UID:nautical-dusk-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";
-        echo 'DTSTAMP:' . gmdate('Ymd\THis\Z') . "\r\n";
-        echo 'DTSTART:' . gmdate('Ymd\THis\Z', $start_time) . "\r\n";
-        echo 'DTEND:' . gmdate('Ymd\THis\Z', $end_time) . "\r\n";
-        echo "SUMMARY:{$STRINGS['summaries']['nautical_dusk']}\r\n";
-
-        // AT A GLANCE section
-        $desc = "{$STRINGS['headers']['at_a_glance']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['duration']}: {$duration}\n\n";
-
-        // DETAILS section
-        $desc .= "{$STRINGS['headers']['details']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['sunrise']}: " . date($time_format, $sunrise) . "\n";
-        $desc .= "{$STRINGS['labels']['sunset']}: " . date($time_format, $sunset) . "\n\n";
-
-        // CONTEXT section
-        $desc .= "{$STRINGS['headers']['context']}\n\n";
-
-        $desc .= "{$STRINGS['twilight_descriptions']['nautical_dusk']}";
-        $desc .= $supplemental;
-
-        echo format_ical_description($desc);
-        echo "TRANSP:TRANSPARENT\r\n";
-        echo "END:VEVENT\r\n";
-    }
-
-    // ASTRONOMICAL DUSK
-    if ($include_astro && isset($nautical_end) && isset($astro_end)) {
-        $start_time = $nautical_end + $set_offset;
-        $end_time = $astro_end + $set_offset;
-        $duration = format_duration_full($astro_end - $nautical_end);
-
-        $supplemental = build_dusk_supplemental($dusk_ctx, $STRINGS);
-
-        echo "BEGIN:VEVENT\r\n";
-        echo "UID:astro-dusk-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";
-        echo 'DTSTAMP:' . gmdate('Ymd\THis\Z') . "\r\n";
-        echo 'DTSTART:' . gmdate('Ymd\THis\Z', $start_time) . "\r\n";
-        echo 'DTEND:' . gmdate('Ymd\THis\Z', $end_time) . "\r\n";
-        echo "SUMMARY:{$STRINGS['summaries']['astronomical_dusk']}\r\n";
-
-        // AT A GLANCE section
-        $desc = "{$STRINGS['headers']['at_a_glance']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['duration']}: {$duration}\n\n";
-
-        // DETAILS section
-        $desc .= "{$STRINGS['headers']['details']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['sunrise']}: " . date($time_format, $sunrise) . "\n";
-        $desc .= "{$STRINGS['labels']['sunset']}: " . date($time_format, $sunset) . "\n\n";
-
-        // CONTEXT section
-        $desc .= "{$STRINGS['headers']['context']}\n\n";
-
-        $desc .= "{$STRINGS['twilight_descriptions']['astronomical_dusk']}";
-        $desc .= $supplemental;
-
-        echo format_ical_description($desc);
-        echo "TRANSP:TRANSPARENT\r\n";
-        echo "END:VEVENT\r\n";
-    }
-
-    // NIGHT
-    if ($include_daynight && isset($astro_end) && isset($next_astro_begin)) {
-        $start_time = $astro_end + $set_offset;
-        $end_time = $next_astro_begin + $rise_offset;
-        $night_duration = format_duration_full((int) $night_seconds);
-        $moon_emoji = get_moon_phase_emoji($moon_info['phase_name']);
-
-        $solar_midnight = $astro_end + (($next_astro_begin - $astro_end) / 2);
-        $solar_midnight_time = date($time_format, (int) $solar_midnight);
-
-        echo "BEGIN:VEVENT\r\n";
-        echo "UID:night-{$date_str}-{$lat}-{$lon}@sun-calendar\r\n";
-        echo 'DTSTAMP:' . gmdate('Ymd\THis\Z') . "\r\n";
-        echo 'DTSTART:' . gmdate('Ymd\THis\Z', $start_time) . "\r\n";
-        echo 'DTEND:' . gmdate('Ymd\THis\Z', $end_time) . "\r\n";
-        echo "SUMMARY:{$STRINGS['summaries']['night']}\r\n";
-
-        // AT A GLANCE section
-        $desc = "{$STRINGS['headers']['at_a_glance']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['duration']}: {$night_duration}\n";
-        $desc .= "{$STRINGS['labels']['progress']}: " . format_percentile_bar($night_percentile) . "\n\n";
-
-        // DETAILS section
-        $desc .= "{$STRINGS['headers']['details']}\n\n";
-
-        $desc .= "{$STRINGS['labels']['solar_midnight']}: {$solar_midnight_time}\n";
-        $desc .= "{$STRINGS['labels']['of_day']}: " . number_format($night_pct, 1) . "%\n\n";
-
-        // COMPARISONS section
-        $desc .= "{$STRINGS['headers']['comparisons']}\n\n";
-
-        if ($night_length_comparison) {
-            $desc .= "{$STRINGS['labels']['vs_yesterday']}: {$night_length_comparison}\n\n";
-        }
-
-        // MOON PHASE section with emoji
-        $desc .= "{$STRINGS['headers']['moon_phase']}\n\n";
-
-        $illum = number_format((float) $moon_info['illumination'], 1);
-        $desc .= "{$STRINGS['labels']['current']}: {$moon_emoji} {$moon_info['phase_name']} ({$illum}% lit)\n";
-        $prev_emoji = get_moon_phase_emoji($moon_info['prev_phase']['name']);
-        $prev_name = $moon_info['prev_phase']['name'];
-        $desc .= "{$STRINGS['labels']['previous']}: {$prev_emoji} {$prev_name} ({$moon_info['prev_phase']['date']})\n";
-        $next_emoji = get_moon_phase_emoji($moon_info['next_phase']['name']);
-        $next_name = $moon_info['next_phase']['name'];
-        $desc .= "{$STRINGS['labels']['next']}: {$next_emoji} {$next_name} ({$moon_info['next_phase']['date']})\n\n";
-
-        // CONTEXT section
-        $desc .= "{$STRINGS['headers']['context']}\n\n";
-
-        $desc .= "{$STRINGS['twilight_descriptions']['night']}";
-
-        if ($description) {
-            $desc .= "\n\n" . $description;
-        }
-
-        echo format_ical_description($desc);
-        echo "TRANSP:TRANSPARENT\r\n";
-        echo "END:VEVENT\r\n";
-    }
-
-    $current_day = strtotime('+1 day', $current_day);
+/**
+ * Daylight on the year's winter and summer solstices, by hemisphere.
+ *
+ * @return array{winter: array{seconds: int, info: string}, summer: array{seconds: int, info: string}}
+ */
+function solstice_daylight(int $year, float $lat, float $lon, DateTimeZone $tz): array
+{
+    $solstices = calculate_equinox_solstice($year);
+    [$winter, $summer] = $lat >= 0 ? ['december_solstice', 'june_solstice'] : ['june_solstice', 'december_solstice'];
+
+    $describe = function (int $timestamp) use ($lat, $lon, $tz): array {
+        $date = (new DateTimeImmutable("@{$timestamp}"))->setTimezone($tz);
+        return [
+            'seconds' => (int) round(sun_events($date, $lat, $lon)['daylength_h'] * 3600),
+            'info' => $date->format('M j'),
+        ];
+    };
+
+    return ['winter' => $describe($solstices[$winter]), 'summer' => $describe($solstices[$summer])];
 }
 
-echo "END:VCALENDAR\r\n";
+/**
+ * Format an iCalendar duration, in hours when whole.
+ */
+function ical_duration(int $seconds): string
+{
+    return $seconds % 3600 === 0 ? 'PT' . intdiv($seconds, 3600) . 'H' : "PT{$seconds}S";
+}
+
+/**
+ * Format a time of day, or a dash when the event does not occur.
+ */
+function format_time(?int $timestamp): string
+{
+    return $timestamp === null ? '—' : date('H:i', $timestamp);
+}
+
+/**
+ * Render one VEVENT.
+ *
+ * @param array<string> $dates DTSTART and DTEND property lines
+ */
+function ical_event(string $uid, array $dates, string $summary, string $description, string $dtstamp): string
+{
+    return "BEGIN:VEVENT\r\nUID:{$uid}\r\nDTSTAMP:{$dtstamp}\r\n"
+        . implode("\r\n", $dates) . "\r\n"
+        . ical_text_property('SUMMARY', $summary)
+        . format_ical_description($description)
+        . "TRANSP:TRANSPARENT\r\nEND:VEVENT\r\n";
+}
+
+/**
+ * Generate the iCalendar feed.
+ *
+ * Event times are UTC; descriptions show local times in the feed's time zone.
+ *
+ * @param array{
+ *     lat: float, lon: float, timezone: string, location: string, description: string,
+ *     rise_offset: int, set_offset: int,
+ *     enabled: array{civil: bool, nautical: bool, astro: bool, daylight: bool},
+ *     past_days: int, window_days: int, refresh_seconds: int, today?: string
+ * } $o Options; offsets in seconds, today as a date string (defaults to today)
+ * @return string Complete VCALENDAR document
+ */
+function generate_calendar(array $o): string
+{
+    $previousTimezone = date_default_timezone_get();
+    date_default_timezone_set($o['timezone']);
+    try {
+        return render_calendar($o);
+    } finally {
+        date_default_timezone_set($previousTimezone);
+    }
+}
+
+/**
+ * Body of generate_calendar(); expects the default time zone to be the feed's.
+ *
+ * @param array $o Options as documented on generate_calendar()
+ */
+function render_calendar(array $o): string
+{
+    $S = get_strings();
+    $tz = new DateTimeZone($o['timezone']);
+    $lat = $o['lat'];
+    $lon = $o['lon'];
+    $enabled = $o['enabled'];
+    $uidSuffix = "{$lat}-{$lon}@sun-calendar";
+    $dtstamp = gmdate('Ymd\THis\Z');
+    $refresh = ical_duration($o['refresh_seconds']);
+
+    $timed = fn(int $start, int $end) => [
+        'DTSTART:' . gmdate('Ymd\THis\Z', $start),
+        'DTEND:' . gmdate('Ymd\THis\Z', $end),
+    ];
+    $allDay = fn(DateTimeImmutable $day) => [
+        'DTSTART;VALUE=DATE:' . $day->format('Ymd'),
+        'DTEND;VALUE=DATE:' . $day->modify('+1 day')->format('Ymd'),
+    ];
+    $signed = fn(int $diff) => ($diff >= 0 ? '+' : '-') . format_duration_short(abs($diff));
+
+    $out = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:{$S['calendar_prodid']}\r\n"
+        . "CALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n"
+        . ical_text_property('X-WR-CALNAME', sprintf($S['calendar_name_format'], $o['location'] ?: "{$lat}, {$lon}"))
+        . "X-WR-TIMEZONE:{$o['timezone']}\r\n"
+        . "X-PUBLISHED-TTL:{$refresh}\r\nREFRESH-INTERVAL;VALUE=DURATION:{$refresh}\r\n";
+
+    $today = new DateTimeImmutable($o['today'] ?? 'today', $tz);
+    $first = $today->modify("-{$o['past_days']} days");
+    $last = $today->modify("+{$o['window_days']} days");
+
+    // Equinoxes and solstices by local date, for every year the window touches
+    $specialEvents = [];
+    for ($y = (int) $first->format('Y'); $y <= (int) $last->format('Y'); $y++) {
+        foreach (get_special_astronomical_events($y) as $event) {
+            $specialEvents[date('Y-m-d', $event['date'])] = $event;
+        }
+    }
+
+    $solstices = [];
+    $locationNotes = get_location_notes($lat);
+    $notesShown = false;
+
+    for ($day = $first; $day <= $last; $day = $day->modify('+1 day')) {
+        $year = (int) $day->format('Y');
+        $dateStr = $day->format('Ymd');
+        $ev = sun_events($day, $lat, $lon);
+        $prev = sun_events($day->modify('-1 day'), $lat, $lon);
+        $spans = solar_spans($ev, sun_events($day->modify('+1 day'), $lat, $lon), $lat);
+        $solstices[$year] ??= solstice_daylight($year, $lat, $lon, $tz);
+
+        $daylightSeconds = (int) round($ev['daylength_h'] * 3600);
+        $daylightPercentile = calculate_daylight_percentile($ev['daylength_h'], $lat, $lon, $year, $ev['utc_offset']);
+        $dayStats = [
+            'daylight_seconds' => $daylightSeconds,
+            'daylight_pct' => round($daylightSeconds / 864, 1),
+            'daylight_percentile' => $daylightPercentile,
+            'day_length_comparison' => format_day_length_comparison(
+                $daylightSeconds - (int) round($prev['daylength_h'] * 3600)
+            ),
+            'solar_noon_time' => date('H:i', $ev['solar_noon']),
+            'winter_comparison' => $signed($daylightSeconds - $solstices[$year]['winter']['seconds']),
+            'winter_solstice_info' => $solstices[$year]['winter']['info'],
+            'summer_comparison' => $signed($daylightSeconds - $solstices[$year]['summer']['seconds']),
+            'summer_solstice_info' => $solstices[$year]['summer']['info'],
+        ];
+
+        // Night runs from astronomical dusk to the next astronomical dawn
+        $nightSeconds = $spans['night'] ? $spans['night'][1] - $spans['night'][0] : 0;
+        $lastNight = ($prev['astro_end'] !== null && $ev['astro_begin'] !== null)
+            ? $ev['astro_begin'] - $prev['astro_end']
+            : null;
+        $nightStats = [
+            'night_seconds' => $nightSeconds,
+            'night_pct' => round($nightSeconds / 864, 1),
+            'night_percentile' => 100 - $daylightPercentile,
+            'night_length_comparison' => ($spans['night'] && $lastNight !== null)
+                ? format_day_length_comparison($nightSeconds - $lastNight)
+                : null,
+            'moon_info' => get_accurate_moon_phase($ev['solar_noon'] + 43200),
+        ];
+
+        // Week summary (Sundays)
+        if ($enabled['daylight'] && $day->format('w') === '0') {
+            $week = SunCalendar\Cache::getInstance()
+                ->getWeekSummary($day->getTimestamp(), $lat, $lon, $ev['utc_offset']);
+            $lastYear = get_last_year_week_data($day->getTimestamp(), $lat, $lon, $ev['utc_offset']);
+
+            $desc = "{$S['headers']['at_a_glance']}\n\n";
+            $desc .= "{$S['labels']['trend']}: {$week['trend_emoji']} {$week['trend']}\n";
+            $desc .= "{$S['labels']['average']}: " . format_duration_full((int) $week['avg_length']) . "\n\n";
+            $desc .= "{$S['headers']['details']}\n\n";
+            $desc .= "{$S['labels']['change']}: " . $signed((int) $week['total_change']) . "\n";
+            $desc .= "{$S['labels']['shortest']}: " . date('l, M j', $week['shortest_day']) . "\n";
+            $desc .= '  ' . format_duration_full((int) $week['min_length']) . "\n";
+            $desc .= "{$S['labels']['longest']}: " . date('l, M j', $week['longest_day']) . "\n";
+            $desc .= '  ' . format_duration_full((int) $week['max_length']) . "\n\n";
+            $desc .= "{$S['headers']['comparisons']}\n\n";
+            $desc .= "{$S['labels']['vs_last_year']}: " . $signed((int) ($week['avg_length'] - $lastYear['avg_length']))
+                . "\n  (Week of " . date('M j, Y', $lastYear['week_start']) . ")\n\n";
+            $desc .= "{$S['labels']['moon']}: " . get_moon_phase_emoji($week['moon_phase']) . " {$week['moon_phase']}";
+
+            // Location notes go on the first week summary only
+            if (!$notesShown && $locationNotes) {
+                $desc .= "\n\n{$S['headers']['location_notes']}\n" . implode("\n", $locationNotes) . "\n";
+                $notesShown = true;
+            }
+
+            $summary = sprintf(
+                $S['week_summary']['title_format'],
+                $day->format('M j'),
+                $day->modify('+6 days')->format('M j')
+            );
+            $out .= ical_event("week-summary-{$dateStr}-{$uidSuffix}", $allDay($day), $summary, $desc, $dtstamp);
+        }
+
+        // Equinoxes and solstices
+        $special = $specialEvents[$day->format('Y-m-d')] ?? null;
+        if ($special) {
+            $desc = "{$S['headers']['astronomical_event']}\n\n";
+            $desc .= "{$S['labels']['event']}: {$special['name']}\n";
+            $desc .= "{$S['labels']['date']}: " . date('F j, Y, H:i', $special['date']) . "\n\n";
+            $desc .= $special['description'];
+
+            $slug = strtolower(str_replace(' ', '-', $special['name']));
+            $out .= ical_event(
+                "special-{$slug}-{$dateStr}@sun-calendar",
+                $allDay($day),
+                "{$special['emoji']} {$special['name']}",
+                $desc,
+                $dtstamp
+            );
+        }
+
+        // Twilight events: span key => [enabled flag, UID prefix, morning?]
+        $twilights = [
+            'civil_dawn' => ['civil', 'civil-dawn', true],
+            'nautical_dawn' => ['nautical', 'nautical-dawn', true],
+            'astronomical_dawn' => ['astro', 'astro-dawn', true],
+            'civil_dusk' => ['civil', 'civil-dusk', false],
+            'nautical_dusk' => ['nautical', 'nautical-dusk', false],
+            'astronomical_dusk' => ['astro', 'astro-dusk', false],
+        ];
+        foreach ($twilights as $key => [$type, $uid, $morning]) {
+            if (!$enabled[$type] || $spans[$key] === null) {
+                continue;
+            }
+            [$start, $end] = $spans[$key];
+            $offset = $morning ? $o['rise_offset'] : $o['set_offset'];
+
+            $desc = "{$S['headers']['at_a_glance']}\n\n";
+            $desc .= "{$S['labels']['duration']}: " . format_duration_full($end - $start) . "\n\n";
+            $desc .= "{$S['headers']['details']}\n\n";
+            if ($key === 'civil_dawn') {
+                $desc .= "{$S['labels']['first_light']}: " . format_time($start) . "\n";
+            }
+            $desc .= "{$S['labels']['sunrise']}: " . format_time($ev['sunrise']) . "\n";
+            $desc .= "{$S['labels']['sunset']}: " . format_time($ev['sunset']) . "\n";
+            if ($key === 'civil_dusk') {
+                $desc .= "{$S['labels']['last_light']}: " . format_time($end) . "\n";
+            }
+            $desc .= "\n{$S['headers']['context']}\n\n{$S['twilight_descriptions'][$key]}";
+            $desc .= $morning
+                ? build_dawn_supplemental(['spans' => $spans, 'enabled' => $enabled, 'daylight' => $dayStats], $S)
+                : build_dusk_supplemental(['spans' => $spans, 'enabled' => $enabled, 'night' => $nightStats], $S);
+
+            $out .= ical_event(
+                "{$uid}-{$dateStr}-{$uidSuffix}",
+                $timed($start + $offset, $end + $offset),
+                $S['summaries'][$key],
+                $desc,
+                $dtstamp
+            );
+        }
+
+        // Daylight
+        if ($enabled['daylight'] && $spans['daylight'] !== null) {
+            [$start, $end] = $spans['daylight'];
+
+            $desc = "{$S['headers']['at_a_glance']}\n\n";
+            $desc .= "{$S['labels']['duration']}: " . format_duration_full($daylightSeconds) . "\n";
+            $desc .= "{$S['labels']['progress']}: " . format_percentile_bar($daylightPercentile) . "\n\n";
+            $desc .= "{$S['headers']['details']}\n\n";
+            $desc .= "{$S['labels']['sunrise']}: " . format_time($ev['sunrise']) . "\n";
+            $desc .= "{$S['labels']['sunset']}: " . format_time($ev['sunset']) . "\n";
+            $desc .= "{$S['labels']['solar_noon']}: {$dayStats['solar_noon_time']}\n";
+            $desc .= "{$S['labels']['of_day']}: " . number_format($dayStats['daylight_pct'], 1) . "%\n\n";
+            $desc .= "{$S['headers']['comparisons']}\n\n";
+            $desc .= "{$S['labels']['vs_yesterday']}: {$dayStats['day_length_comparison']}\n";
+            $desc .= "{$S['labels']['vs_winter_solstice']}: {$dayStats['winter_comparison']}\n";
+            $desc .= "  ({$dayStats['winter_solstice_info']})\n";
+            $desc .= "{$S['labels']['vs_summer_solstice']}: {$dayStats['summer_comparison']}\n";
+            $desc .= "  ({$dayStats['summer_solstice_info']})\n\n";
+            $desc .= "{$S['headers']['context']}\n\n{$S['twilight_descriptions']['daylight']}";
+            if ($o['description'] !== '') {
+                $desc .= "\n\n" . $o['description'];
+            }
+
+            $out .= ical_event(
+                "daylight-{$dateStr}-{$uidSuffix}",
+                $timed($start + $o['rise_offset'], $end + $o['set_offset']),
+                $S['summaries']['daylight'],
+                $desc,
+                $dtstamp
+            );
+        }
+
+        // Night
+        if ($enabled['daylight'] && $spans['night'] !== null) {
+            [$start, $end] = $spans['night'];
+
+            $desc = "{$S['headers']['at_a_glance']}\n\n";
+            $desc .= "{$S['labels']['duration']}: " . format_duration_full($nightSeconds) . "\n";
+            $desc .= "{$S['labels']['progress']}: " . format_percentile_bar($nightStats['night_percentile']) . "\n\n";
+            $desc .= "{$S['headers']['details']}\n\n";
+            $desc .= "{$S['labels']['solar_midnight']}: " . date('H:i', intdiv($start + $end, 2)) . "\n";
+            $desc .= "{$S['labels']['of_day']}: " . number_format($nightStats['night_pct'], 1) . "%\n\n";
+            if ($nightStats['night_length_comparison'] !== null) {
+                $desc .= "{$S['headers']['comparisons']}\n\n";
+                $desc .= "{$S['labels']['vs_yesterday']}: {$nightStats['night_length_comparison']}\n\n";
+            }
+            $desc .= format_moon_section($nightStats['moon_info'], $S) . "\n";
+            $desc .= "{$S['headers']['context']}\n\n{$S['twilight_descriptions']['night']}";
+            if ($o['description'] !== '') {
+                $desc .= "\n\n" . $o['description'];
+            }
+
+            $out .= ical_event(
+                "night-{$dateStr}-{$uidSuffix}",
+                $timed($start + $o['set_offset'], $end + $o['rise_offset']),
+                $S['summaries']['night'],
+                $desc,
+                $dtstamp
+            );
+        }
+    }
+
+    return $out . "END:VCALENDAR\r\n";
+}

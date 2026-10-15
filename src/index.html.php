@@ -1,6 +1,7 @@
 <?php
-// This file is included by sunrise-sunset-calendar.php
-// It displays the web interface for generating calendar URLs
+// Web interface for generating calendar URLs; rendered by sunrise-sunset-calendar.php
+$today = sun_events(new DateTimeImmutable('today', new DateTimeZone(DEFAULT_TIMEZONE)), DEFAULT_LAT, DEFAULT_LON);
+$daylight_minutes = (int) round($today['daylength_h'] * 60);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -8,70 +9,47 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enhanced Sun & Twilight Calendar</title>
+    <title>Sun &amp; Twilight Calendar</title>
     <link rel="stylesheet" href="assets/styles.css">
 </head>
 
 <body>
     <div class="container">
-        <h1>🌅 Enhanced Sun & Twilight Calendar v8.0</h1>
+        <h1>🌅 Sun &amp; Twilight Calendar</h1>
 
         <div class="info-box">
             <strong>Today's Information (Rome, Italy)</strong><br>
-            Date: <?php echo date('F j, Y'); ?><br>
-            <?php
-            // Get today's sun times using high-precision calculations
-            $tz = new DateTimeZone('Europe/Rome');
-$dt = new DateTime('now', $tz);
-$utc_offset = $dt->getOffset() / 3600;
-$today = getdate();
-
-$sun_calc = calculate_sun_times($today['year'], $today['mon'], $today['mday'], 41.9028, 12.4964, $utc_offset);
-
-$astro_begin = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['astro_begin_frac']);
-$nautical_begin = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['nautical_begin_frac']);
-$civil_begin = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['civil_begin_frac']);
-$sunrise = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['sunrise_frac']);
-$solar_noon = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['solar_noon_frac']);
-$sunset = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['sunset_frac']);
-$civil_end = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['civil_end_frac']);
-$nautical_end = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['nautical_end_frac']);
-$astro_end = fraction_to_timestamp($today['year'], $today['mon'], $today['mday'], $sun_calc['astro_end_frac']);
-
-$daylight_hours = $sun_calc['daylength_h'];
-$daylight_h = floor($daylight_hours);
-$daylight_m = round(($daylight_hours - $daylight_h) * 60);
-?>
+            Date: <?= date('F j, Y') ?><br>
             <span id="time-display">
-                Astronomical Dawn: <?php echo date('H:i', $astro_begin); ?><br>
-                Nautical Dawn: <?php echo date('H:i', $nautical_begin); ?><br>
-                Civil Dawn: <?php echo date('H:i', $civil_begin); ?><br>
-                Sunrise: <?php echo date('H:i', $sunrise); ?><br>
-                Solar Noon: <?php echo date('H:i', $solar_noon); ?><br>
-                Sunset: <?php echo date('H:i', $sunset); ?><br>
-                Civil Dusk: <?php echo date('H:i', $civil_end); ?><br>
-                Nautical Dusk: <?php echo date('H:i', $nautical_end); ?><br>
-                Astronomical Dusk: <?php echo date('H:i', $astro_end); ?><br>
-                <strong>Day Length: <?php echo $daylight_h; ?>h <?php echo $daylight_m; ?>m</strong>
+                Astronomical Dawn: <?= format_time($today['astro_begin']) ?><br>
+                Nautical Dawn: <?= format_time($today['nautical_begin']) ?><br>
+                Civil Dawn: <?= format_time($today['civil_begin']) ?><br>
+                Sunrise: <?= format_time($today['sunrise']) ?><br>
+                Solar Noon: <?= format_time($today['solar_noon']) ?><br>
+                Sunset: <?= format_time($today['sunset']) ?><br>
+                Civil Dusk: <?= format_time($today['civil_end']) ?><br>
+                Nautical Dusk: <?= format_time($today['nautical_end']) ?><br>
+                Astronomical Dusk: <?= format_time($today['astro_end']) ?><br>
+                <strong>Day Length: <?= intdiv($daylight_minutes, 60) ?>h <?= $daylight_minutes % 60 ?>m</strong>
             </span>
         </div>
 
         <?php if (isset($error)): ?>
             <div class="error-box">
-                <strong>Error:</strong> <?php echo htmlspecialchars($error); ?>
+                <strong>Error:</strong> <?= htmlspecialchars($error) ?>
             </div>
         <?php endif; ?>
 
-        <?php if (isset($subscription_url)): ?>
+        <?php if (isset($subscription_url, $webcal_url)): ?>
             <div class="success-box">
                 <h3>✅ Subscription URL Generated!</h3>
                 <p><strong>Your Calendar Subscription URL:</strong></p>
-                <div class="url-display" id="subscription-url"><?php echo htmlspecialchars($subscription_url); ?></div>
-                <button class="copy-button" onclick="copyToClipboard('subscription-url')">📋 Copy URL</button>
+                <div class="url-display" id="subscription-url"><?= htmlspecialchars($subscription_url) ?></div>
+                <button class="copy-button" onclick="copyToClipboard('subscription-url', this)">📋 Copy URL</button>
 
                 <p style="margin-top: 20px;"><strong>Webcal URL (recommended):</strong></p>
-                <div class="url-display" id="webcal-url"><?php echo htmlspecialchars($webcal_url); ?></div>
-                <button class="copy-button" onclick="copyToClipboard('webcal-url')">📋 Copy Webcal URL</button>
+                <div class="url-display" id="webcal-url"><?= htmlspecialchars($webcal_url) ?></div>
+                <button class="copy-button" onclick="copyToClipboard('webcal-url', this)">📋 Copy Webcal URL</button>
 
                 <hr>
                 <h4>How to Add to Google Calendar:</h4>
@@ -125,30 +103,23 @@ $daylight_m = round(($daylight_hours - $daylight_h) * 60);
             <div class="form-group">
                 <label for="lat">Latitude <span class="required">*</span></label>
                 <input type="number" name="lat" id="lat" step="0.000001" min="-90" max="90"
-                    value="<?php echo $default_lat; ?>" required onchange="reverseGeocode()">
+                    value="<?= DEFAULT_LAT ?>" required onchange="reverseGeocode()">
                 <div class="help-text">Decimal format (e.g., 41.9028)</div>
             </div>
 
             <div class="form-group">
                 <label for="lon">Longitude <span class="required">*</span></label>
                 <input type="number" name="lon" id="lon" step="0.000001" min="-180" max="180"
-                    value="<?php echo $default_lon; ?>" required onchange="reverseGeocode()">
+                    value="<?= DEFAULT_LON ?>" required onchange="reverseGeocode()">
                 <div class="help-text">Decimal format (e.g., 12.4964)</div>
             </div>
 
             <div class="form-group">
                 <label for="zone">Timezone <span class="required">*</span></label>
                 <select name="zone" id="zone" required>
-                    <option value="Europe/Rome" selected>Europe/Rome (CET)</option>
-                    <?php
-        $zones = timezone_identifiers_list();
-foreach ($zones as $zone) {
-    if ($zone !== 'Europe/Rome') {
-        echo '<option value="' . htmlspecialchars($zone) . '">' .
-            htmlspecialchars($zone) . "</option>\n";
-    }
-}
-?>
+                    <?php foreach (timezone_identifiers_list() as $zone): ?>
+                        <option value="<?= htmlspecialchars($zone) ?>"<?= $zone === DEFAULT_TIMEZONE ? ' selected' : '' ?>><?= htmlspecialchars($zone) ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
 
@@ -201,8 +172,8 @@ foreach ($zones as $zone) {
         </form>
 
         <div class="footer">
-            <strong>High-Precision NREL Calculations v7.3:</strong>
-            <p>Uses NREL SPA-inspired algorithms for maximum accuracy. All times calculated with proper solar declination, equation of time, and atmospheric refraction. Always displays 24-hour time format.</p>
+            <strong>High-Precision NREL Calculations:</strong>
+            <p>Uses the NREL Solar Position Algorithm, with proper solar declination, equation of time, and atmospheric refraction. Always displays 24-hour time format.</p>
             
             <strong>Astronomical Terminology:</strong>
             <ul>

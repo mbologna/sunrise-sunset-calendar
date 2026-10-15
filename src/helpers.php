@@ -3,63 +3,52 @@
 /**
  * Helper functions for calendar generation.
  *
- * These functions provide utilities for location notes, astronomical events,
- * week summaries, and supplemental information formatting.
+ * These functions provide utilities for iCalendar formatting, location notes,
+ * astronomical events, week summaries, and supplemental information.
  */
 
 declare(strict_types=1);
 
+use SunCalendar\Cache;
+
+/**
+ * Format a TEXT property line per RFC 5545: escape, then fold at 75 octets.
+ *
+ * Folding never splits a multibyte UTF-8 character.
+ *
+ * @param string $name Property name, optionally with parameters (e.g. "SUMMARY")
+ * @param string $text Unescaped value; real newlines become literal \n
+ * @return string Folded property line(s), terminated by CRLF
+ */
+function ical_text_property(string $name, string $text): string
+{
+    // Backslashes first, so the escapes added below are not doubled
+    $text = str_replace('\\', '\\\\', $text);
+    $text = str_replace(["\r\n", "\r", "\n"], '\n', $text);
+    $text = str_replace([',', ';'], ['\\,', '\\;'], $text);
+
+    $result = '';
+    $line = '';
+    foreach (mb_str_split($name . ':' . $text, 1, 'UTF-8') as $char) {
+        if (strlen($line) + strlen($char) > 75) {
+            $result .= $line . "\r\n";
+            $line = ' ';
+        }
+        $line .= $char;
+    }
+
+    return $result . $line . "\r\n";
+}
+
 /**
  * Format description for iCalendar with proper escaping and line folding.
- * Per RFC 5545: newlines must be \n (literal), lines fold at 75 octets with space continuation.
  *
  * @param string $text The text to format
  * @return string RFC 5545 compliant DESCRIPTION property
  */
 function format_ical_description(string $text): string
 {
-    // Step 1: Escape special characters per RFC 5545
-    // IMPORTANT: Escape backslashes FIRST, then everything else
-    $text = str_replace('\\', '\\\\', $text);
-
-    // Replace actual newlines with literal \n (backslash + n)
-    $text = str_replace(["\r\n", "\r", "\n"], '\n', $text);
-
-    // Escape commas and semicolons
-    $text = str_replace([',', ';'], ['\\,', '\\;'], $text);
-
-    // Step 2: Build the complete DESCRIPTION line
-    $line = 'DESCRIPTION:' . $text;
-
-    // Step 3: Fold at 75 octets (bytes) with CRLF + space for continuation
-    // IMPORTANT: Must not split multibyte UTF-8 characters
-    $result = '';
-    $current_line = '';
-    $byte_count = 0;
-
-    // Process character by character (UTF-8 aware)
-    $char_count = mb_strlen($line, 'UTF-8');
-    for ($i = 0; $i < $char_count; $i++) {
-        $char = mb_substr($line, $i, 1, 'UTF-8');
-        $char_bytes = strlen($char); // byte length of this character
-
-        // Check if adding this character would exceed 75 bytes
-        if ($byte_count + $char_bytes > 75) {
-            // Add the current line with folding
-            $result .= $current_line . "\r\n";
-            // Start continuation line with space
-            $current_line = ' ' . $char;
-            $byte_count = 1 + $char_bytes; // space (1 byte) + current char bytes
-        } else {
-            $current_line .= $char;
-            $byte_count += $char_bytes;
-        }
-    }
-
-    // Add final line
-    $result .= $current_line . "\r\n";
-
-    return $result;
+    return ical_text_property('DESCRIPTION', $text);
 }
 
 /**
@@ -79,14 +68,7 @@ function calculate_daylight_percentile(
     int $year,
     float $utcOffset
 ): float {
-    $daylightLengths = get_cached_daylight_lengths($lat, $lon, $year, $utcOffset);
-
-    $countBelow = 0;
-    foreach ($daylightLengths as $length) {
-        if ($length < $targetDaylightHours) {
-            $countBelow++;
-        }
-    }
+    $daylightLengths = Cache::getInstance()->getDaylightLengths($lat, $lon, $year, $utcOffset);
 
     // When today is the longest day of the year, return exactly 100%.
     // Without this, the solstice would score 364/365 = 99.7% because no day
@@ -94,6 +76,8 @@ function calculate_daylight_percentile(
     if ($targetDaylightHours >= max($daylightLengths)) {
         return 100.0;
     }
+
+    $countBelow = count(array_filter($daylightLengths, fn($length) => $length < $targetDaylightHours));
 
     return round(($countBelow / count($daylightLengths)) * 100, 1);
 }
@@ -128,41 +112,21 @@ function get_location_notes(float $lat): array
 }
 
 /**
- * Get special astronomical events for a year.
+ * Get equinoxes and solstices for a year, at their computed instants.
  *
  * @param int $year Year to get events for
  * @return array<array{date: int, name: string, emoji: string, description: string}>
  */
 function get_special_astronomical_events(int $year): array
 {
-    $strings = get_strings();
+    $strings = get_strings()['astronomical_events'];
+    $events = [];
 
-    return [
-        [
-            'date' => strtotime("$year-03-20"),
-            'name' => $strings['astronomical_events']['march_equinox']['name'],
-            'emoji' => $strings['astronomical_events']['march_equinox']['emoji'],
-            'description' => $strings['astronomical_events']['march_equinox']['description'],
-        ],
-        [
-            'date' => strtotime("$year-06-21"),
-            'name' => $strings['astronomical_events']['june_solstice']['name'],
-            'emoji' => $strings['astronomical_events']['june_solstice']['emoji'],
-            'description' => $strings['astronomical_events']['june_solstice']['description'],
-        ],
-        [
-            'date' => strtotime("$year-09-22"),
-            'name' => $strings['astronomical_events']['september_equinox']['name'],
-            'emoji' => $strings['astronomical_events']['september_equinox']['emoji'],
-            'description' => $strings['astronomical_events']['september_equinox']['description'],
-        ],
-        [
-            'date' => strtotime("$year-12-21"),
-            'name' => $strings['astronomical_events']['december_solstice']['name'],
-            'emoji' => $strings['astronomical_events']['december_solstice']['emoji'],
-            'description' => $strings['astronomical_events']['december_solstice']['description'],
-        ],
-    ];
+    foreach (calculate_equinox_solstice($year) as $key => $timestamp) {
+        $events[] = ['date' => $timestamp] + $strings[$key];
+    }
+
+    return $events;
 }
 
 /**
@@ -204,37 +168,6 @@ function get_moon_phase_emoji(string $phaseName): string
 }
 
 /**
- * Get day of year information.
- *
- * @param int $timestamp Unix timestamp
- * @return array{day: int, total: int, formatted: string}
- */
-function get_day_of_year(int $timestamp): array
-{
-    $year = (int) date('Y', $timestamp);
-    $dayOfYear = (int) date('z', $timestamp) + 1; // date('z') is 0-indexed
-    $isLeapYear = ($year % 4 == 0 && $year % 100 != 0) || $year % 400 == 0;
-    $totalDays = $isLeapYear ? 366 : 365;
-
-    return [
-        'day' => $dayOfYear,
-        'total' => $totalDays,
-        'formatted' => "Day {$dayOfYear} of {$totalDays}",
-    ];
-}
-
-/**
- * Create a visual separator line.
- *
- * @param int $width Width of the separator (default 30)
- * @return string Separator line
- */
-function format_separator(int $width = 30): string
-{
-    return str_repeat('─', $width);
-}
-
-/**
  * Format duration with full words (no abbreviations).
  *
  * @param int $seconds Duration in seconds
@@ -259,32 +192,37 @@ function format_duration_full(int $seconds): string
 }
 
 /**
+ * Format a duration as "Xh YYm".
+ *
+ * @param int $seconds Duration in seconds
+ * @return string Formatted duration
+ */
+function format_hours_minutes(int $seconds): string
+{
+    return sprintf('%dh %02dm', intdiv($seconds, 3600), intdiv($seconds % 3600, 60));
+}
+
+/**
  * Get week data from the same week last year for comparison.
  *
  * @param int $weekStart Current week start timestamp
  * @param float $lat Latitude
  * @param float $lon Longitude
  * @param float $utcOffset UTC offset
- * @return array|null Last year's week data or null
+ * @return array{avg_length: float, week_start: int}
  */
-function get_last_year_week_data(int $weekStart, float $lat, float $lon, float $utcOffset): ?array
+function get_last_year_week_data(int $weekStart, float $lat, float $lon, float $utcOffset): array
 {
-    // Get the same week last year (approximately)
+    // Same week last year, moved back to the nearest Sunday
     $lastYearWeekStart = strtotime('-1 year', $weekStart);
-
-    // Adjust to the nearest Sunday
     $dayOfWeek = (int) date('w', $lastYearWeekStart);
     if ($dayOfWeek !== 0) {
         $lastYearWeekStart = strtotime('-' . $dayOfWeek . ' days', $lastYearWeekStart);
     }
 
-    $weekEnd = strtotime('+6 days', $lastYearWeekStart);
-    $totalLength = 0;
-    $count = 0;
-    $current = $lastYearWeekStart;
-
-    while ($current <= $weekEnd) {
-        $dateParts = getdate($current);
+    $totalLength = 0.0;
+    for ($i = 0; $i < 7; $i++) {
+        $dateParts = getdate(strtotime("+{$i} days", $lastYearWeekStart));
         $result = calculate_sun_times(
             $dateParts['year'],
             $dateParts['mon'],
@@ -294,16 +232,10 @@ function get_last_year_week_data(int $weekStart, float $lat, float $lon, float $
             $utcOffset
         );
         $totalLength += $result['daylength_h'] * 3600;
-        $count++;
-        $current = strtotime('+1 day', $current);
-    }
-
-    if ($count === 0) {
-        return null;
     }
 
     return [
-        'avg_length' => $totalLength / $count,
+        'avg_length' => $totalLength / 7,
         'week_start' => $lastYearWeekStart,
     ];
 }
@@ -312,114 +244,78 @@ function get_last_year_week_data(int $weekStart, float $lat, float $lon, float $
  * Format day length comparison string.
  *
  * @param int $diffSeconds Difference in seconds
- * @param string $type Type of comparison ('day' or 'night') - reserved for future use
  * @return string Formatted comparison string
  */
-function format_day_length_comparison(int $diffSeconds, string $type = 'day'): string
+function format_day_length_comparison(int $diffSeconds): string
 {
-    $strings = get_strings();
-    $absDiff = abs($diffSeconds);
-    $minutes = (int) floor($absDiff / 60);
-    $seconds = $absDiff % 60;
-
-    if ($diffSeconds > 0) {
-        return sprintf('+%dm %02ds', $minutes, $seconds);
-    } elseif ($diffSeconds < 0) {
-        return sprintf('-%dm %02ds', $minutes, $seconds);
+    if ($diffSeconds === 0) {
+        return get_strings()['comparisons']['same_length'];
     }
 
-    return $strings['comparisons']['same_length'];
+    $absDiff = abs($diffSeconds);
+
+    return sprintf('%s%dm %02ds', $diffSeconds > 0 ? '+' : '-', intdiv($absDiff, 60), $absDiff % 60);
 }
 
 /**
- * Build dawn supplemental information.
+ * Format one twilight span line for the supplemental schedule.
  *
- * @param array $ctx Context array with keys:
- *                   - times: timestamps array (sunrise, sunset, solar_noon, etc.)
- *                   - format: time format string
- *                   - enabled: enabled event types array
- *                   - daylight: daylight statistics array
+ * @param string $label Span name
+ * @param array{0: int, 1: int} $span Start and end timestamps
+ * @param string $note One-line description
+ * @return string Formatted lines
+ */
+function format_schedule_span(string $label, array $span, string $note): string
+{
+    [$start, $end] = $span;
+
+    return "{$label}: " . date('H:i', $start) . ' - ' . date('H:i', $end)
+        . ' (' . format_hours_minutes($end - $start) . ")\n  {$note}\n\n";
+}
+
+/**
+ * Build dawn supplemental information: the morning spans the user did not
+ * subscribe to as separate events, so a minimal calendar still carries them.
+ *
+ * @param array $ctx Context with keys:
+ *                   - spans: solar spans from solar_spans()
+ *                   - enabled: enabled event types (civil, nautical, astro, daylight)
+ *                   - daylight: daylight statistics
  * @param array $strings Strings configuration
  * @return string Formatted supplemental information
  */
 function build_dawn_supplemental(array $ctx, array $strings): string
 {
-    $sunrise = $ctx['times']['sunrise'] ?? null;
-    $sunset = $ctx['times']['sunset'] ?? null;
-    $solar_noon = $ctx['times']['solar_noon'] ?? null;
-    $civil_begin = $ctx['times']['civil_begin'] ?? null;
-    $civil_end = $ctx['times']['civil_end'] ?? null;
-    $nautical_begin = $ctx['times']['nautical_begin'] ?? null;
-    $nautical_end = $ctx['times']['nautical_end'] ?? null;
-    $astro_begin = $ctx['times']['astro_begin'] ?? null;
-    $astro_end = $ctx['times']['astro_end'] ?? null;
-
-    $time_format = $ctx['format'];
+    $spans = $ctx['spans'];
     $enabled = $ctx['enabled'];
-    $daylight_seconds = $ctx['daylight']['daylight_seconds'];
-    $daylight_pct = $ctx['daylight']['daylight_pct'];
-    $daylight_percentile = $ctx['daylight']['daylight_percentile'];
-    $day_length_comparison = $ctx['daylight']['day_length_comparison'];
-    $winter_comparison = $ctx['daylight']['winter_comparison'];
-    $summer_comparison = $ctx['daylight']['summer_comparison'];
-    $solar_noon_time = $ctx['daylight']['solar_noon_time'];
-    $winter_solstice_info = $ctx['daylight']['winter_solstice_info'];
-    $summer_solstice_info = $ctx['daylight']['summer_solstice_info'];
-    $diff_from_winter = $ctx['daylight']['diff_from_winter'];
-    $diff_from_summer = $ctx['daylight']['diff_from_summer'];
     if (count(array_filter($enabled)) >= 4) {
         return '';
     }
 
     $info = "\n\n{$strings['headers']['daytime_schedule']}\n\n";
 
-    if (!$enabled['astro'] && isset($astro_begin) && isset($nautical_begin)) {
-        $info .= "{$strings['summaries']['astronomical_dawn']}: "
-            . date($time_format, $astro_begin) . ' - '
-            . date($time_format, $nautical_begin) . ' ('
-            . sprintf('%dh %02dm', (int) floor(($nautical_begin - $astro_begin) / 3600), (int) floor((($nautical_begin - $astro_begin) % 3600) / 60)) . ")\n";
-        $info .= "  {$strings['supplemental']['astronomical_dawn']}\n\n";
-    }
-
-    if (!$enabled['nautical'] && isset($nautical_begin) && isset($civil_begin)) {
-        $info .= "{$strings['summaries']['nautical_dawn']}: "
-            . date($time_format, $nautical_begin) . ' - '
-            . date($time_format, $civil_begin) . ' ('
-            . sprintf('%dh %02dm', (int) floor(($civil_begin - $nautical_begin) / 3600), (int) floor((($civil_begin - $nautical_begin) % 3600) / 60)) . ")\n";
-        $info .= "  {$strings['supplemental']['nautical_dawn']}\n\n";
-    }
-
-    if (!$enabled['civil'] && isset($civil_begin) && isset($sunrise)) {
-        $info .= "{$strings['summaries']['civil_dawn']}: "
-            . date($time_format, $civil_begin) . ' - '
-            . date($time_format, $sunrise) . ' ('
-            . sprintf('%dh %02dm', (int) floor(($sunrise - $civil_begin) / 3600), (int) floor((($sunrise - $civil_begin) % 3600) / 60)) . ")\n";
-        $info .= "  {$strings['supplemental']['civil_dawn']}\n\n";
-    }
-
-    if (!$enabled['daylight']) {
-        $info .= "\n{$strings['headers']['daylight']}\n\n";
-        // All data first
-        $info .= "{$strings['labels']['time']}: "
-            . date($time_format, $sunrise) . ' - '
-            . date($time_format, $sunset) . ' ('
-            . sprintf('%dh %02dm', (int) floor($daylight_seconds / 3600), (int) floor(($daylight_seconds % 3600) / 60)) . ", {$daylight_pct}%)\n";
-        $info .= "{$strings['labels']['solar_noon']}: {$solar_noon_time}\n";
-        $info .= "{$strings['labels']['percentile']}: "
-            . sprintf($strings['percentile_explanation']['daylight'], $daylight_percentile) . "\n\n";
-
-        if ($day_length_comparison) {
-            $info .= "{$strings['labels']['vs_yesterday']}: {$day_length_comparison}\n";
+    $dawns = ['astro' => 'astronomical_dawn', 'nautical' => 'nautical_dawn', 'civil' => 'civil_dawn'];
+    foreach ($dawns as $type => $key) {
+        if (!$enabled[$type] && $spans[$key] !== null) {
+            $info .= format_schedule_span($strings['summaries'][$key], $spans[$key], $strings['supplemental'][$key]);
         }
+    }
 
-        $winter_sign = ($diff_from_winter >= 0) ? '+' : '-';
-        $summer_sign = ($diff_from_summer >= 0) ? '+' : '-';
-        $info .= "{$strings['labels']['vs_winter_solstice']} ({$winter_solstice_info}): "
-            . "{$winter_sign}{$winter_comparison}\n";
-        $info .= "{$strings['labels']['vs_summer_solstice']} ({$summer_solstice_info}): "
-            . "{$summer_sign}{$summer_comparison}\n\n";
+    if (!$enabled['daylight'] && $spans['daylight'] !== null) {
+        $stats = $ctx['daylight'];
+        [$sunrise, $sunset] = $spans['daylight'];
 
-        // Description after data
+        $info .= "\n{$strings['headers']['daylight']}\n\n";
+        $info .= "{$strings['labels']['time']}: " . date('H:i', $sunrise) . ' - ' . date('H:i', $sunset)
+            . ' (' . format_hours_minutes($stats['daylight_seconds']) . ", {$stats['daylight_pct']}%)\n";
+        $info .= "{$strings['labels']['solar_noon']}: {$stats['solar_noon_time']}\n";
+        $info .= "{$strings['labels']['percentile']}: "
+            . sprintf($strings['percentile_explanation']['daylight'], $stats['daylight_percentile']) . "\n\n";
+        $info .= "{$strings['labels']['vs_yesterday']}: {$stats['day_length_comparison']}\n";
+        $info .= "{$strings['labels']['vs_winter_solstice']} ({$stats['winter_solstice_info']}): "
+            . "{$stats['winter_comparison']}\n";
+        $info .= "{$strings['labels']['vs_summer_solstice']} ({$stats['summer_solstice_info']}): "
+            . "{$stats['summer_comparison']}\n\n";
         $info .= "{$strings['supplemental']['daylight']}\n";
     }
 
@@ -427,100 +323,72 @@ function build_dawn_supplemental(array $ctx, array $strings): string
 }
 
 /**
- * Build dusk supplemental information.
+ * Build dusk supplemental information (evening counterpart of build_dawn_supplemental()).
  *
- * @param array $ctx Context array with keys:
- *                   - times: timestamps array (sunrise, sunset, twilight times, next_astro_begin)
- *                   - format: time format string
- *                   - enabled: enabled event types array
- *                   - night: night statistics array
+ * @param array $ctx Context with keys:
+ *                   - spans: solar spans from solar_spans()
+ *                   - enabled: enabled event types (civil, nautical, astro, daylight)
+ *                   - night: night statistics including moon_info
  * @param array $strings Strings configuration
  * @return string Formatted supplemental information
  */
 function build_dusk_supplemental(array $ctx, array $strings): string
 {
-    $sunrise = $ctx['times']['sunrise'] ?? null;
-    $sunset = $ctx['times']['sunset'] ?? null;
-    $civil_begin = $ctx['times']['civil_begin'] ?? null;
-    $civil_end = $ctx['times']['civil_end'] ?? null;
-    $nautical_begin = $ctx['times']['nautical_begin'] ?? null;
-    $nautical_end = $ctx['times']['nautical_end'] ?? null;
-    $astro_begin = $ctx['times']['astro_begin'] ?? null;
-    $astro_end = $ctx['times']['astro_end'] ?? null;
-    $next_astro_begin = $ctx['times']['next_astro_begin'] ?? null;
-
-    $time_format = $ctx['format'];
+    $spans = $ctx['spans'];
     $enabled = $ctx['enabled'];
-    $night_seconds = $ctx['night']['night_seconds'];
-    $night_pct = $ctx['night']['night_pct'];
-    $night_percentile = $ctx['night']['night_percentile'];
-    $night_length_comparison = $ctx['night']['night_length_comparison'];
-    $moon_info = $ctx['night']['moon_info'];
     if (count(array_filter($enabled)) >= 4) {
         return '';
     }
 
     $info = "\n\n{$strings['headers']['nighttime_schedule']}\n\n";
 
-    if (!$enabled['civil'] && isset($sunset) && isset($civil_end)) {
-        $info .= "{$strings['summaries']['civil_dusk']}: "
-            . date($time_format, $sunset) . ' - '
-            . date($time_format, $civil_end) . ' ('
-            . sprintf('%dh %02dm', (int) floor(($civil_end - $sunset) / 3600), (int) floor((($civil_end - $sunset) % 3600) / 60)) . ")\n";
-        $info .= "  {$strings['supplemental']['civil_dusk']}\n\n";
+    $dusks = ['civil' => 'civil_dusk', 'nautical' => 'nautical_dusk', 'astro' => 'astronomical_dusk'];
+    foreach ($dusks as $type => $key) {
+        if (!$enabled[$type] && $spans[$key] !== null) {
+            $info .= format_schedule_span($strings['summaries'][$key], $spans[$key], $strings['supplemental'][$key]);
+        }
     }
 
-    if (!$enabled['nautical'] && isset($civil_end) && isset($nautical_end)) {
-        $info .= "{$strings['summaries']['nautical_dusk']}: "
-            . date($time_format, $civil_end) . ' - '
-            . date($time_format, $nautical_end) . ' ('
-            . sprintf('%dh %02dm', (int) floor(($nautical_end - $civil_end) / 3600), (int) floor((($nautical_end - $civil_end) % 3600) / 60)) . ")\n";
-        $info .= "  {$strings['supplemental']['nautical_dusk']}\n\n";
-    }
+    if (!$enabled['daylight'] && $spans['night'] !== null) {
+        $stats = $ctx['night'];
+        [$start, $end] = $spans['night'];
 
-    if (!$enabled['astro'] && isset($nautical_end) && isset($astro_end)) {
-        $info .= "{$strings['summaries']['astronomical_dusk']}: "
-            . date($time_format, $nautical_end) . ' - '
-            . date($time_format, $astro_end) . ' ('
-            . sprintf('%dh %02dm', (int) floor(($astro_end - $nautical_end) / 3600), (int) floor((($astro_end - $nautical_end) % 3600) / 60)) . ")\n";
-        $info .= "  {$strings['supplemental']['astronomical_dusk']}\n\n";
-    }
-
-    if (!$enabled['daylight'] && isset($astro_end) && isset($next_astro_begin)) {
-        $solar_midnight = $astro_end + (int) (($next_astro_begin - $astro_end) / 2);
         $info .= "\n{$strings['headers']['night']}\n\n";
-        // All data first
-        $info .= "{$strings['labels']['time']}: "
-            . date($time_format, $astro_end) . ' - '
-            . date($time_format, $next_astro_begin) . ' ('
-            . sprintf('%dh %02dm', (int) floor($night_seconds / 3600), (int) floor(($night_seconds % 3600) / 60)) . ", {$night_pct}%)\n";
-        $info .= "{$strings['labels']['solar_midnight']}: " . date($time_format, $solar_midnight) . "\n";
+        $info .= "{$strings['labels']['time']}: " . date('H:i', $start) . ' - ' . date('H:i', $end)
+            . ' (' . format_hours_minutes($stats['night_seconds']) . ", {$stats['night_pct']}%)\n";
+        $info .= "{$strings['labels']['solar_midnight']}: " . date('H:i', intdiv($start + $end, 2)) . "\n";
         $info .= "{$strings['labels']['percentile']}: "
-            . sprintf($strings['percentile_explanation']['night'], $night_percentile) . "\n\n";
-
-        if ($night_length_comparison) {
-            $info .= "{$strings['labels']['vs_yesterday']}: {$night_length_comparison}\n\n";
+            . sprintf($strings['percentile_explanation']['night'], $stats['night_percentile']) . "\n\n";
+        if ($stats['night_length_comparison'] !== null) {
+            $info .= "{$strings['labels']['vs_yesterday']}: {$stats['night_length_comparison']}\n\n";
         }
-
-        // Description after data
         $info .= "{$strings['supplemental']['night']}\n\n";
-
-        $moon_emoji_supp = get_moon_phase_emoji($moon_info['phase_name']);
-        $illum_supp = number_format((float) $moon_info['illumination'], 1);
-        $info .= "{$strings['headers']['moon_phase']}\n\n";
-        $info .= "{$strings['labels']['current']}: {$moon_emoji_supp} {$moon_info['phase_name']}"
-            . " ({$illum_supp}% lit)\n";
-        if ($moon_info['prev_phase']) {
-            $prev_emoji_supp = get_moon_phase_emoji($moon_info['prev_phase']['name']);
-            $info .= "{$strings['labels']['previous']}: {$prev_emoji_supp} {$moon_info['prev_phase']['name']}"
-                . " ({$moon_info['prev_phase']['date']})\n";
-        }
-        if ($moon_info['next_phase']) {
-            $next_emoji_supp = get_moon_phase_emoji($moon_info['next_phase']['name']);
-            $info .= "{$strings['labels']['next']}: {$next_emoji_supp} {$moon_info['next_phase']['name']}"
-                . " ({$moon_info['next_phase']['date']})\n";
-        }
+        $info .= format_moon_section($stats['moon_info'], $strings);
     }
 
     return $info;
+}
+
+/**
+ * Format the moon phase section (current, previous, next phase).
+ *
+ * @param array $moon Result of get_accurate_moon_phase()
+ * @param array $strings Strings configuration
+ * @return string Formatted section
+ */
+function format_moon_section(array $moon, array $strings): string
+{
+    $illumination = number_format((float) $moon['illumination'], 1);
+    $section = "{$strings['headers']['moon_phase']}\n\n";
+    $section .= "{$strings['labels']['current']}: " . get_moon_phase_emoji($moon['phase_name'])
+        . " {$moon['phase_name']} ({$illumination}% lit)\n";
+
+    foreach (['previous' => 'prev_phase', 'next' => 'next_phase'] as $label => $key) {
+        if ($moon[$key]) {
+            $section .= "{$strings['labels'][$label]}: " . get_moon_phase_emoji($moon[$key]['name'])
+                . " {$moon[$key]['name']} ({$moon[$key]['date']})\n";
+        }
+    }
+
+    return $section;
 }

@@ -3,21 +3,16 @@
 /**
  * Cache class for managing application caches.
  *
- * Replaces $GLOBALS-based caching with a cleaner singleton pattern.
- * Provides lazy loading, size limits, and cache clearing.
+ * Per-request memoization of expensive astronomical calculations. Each PHP
+ * request starts with an empty cache, so entries are bounded by the feed window.
  */
 
 declare(strict_types=1);
 
 namespace SunCalendar;
 
-use DateTime;
-
 class Cache
 {
-    /** @var int Maximum entries per cache type */
-    private const MAX_ENTRIES = 100;
-
     /** @var Cache|null Singleton instance */
     private static ?Cache $instance = null;
 
@@ -27,7 +22,7 @@ class Cache
     /** @var array<string, array<float>> Percentile cache keyed by lat:lon:year */
     private array $percentileCache = [];
 
-    /** @var array<string, array|null> Week summary cache */
+    /** @var array<string, array> Week summary cache */
     private array $weekSummaryCache = [];
 
     /** @var array<string, array> Solar calculation cache */
@@ -68,14 +63,6 @@ class Cache
     }
 
     /**
-     * Clear strings cache.
-     */
-    public function clearStrings(): void
-    {
-        $this->strings = null;
-    }
-
-    /**
      * Get cached daylight lengths for a location/year.
      *
      * @param float $lat Latitude
@@ -90,24 +77,16 @@ class Cache
 
         if (!isset($this->percentileCache[$cacheKey])) {
             $daylightLengths = [];
-            $daysInYear = (($year % 4 == 0 && $year % 100 != 0) || $year % 400 == 0) ? 366 : 365;
+            $daysInYear = checkdate(2, 29, $year) ? 366 : 365;
 
             for ($day = 1; $day <= $daysInYear; $day++) {
-                $date = new DateTime("$year-01-01");
-                $date->modify('+' . ($day - 1) . ' days');
-                $result = calculate_sun_times(
-                    (int) $date->format('Y'),
-                    (int) $date->format('m'),
-                    (int) $date->format('d'),
-                    $lat,
-                    $lon,
-                    $utcOffset
-                );
+                // mktime normalizes day-of-year overflow into the right month
+                $date = getdate(mktime(12, 0, 0, 1, $day, $year));
+                $result = calculate_sun_times($date['year'], $date['mon'], $date['mday'], $lat, $lon, $utcOffset);
                 $daylightLengths[] = $result['daylength_h'];
             }
             sort($daylightLengths);
 
-            $this->enforceCacheLimit('percentileCache');
             $this->percentileCache[$cacheKey] = $daylightLengths;
         }
 
@@ -121,9 +100,9 @@ class Cache
      * @param float $lat Latitude
      * @param float $lon Longitude
      * @param float $utcOffset UTC offset
-     * @return array|null Week summary data
+     * @return array Week summary data
      */
-    public function getWeekSummary(int $weekStart, float $lat, float $lon, float $utcOffset): ?array
+    public function getWeekSummary(int $weekStart, float $lat, float $lon, float $utcOffset): array
     {
         $strings = $this->getStrings();
         $cacheKey = sprintf('%d:%.4f:%.4f:%.2f', $weekStart, $lat, $lon, $utcOffset);
@@ -151,10 +130,6 @@ class Cache
                 'length' => $result['daylength_h'] * 3600,
             ];
             $current = strtotime('+1 day', $current);
-        }
-
-        if (empty($dayLengths)) {
-            return null;
         }
 
         $lengths = array_column($dayLengths, 'length');
@@ -190,7 +165,6 @@ class Cache
             'moon_phase' => $moonInfo['phase_name'],
         ];
 
-        $this->enforceCacheLimit('weekSummaryCache');
         $this->weekSummaryCache[$cacheKey] = $summary;
         return $summary;
     }
@@ -214,7 +188,6 @@ class Cache
      */
     public function setSolarCalc(string $key, array $data): void
     {
-        $this->enforceCacheLimit('solarCalcCache');
         $this->solarCalcCache[$key] = $data;
     }
 
@@ -237,55 +210,7 @@ class Cache
      */
     public function setMoonPhase(string $key, array $data): void
     {
-        $this->enforceCacheLimit('moonPhaseCache');
         $this->moonPhaseCache[$key] = $data;
-    }
-
-    /**
-     * Clear all caches.
-     *
-     * @param bool $includeStrings Also clear strings cache
-     */
-    public function clearAll(bool $includeStrings = false): void
-    {
-        $this->percentileCache = [];
-        $this->weekSummaryCache = [];
-        $this->solarCalcCache = [];
-        $this->moonPhaseCache = [];
-
-        if ($includeStrings) {
-            $this->strings = null;
-        }
-    }
-
-    /**
-     * Get cache statistics.
-     *
-     * @return array<string, int> Cache sizes
-     */
-    public function getStats(): array
-    {
-        return [
-            'strings' => $this->strings !== null ? 1 : 0,
-            'percentile' => count($this->percentileCache),
-            'week_summary' => count($this->weekSummaryCache),
-            'solar_calc' => count($this->solarCalcCache),
-            'moon_phase' => count($this->moonPhaseCache),
-        ];
-    }
-
-    /**
-     * Enforce cache size limit.
-     *
-     * @param string $cacheName Name of the cache property
-     */
-    private function enforceCacheLimit(string $cacheName): void
-    {
-        if (count($this->$cacheName) > self::MAX_ENTRIES) {
-            // Remove oldest entries (first 10% of cache)
-            $removeCount = (int) ceil(self::MAX_ENTRIES * 0.1);
-            $this->$cacheName = array_slice($this->$cacheName, $removeCount, null, true);
-        }
     }
 
     /**

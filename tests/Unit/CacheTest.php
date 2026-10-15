@@ -7,7 +7,7 @@ use Tests\BaseTest;
 
 /**
  * Cache Singleton Test Suite
- * Tests cache hit/miss behavior and size limits
+ * Tests cache hit/miss behavior
  */
 class CacheTest extends BaseTest
 {
@@ -82,37 +82,15 @@ class CacheTest extends BaseTest
         $this->assertNull($result);
     }
 
-    public function testCacheLimitEnforcement(): void
+    public function testWeekSummaryIsCached(): void
     {
         $cache = Cache::getInstance();
+        $weekStart = mktime(0, 0, 0, 2, 1, 2026);
 
-        // Add 110 solar calc entries (exceeds MAX_ENTRIES of 100)
-        for ($i = 0; $i < 110; $i++) {
-            $key = "test-key-{$i}";
-            $cache->setSolarCalc($key, ['index' => $i]);
-        }
+        $summary = $cache->getWeekSummary($weekStart, 40.0, 15.0, 1.0);
 
-        $stats = $cache->getStats();
-        // Should be at or below MAX_ENTRIES
-        $this->assertLessThanOrEqual(100, $stats['solar_calc']);
-    }
-
-    public function testWeekSummaryWithUtcOffset(): void
-    {
-        $cache = Cache::getInstance();
-
-        // Week summary cache key now includes UTC offset
-        $weekStart = mktime(0, 0, 0, 2, 2, 2026);
-        $lat = 40.0;
-        $lon = 15.0;
-
-        // With UTC 0
-        $result1 = $cache->getWeekSummary($weekStart, $lat, $lon, 0.0);
-        // Results may be null if calculate_sun_times not properly set up, but cache should work
-        $this->assertTrue(true); // Just verify no exception
-
-        // With UTC +2
-        $result2 = $cache->getWeekSummary($weekStart, $lat, $lon, 2.0);
-        $this->assertTrue(true); // Just verify no exception
+        $this->assertSame($summary, $cache->getWeekSummary($weekStart, 40.0, 15.0, 1.0));
+        $this->assertSame($weekStart, $summary['shortest_day'], 'Days lengthen in February');
+        $this->assertSame('Increasing', $summary['trend']);
     }
 }

@@ -195,7 +195,8 @@ abstract class BaseTest extends TestCase
     }
 
     /**
-     * Helper: Convert fraction to timestamp.
+     * Helper: Convert fraction to timestamp, reading the local wall-clock time
+     * as UTC. Tests run in UTC, so this matches mktime()-built expectations.
      *
      * @param int $year Year
      * @param int $month Month (1-12)
@@ -209,6 +210,6 @@ abstract class BaseTest extends TestCase
         int $day,
         float $fraction
     ): int {
-        return fraction_to_timestamp($year, $month, $day, $fraction);
+        return fraction_to_timestamp($year, $month, $day, $fraction, 0.0);
     }
 }

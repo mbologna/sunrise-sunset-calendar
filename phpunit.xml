@@ -22,7 +22,7 @@
         </testsuite>
     </testsuites>
 
-    <source>
+    <source ignoreIndirectDeprecations="true">
         <include>
             <file>sunrise-sunset-calendar.php</file>
             <directory suffix=".php">src</directory>

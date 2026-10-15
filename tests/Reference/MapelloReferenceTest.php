@@ -58,7 +58,8 @@ class MapelloReferenceTest extends BaseTest
             self::TEST_YEAR,
             self::TEST_MONTH,
             self::TEST_DAY,
-            $fraction
+            $fraction,
+            0.0 // Wall-clock time read as UTC, matching the HH:MM reference strings
         );
     }
 

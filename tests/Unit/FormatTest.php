@@ -29,7 +29,7 @@ class FormatTest extends BaseTest
     {
         $this->assertEquals(
             '+2m 30s',
-            format_day_length_comparison(150, 'day')
+            format_day_length_comparison(150)
         );
     }
 
@@ -37,7 +37,7 @@ class FormatTest extends BaseTest
     {
         $this->assertEquals(
             '-1m 45s',
-            format_day_length_comparison(-105, 'day')
+            format_day_length_comparison(-105)
         );
     }
 
@@ -45,15 +45,15 @@ class FormatTest extends BaseTest
     {
         $this->assertEquals(
             'same length as yesterday',
-            format_day_length_comparison(0, 'day')
+            format_day_length_comparison(0)
         );
     }
 
-    public function testDayLengthComparisonNight(): void
+    public function testDayLengthComparisonWholeMinutesKeepsSeconds(): void
     {
         $this->assertEquals(
             '+5m 00s',
-            format_day_length_comparison(300, 'night')
+            format_day_length_comparison(300)
         );
     }
 

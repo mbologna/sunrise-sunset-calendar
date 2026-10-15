@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<ruleset name="sunrise-sunset-calendar">
+    <file>sunrise-sunset-calendar.php</file>
+    <file>src</file>
+    <!-- HTML template: PSR-12 layout rules do not fit mixed PHP/HTML -->
+    <exclude-pattern>src/index\.html\.php</exclude-pattern>
+    <arg name="extensions" value="php"/>
+    <rule ref="PSR12"/>
+</ruleset>

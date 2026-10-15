@@ -9,8 +9,7 @@ use Tests\BaseTest;
  * Tests high-precision NREL SPA-inspired solar calculations.
  *
  * Coverage:
- * - Julian Day calculations
- * - Solar position calculations (declination, equation of time)
+ * - Solar position calculations
  * - Sunrise/sunset calculations for various latitudes
  * - Twilight calculations (civil, nautical, astronomical)
  * - Edge cases (polar regions, equator, solstices, equinoxes)
@@ -19,118 +18,6 @@ use Tests\BaseTest;
  */
 class SolarCalculationsTest extends BaseTest
 {
-    public function testJulianDayForJ2000Epoch(): void
-    {
-        // Test J2000.0 epoch (noon on January 1, 2000)
-        $jd = julianDay(2000, 1, 1, 12.0);
-        $this->assertFloatEquals(2451545.0, $jd, 'JD for J2000.0 epoch (2000-01-01 12:00 UTC)', 0.01);
-    }
-
-    public function testJulianDayForKnownDates(): void
-    {
-        // Test 2026-01-29
-        $jd = julianDay(2026, 1, 29, 0.0);
-        $this->assertFloatEquals(2461069.5, $jd, 'JD for 2026-01-29 00:00 UTC', 0.5);
-
-        // Test 1999-01-01
-        $jd = julianDay(1999, 1, 1, 0.0);
-        $this->assertFloatEquals(2451179.5, $jd, 'JD for 1999-01-01 00:00 UTC', 0.5);
-    }
-
-    public function testJulianDayForLeapDay(): void
-    {
-        // Test leap year Feb 29
-        $jd = julianDay(2024, 2, 29, 0.0);
-        $expected = 2460369.5;
-        $this->assertFloatEquals($expected, $jd, 'JD for leap day 2024-02-29', 0.5);
-    }
-
-    public function testJulianDayForDecember(): void
-    {
-        // Test December dates (month adjustment)
-        $jd = julianDay(2026, 12, 31, 0.0);
-        $jdJan = julianDay(2026, 1, 29, 0.0);
-        $this->assertGreaterThan($jdJan, $jd, 'JD for Dec 31 2026 should be greater than Jan 29 2026');
-    }
-
-    public function testJulianCenturyForJ2000(): void
-    {
-        $T = julianCentury(2451545.0); // J2000.0
-        $this->assertFloatEquals(0.0, $T, 'Julian century for J2000.0 is 0', 0.0001);
-    }
-
-    public function testJulianCenturyOneCenturyLater(): void
-    {
-        $T = julianCentury(2451545.0 + 36525); // One century later
-        $this->assertFloatEquals(1.0, $T, 'Julian century +1 for 36525 days later', 0.0001);
-    }
-
-    public function testJulianCenturyOneCenturyEarlier(): void
-    {
-        $T = julianCentury(2451545.0 - 36525); // One century earlier
-        $this->assertFloatEquals(-1.0, $T, 'Julian century -1 for 36525 days earlier', 0.0001);
-    }
-
-    public function testSolarDeclinationWinter(): void
-    {
-        // Test for winter (late January) - sun south of equator
-        $jd = julianDay(2026, 1, 29, 12.0);
-        $T = julianCentury($jd);
-
-        // Calculate required intermediate values
-        $L0 = sunMeanLongitude($T);
-        $M = sunMeanAnomaly($T);
-        $C = sunEquationOfCenter($T, $M);
-        $trueLon = sunTrueLongitude($L0, $C);
-        $lambda = sunApparentLongitude($T, $trueLon);
-        $eps0 = meanObliquity($T);
-        $eps = correctedObliquity($T, $eps0);
-        $decl = solarDeclination($lambda, $eps);
-
-        // In late January, sun should be south of equator (negative declination)
-        // Range: approximately -17° to -20°
-        $this->assertInRange($decl, -25.0, -15.0, 'Solar declination in late January');
-    }
-
-    public function testSolarDeclinationSummer(): void
-    {
-        // Test for summer (late June) - sun north of equator
-        $jd = julianDay(2026, 6, 21, 12.0);
-        $T = julianCentury($jd);
-
-        // Calculate required intermediate values
-        $L0 = sunMeanLongitude($T);
-        $M = sunMeanAnomaly($T);
-        $C = sunEquationOfCenter($T, $M);
-        $trueLon = sunTrueLongitude($L0, $C);
-        $lambda = sunApparentLongitude($T, $trueLon);
-        $eps0 = meanObliquity($T);
-        $eps = correctedObliquity($T, $eps0);
-        $decl = solarDeclination($lambda, $eps);
-
-        // Summer solstice: sun at maximum northern declination (~23.4°)
-        $this->assertInRange($decl, 23.0, 24.0, 'Solar declination at summer solstice');
-    }
-
-    public function testEquationOfTimeRange(): void
-    {
-        // Test equation of time for various dates
-        // Should be within ±16 minutes throughout the year
-        $jd = julianDay(2026, 1, 1, 12.0);
-        $T = julianCentury($jd);
-
-        // Calculate required intermediate values
-        $L0 = sunMeanLongitude($T);
-        $M = sunMeanAnomaly($T);
-        $eps0 = meanObliquity($T);
-        $eps = correctedObliquity($T, $eps0);
-        $e = 0.016708634 - $T * (0.000042037 + 0.0000001267 * $T);
-        $eot = equationOfTime($T, $L0, $e, $M, $eps);
-
-        // Function returns value in minutes (factor of 4 converts degrees to minutes)
-        $this->assertInRange($eot, -17.0, 17.0, 'Equation of time in early January (minutes)');
-    }
-
     public function testSunriseHourAngleForSunrise(): void
     {
         // Test sunrise hour angle for typical location (45°N)
