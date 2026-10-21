@@ -1,7 +1,16 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Follow-up: set config.policy.cooldown in composer.json once Composer 2.11 ships, so composer update applies a release-age gate too.",
   "extends": [
     "github>mbologna/.github//renovate-config.json"
   ],
-  "ignoreDeps": ["abbadon1334/sun-position-spa-php"]
+  "ignoreDeps": ["abbadon1334/sun-position-spa-php"],
+  "packageRules": [
+    {
+      "description": "PHP runtime comes from the digest-pinned php:8.5-apache image in the Dockerfile; the composer platform constraint stays ^8.5 (a human reverted the ^8.5.11 floor bump in ddcb764).",
+      "matchManagers": ["composer"],
+      "matchDepNames": ["php"],
+      "enabled": false
+    }
+  ]
 }
