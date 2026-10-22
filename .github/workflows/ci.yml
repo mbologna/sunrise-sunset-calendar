@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   test:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@a6a7768c3003d4de83331b7c1eb81b639a866931 # main
+    uses: mbologna/.github/.github/workflows/php-ci.yml@a87cffbfc7b62833a36f463bd6835a189e909c1b # main
     with:
       php_version: "8.5"
       php_extensions: "mbstring, json"
@@ -31,7 +31,7 @@ jobs:
       test_command: vendor/bin/phpunit --testdox && composer analyse && composer lint
 
   lint:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@a6a7768c3003d4de83331b7c1eb81b639a866931 # main
+    uses: mbologna/.github/.github/workflows/php-ci.yml@a87cffbfc7b62833a36f463bd6835a189e909c1b # main
     with:
       php_version: "8.5"
       enable_test: false
@@ -44,7 +44,7 @@ jobs:
 
   docker:
     needs: [test, lint]
-    uses: mbologna/.github/.github/workflows/docker-ci.yml@a6a7768c3003d4de83331b7c1eb81b639a866931 # main
+    uses: mbologna/.github/.github/workflows/docker-ci.yml@a87cffbfc7b62833a36f463bd6835a189e909c1b # main
     with:
       image_name: sunrise-sunset-calendar
       push_to_dockerhub: true
@@ -60,7 +60,7 @@ jobs:
       contents: write
       actions: write
     needs: [docker]
-    uses: mbologna/.github/.github/workflows/auto-release.yml@a6a7768c3003d4de83331b7c1eb81b639a866931 # main
+    uses: mbologna/.github/.github/workflows/auto-release.yml@a87cffbfc7b62833a36f463bd6835a189e909c1b # main
     with:
       strategy: docker
       image: docker.io/mbologna/sunrise-sunset-calendar
@@ -69,7 +69,7 @@ jobs:
   deploy:
     needs: [docker]
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule'
-    uses: mbologna/.github/.github/workflows/gcp-deploy.yml@a6a7768c3003d4de83331b7c1eb81b639a866931 # main
+    uses: mbologna/.github/.github/workflows/gcp-deploy.yml@a87cffbfc7b62833a36f463bd6835a189e909c1b # main
     with:
       image_name: sunrise-sunset-calendar
       deploy_type: service
@@ -79,7 +79,7 @@ jobs:
 
   cache-cleanup:
     if: github.event_name == 'schedule'
-    uses: mbologna/.github/.github/workflows/cache-cleanup.yml@a6a7768c3003d4de83331b7c1eb81b639a866931 # main
+    uses: mbologna/.github/.github/workflows/cache-cleanup.yml@a87cffbfc7b62833a36f463bd6835a189e909c1b # main
     with:
       max_age_days: 7
     permissions:
