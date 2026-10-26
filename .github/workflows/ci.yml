@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   test:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@63deea7f993150cc855466e01c72747becb8211d # main
+    uses: mbologna/.github/.github/workflows/php-ci.yml@38f7ca7d59dad7be2dfd5607f8758cd51bb41dd2 # main
     with:
       php_version: "8.5"
       php_extensions: "mbstring, json"
@@ -31,7 +31,7 @@ jobs:
       test_command: vendor/bin/phpunit --testdox && composer analyse && composer lint
 
   lint:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@63deea7f993150cc855466e01c72747becb8211d # main
+    uses: mbologna/.github/.github/workflows/php-ci.yml@38f7ca7d59dad7be2dfd5607f8758cd51bb41dd2 # main
     with:
       php_version: "8.5"
       enable_test: false
@@ -44,7 +44,7 @@ jobs:
 
   docker:
     needs: [test, lint]
-    uses: mbologna/.github/.github/workflows/docker-ci.yml@63deea7f993150cc855466e01c72747becb8211d # main
+    uses: mbologna/.github/.github/workflows/docker-ci.yml@38f7ca7d59dad7be2dfd5607f8758cd51bb41dd2 # main
     with:
       image_name: sunrise-sunset-calendar
       push_to_dockerhub: true
@@ -53,14 +53,20 @@ jobs:
     secrets: inherit
 
   auto-release:
-    if: github.event_name == 'schedule'
-    # contents: push the tag; actions: dispatch this workflow on it, since a
-    # tag pushed with GITHUB_TOKEN triggers no run of its own.
+    # Monday's schedule releases; a manual run on the default branch releases
+    # at once. The tag build auto-release dispatches runs on the tag ref, so it
+    # does not release again.
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
+    # contents: push the tag and create the Release; actions: dispatch this
+    # workflow on it, since a tag pushed with GITHUB_TOKEN triggers no run.
     permissions:
       contents: write
       actions: write
     needs: [docker]
-    uses: mbologna/.github/.github/workflows/auto-release.yml@63deea7f993150cc855466e01c72747becb8211d # main
+    uses: mbologna/.github/.github/workflows/auto-release.yml@38f7ca7d59dad7be2dfd5607f8758cd51bb41dd2 # main
     with:
       strategy: docker
       image: docker.io/mbologna/sunrise-sunset-calendar
@@ -69,7 +75,7 @@ jobs:
   deploy:
     needs: [docker]
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule'
-    uses: mbologna/.github/.github/workflows/gcp-deploy.yml@63deea7f993150cc855466e01c72747becb8211d # main
+    uses: mbologna/.github/.github/workflows/gcp-deploy.yml@38f7ca7d59dad7be2dfd5607f8758cd51bb41dd2 # main
     with:
       image_name: sunrise-sunset-calendar
       deploy_type: service
@@ -79,7 +85,7 @@ jobs:
 
   cache-cleanup:
     if: github.event_name == 'schedule'
-    uses: mbologna/.github/.github/workflows/cache-cleanup.yml@63deea7f993150cc855466e01c72747becb8211d # main
+    uses: mbologna/.github/.github/workflows/cache-cleanup.yml@38f7ca7d59dad7be2dfd5607f8758cd51bb41dd2 # main
     with:
       max_age_days: 7
     permissions:
