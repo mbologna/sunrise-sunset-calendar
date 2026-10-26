@@ -1,4 +1,4 @@
-FROM php:8.5-apache@sha256:47e6d8849049375e0d19e81f1b391ed88828d4653e0d1b00822185b66b564e8b AS base
+FROM php:8.5-apache@sha256:7cd25eb48f9763dfeabe8fda3939897aca2001802fadeafa1b602f26c735ef96 AS base
 
 # ---------------------------------------------------------------------------
 # Build stage: install production dependencies; Composer stays out of the final image
