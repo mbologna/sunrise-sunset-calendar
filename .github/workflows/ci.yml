@@ -77,7 +77,11 @@ jobs:
 
   deploy:
     needs: [docker]
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule'
+    # A push to main only: Renovate merges in the Tue/Wed/Thu window (CVE fixes
+    # at any time), and that merge is the deploy. Monday's schedule rebuilds the
+    # same pinned base image, so redeploying it only moved a deploy out of the
+    # window.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: mbologna/.github/.github/workflows/gcp-deploy.yml@e0ca3700bd9629e5d400755fbb8bb6e3740d9bf2 # main
     with:
       image_name: sunrise-sunset-calendar
