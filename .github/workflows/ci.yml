@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   test:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@e0ca3700bd9629e5d400755fbb8bb6e3740d9bf2 # main
+    uses: mbologna/.github/.github/workflows/php-ci.yml@4d3d3ce5ea23ff80ab3039ae733d138abd5a3280 # main
     with:
       php_version: "8.5"
       php_extensions: "mbstring, json"
@@ -33,7 +33,7 @@ jobs:
       test_command: vendor/bin/phpunit --testdox && composer analyse && composer lint
 
   lint:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@e0ca3700bd9629e5d400755fbb8bb6e3740d9bf2 # main
+    uses: mbologna/.github/.github/workflows/php-ci.yml@4d3d3ce5ea23ff80ab3039ae733d138abd5a3280 # main
     with:
       php_version: "8.5"
       enable_test: false
@@ -46,7 +46,7 @@ jobs:
 
   docker:
     needs: [test, lint]
-    uses: mbologna/.github/.github/workflows/docker-ci.yml@e0ca3700bd9629e5d400755fbb8bb6e3740d9bf2 # main
+    uses: mbologna/.github/.github/workflows/docker-ci.yml@4d3d3ce5ea23ff80ab3039ae733d138abd5a3280 # main
     with:
       image_name: sunrise-sunset-calendar
       push_to_dockerhub: true
@@ -69,7 +69,7 @@ jobs:
       contents: write
       actions: write
     needs: [docker]
-    uses: mbologna/.github/.github/workflows/auto-release.yml@e0ca3700bd9629e5d400755fbb8bb6e3740d9bf2 # main
+    uses: mbologna/.github/.github/workflows/auto-release.yml@4d3d3ce5ea23ff80ab3039ae733d138abd5a3280 # main
     with:
       strategy: conventional
       image: docker.io/mbologna/sunrise-sunset-calendar
@@ -82,7 +82,7 @@ jobs:
     # same pinned base image, so redeploying it only moved a deploy out of the
     # window.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: mbologna/.github/.github/workflows/gcp-deploy.yml@e0ca3700bd9629e5d400755fbb8bb6e3740d9bf2 # main
+    uses: mbologna/.github/.github/workflows/gcp-deploy.yml@4d3d3ce5ea23ff80ab3039ae733d138abd5a3280 # main
     with:
       image_name: sunrise-sunset-calendar
       deploy_type: service
@@ -92,7 +92,7 @@ jobs:
 
   cache-cleanup:
     if: github.event_name == 'schedule'
-    uses: mbologna/.github/.github/workflows/cache-cleanup.yml@e0ca3700bd9629e5d400755fbb8bb6e3740d9bf2 # main
+    uses: mbologna/.github/.github/workflows/cache-cleanup.yml@4d3d3ce5ea23ff80ab3039ae733d138abd5a3280 # main
     with:
       max_age_days: 7
     permissions:
