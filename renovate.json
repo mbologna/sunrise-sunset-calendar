@@ -4,7 +4,6 @@
   "extends": [
     "github>mbologna/.github//renovate-config.json"
   ],
-  "timezone": "UTC",
   "ignoreDeps": ["abbadon1334/sun-position-spa-php"],
   "packageRules": [
     {
@@ -12,11 +11,6 @@
       "matchManagers": ["composer"],
       "matchDepNames": ["php"],
       "enabled": false
-    },
-    {
-      "description": "Every merge to main deploys to Cloud Run, so automerge only in the maintenance window infra uses: Tue/Wed/Thu 00:00-02:00 UTC. Pinned on all packages because the preset sets at any time for the mbologna/.github workflows.",
-      "matchPackageNames": ["**"],
-      "automergeSchedule": ["* 0-1 * * 2,3,4"]
     }
   ]
 }

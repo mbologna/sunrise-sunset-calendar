@@ -71,7 +71,7 @@ jobs:
     needs: [docker]
     uses: mbologna/.github/.github/workflows/auto-release.yml@e0ca3700bd9629e5d400755fbb8bb6e3740d9bf2 # main
     with:
-      strategy: docker
+      strategy: conventional
       image: docker.io/mbologna/sunrise-sunset-calendar
     secrets: inherit
 
