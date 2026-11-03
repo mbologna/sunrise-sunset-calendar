@@ -1,4 +1,4 @@
-FROM php:8.5-apache@sha256:fce5eaf640e8fb620aac9aaf53efebe5584b3f3c1f2033b78b08be252be92adc AS base
+FROM php:8.5-apache@sha256:4cc63b3d4e05c40da73e7af5d39364ca2678ac07208919497bda3bbab975be95 AS base
 
 # ---------------------------------------------------------------------------
 # Build stage: install production dependencies; Composer stays out of the final image
@@ -8,7 +8,7 @@ FROM base AS vendor
 # unzip is required by Composer to extract package archives
 RUN apt-get update && apt-get install -y --no-install-recommends unzip \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=composer:2@sha256:b6dcd72ca98fa19d0e5b8476de179859704891fad06dd9e0b96833d4c430a5fc /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2@sha256:4ed71c38c6d788eb4e4e3747b5332f5b40d5b5a6fcadd5062a1a70986a118e0a /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 COPY composer.json composer.lock ./
