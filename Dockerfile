@@ -8,7 +8,7 @@ FROM base AS vendor
 # unzip is required by Composer to extract package archives
 RUN apt-get update && apt-get install -y --no-install-recommends unzip \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=composer:2@sha256:4ed71c38c6d788eb4e4e3747b5332f5b40d5b5a6fcadd5062a1a70986a118e0a /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2@sha256:8de2184c6de224f4689e8f80ed5f5edaf0030b6b8b7839a22a2bcb6722ac87d0 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
 COPY composer.json composer.lock ./
