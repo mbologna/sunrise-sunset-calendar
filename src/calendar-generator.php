@@ -85,8 +85,19 @@ function solar_spans(array $ev, array $next): array
         $daylight = [$noon - 43200, $noon + 43200, 'solar_midnight', 'solar_midnight'];
     }
 
-    $night = ($ev['astro_end'] !== null && $next['astro_begin'] !== null)
-        ? [$ev['astro_end'], $next['astro_begin'], 'astronomical_dusk', 'astronomical_dawn']
+    // Night runs from astronomical dusk to the next astronomical dawn. On a day the sun
+    // stays more than 18° below the horizon, solar noon stands in, so consecutive
+    // nights join up around the clock during deep polar night.
+    $allDark = fn(array $e) => $e['astro_begin'] === null && $e['noon_elevation'] < -18;
+    $nightStart = $ev['astro_end'] ?? ($allDark($ev) ? $noon : null);
+    $nightEnd = $next['astro_begin'] ?? ($allDark($next) ? $next['solar_noon'] : null);
+    $night = ($nightStart !== null && $nightEnd !== null)
+        ? [
+            $nightStart,
+            $nightEnd,
+            $ev['astro_end'] !== null ? 'astronomical_dusk' : 'solar_noon',
+            $next['astro_begin'] !== null ? 'astronomical_dawn' : 'solar_noon',
+        ]
         : null;
 
     return $spans + ['daylight' => $daylight, 'night' => $night];
@@ -232,18 +243,17 @@ function render_calendar(array $o): string
         $dateStr = $day->format('Ymd');
         $ev = sun_events($day, $lat, $lon);
         $prev = sun_events($day->modify('-1 day'), $lat, $lon);
-        $spans = solar_spans($ev, sun_events($day->modify('+1 day'), $lat, $lon));
+        $next = sun_events($day->modify('+1 day'), $lat, $lon);
+        $spans = solar_spans($ev, $next);
         $yearInfo = year_summary($lat, $lon, $year, $ev['utc_offset']);
         $solstices[$year] ??= solstice_daylight($year, $lat, $lon, $tz);
 
         $daylightSeconds = (int) round($ev['daylength_h'] * 3600);
         $daylightPercentile = calculate_daylight_percentile($ev['daylength_h'], $lat, $lon, $year, $ev['utc_offset']);
 
-        // Night runs from astronomical dusk to the next astronomical dawn
         $nightSeconds = $spans['night'] ? $spans['night'][1] - $spans['night'][0] : 0;
-        $lastNight = ($prev['astro_end'] !== null && $ev['astro_begin'] !== null)
-            ? $ev['astro_begin'] - $prev['astro_end']
-            : null;
+        $lastNightSpan = solar_spans($prev, $ev)['night'];
+        $lastNight = $lastNightSpan ? $lastNightSpan[1] - $lastNightSpan[0] : null;
         $moon = get_accurate_moon_phase($ev['solar_noon'] + 43200);
 
         $c = [
@@ -274,6 +284,7 @@ function render_calendar(array $o): string
             'night' => [
                 'seconds' => $nightSeconds,
                 'percentile' => night_percentile($yearInfo, (int) $day->format('z')),
+                'solar_midnight' => intdiv($ev['solar_noon'] + $next['solar_noon'], 2),
                 'comparison' => ($spans['night'] && $lastNight !== null)
                     ? format_comparison($nightSeconds - $lastNight, $S['comparisons']['last_night'], $S)
                     : null,

@@ -358,6 +358,24 @@ class CalendarFeedTest extends TestCase
         $this->assertStringContainsString('Calendar times shifted from the actual times: start -10m\, end +15m.', $daylight['DESCRIPTION']);
     }
 
+    public function testDeepPolarNightLastsAroundTheClock(): void
+    {
+        // At 88°S the noon sun stays more than 18° below the horizon from May 21
+        $ics = $this->feed(['lat' => -88.0, 'lon' => 0.0, 'timezone' => 'Antarctica/McMurdo', 'today' => '2027-05-19', 'window_days' => 4]);
+        $nights = $this->eventsOfType($ics, 'night');
+
+        $this->assertCount(5, $nights);
+        // From May 20's night on, solar noon joins each night to the next
+        for ($i = 2; $i < count($nights); $i++) {
+            $this->assertSame($nights[$i - 1]['DTEND'], $nights[$i]['DTSTART'], 'Nights join up without gaps');
+        }
+        $this->assertStringContainsString(' to solar noon ', $nights[1]['DESCRIPTION']);
+        $this->assertStringContainsString('all day tomorrow\, so this night lasts until solar noon.', $nights[1]['DESCRIPTION']);
+        $this->assertStringStartsWith('Polar night: the sun stays more than 18° below the horizon all day', $nights[2]['DESCRIPTION']);
+        $this->assertStringNotContainsString('this year\'s nights', $nights[2]['DESCRIPTION']);
+        $this->assertStringContainsString(' Night · 24h 00m', $nights[3]['SUMMARY']);
+    }
+
     public function testNightRankComesFromNightLengths(): void
     {
         // Daylight is 0h through Tromsø's polar night, but nights still differ in length

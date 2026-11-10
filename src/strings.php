@@ -113,6 +113,8 @@ return [
         'solar_noon_midnight_sun' => 'Solar noon: %s · Sun at noon: %d°, at solar midnight: %d°',
         'solar_midnight' => 'Solar midnight: %s',
         'midnight_sun' => 'Midnight sun: the sun does not set today.',
+        'night_all_day' => 'Polar night: the sun stays more than 18° below the horizon all day, so night lasts '
+            . 'around the clock.',
         'average' => 'Average: %s',
         'week_daylight' => 'Daylight: %s on Sunday → %s on Saturday',
         'week_moon' => 'Moon: %s',
@@ -252,6 +254,10 @@ return [
             . 'at solar noon.',
         'polar_morning' => "Polar night: the sun doesn't rise today, so this twilight lasts until solar noon.",
         'polar_evening' => "Polar night: the sun doesn't rise today, so this twilight starts at solar noon.",
+        'night_from_noon' => 'The sun stays more than 18° below the horizon all day today, so this night starts '
+            . 'at solar noon.',
+        'night_to_noon' => 'The sun stays more than 18° below the horizon all day tomorrow, so this night lasts '
+            . 'until solar noon.',
     ],
 
     // One-line notes in the Today/Tonight schedule

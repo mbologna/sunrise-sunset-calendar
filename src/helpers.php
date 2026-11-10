@@ -347,12 +347,18 @@ function year_summary(float $lat, float $lon, int $year, float $utcOffset): arra
         ];
     }
 
-    // Night lengths by day. December's last night borrows January 1 of the same year
-    // for its morning; the dates differ by a year, not the sun.
+    // Night lengths by day, with the same solar-noon stand-in as solar_spans() for days
+    // the sun stays more than 18° below the horizon. December's last night borrows
+    // January 1 of the same year for its morning; the dates differ by a year, not the sun.
+    $allDark = array_map(
+        fn($d) => $d['astro_begin_frac'] === null && 90 - abs($lat - $d['declination_deg']) < -18,
+        $days
+    );
     $nights = [];
     foreach ($days as $i => $d) {
-        $start = $d['astro_end_frac'];
-        $end = $days[($i + 1) % count($days)]['astro_begin_frac'];
+        $j = ($i + 1) % count($days);
+        $start = $d['astro_end_frac'] ?? ($allDark[$i] ? $d['solar_noon_frac'] : null);
+        $end = $days[$j]['astro_begin_frac'] ?? ($allDark[$j] ? $days[$j]['solar_noon_frac'] : null);
         $nights[$i] = ($start !== null && $end !== null) ? (int) round(($end + 1 - $start) * 86400) : null;
     }
 
@@ -771,14 +777,21 @@ function night_details(array $c, array $S): string
     $n = $c['night'];
     $L = $S['labels'];
 
-    $lines = [
-        format_span_line($span, $S),
-        sprintf($L['solar_midnight'], format_local(intdiv($span[0] + $span[1], 2))),
-        sprintf($L['length_share'], format_duration($n['seconds']), round($n['seconds'] / 864)),
-        format_percentile_bar($n['percentile']) . ' ' . format_rank($n['percentile'], 'night', $S),
-    ];
-    if ($n['comparison'] !== null) {
-        $lines[] = $n['comparison'];
+    // Deep polar night: solar noon stands in for astronomical dusk and dawn
+    $noonStart = $span[2] === 'solar_noon';
+    $noonEnd = $span[3] === 'solar_noon';
+    $lines = [$noonStart && $noonEnd ? $L['night_all_day'] : format_span_line($span, $S)];
+    if ($noonStart xor $noonEnd) {
+        $lines[] = $S['no_crossing'][$noonStart ? 'night_from_noon' : 'night_to_noon'];
+    }
+    $lines[] = sprintf($L['solar_midnight'], format_local($n['solar_midnight']));
+    $lines[] = sprintf($L['length_share'], format_duration($n['seconds']), round($n['seconds'] / 864));
+    // Round-the-clock nights differ only by seconds of solar-noon drift: no rank or change to give
+    if (!($noonStart && $noonEnd)) {
+        $lines[] = format_percentile_bar($n['percentile']) . ' ' . format_rank($n['percentile'], 'night', $S);
+        if ($n['comparison'] !== null) {
+            $lines[] = $n['comparison'];
+        }
     }
 
     return implode("\n", $lines) . "\n\n" . format_moon_section($n['moon'], $S);

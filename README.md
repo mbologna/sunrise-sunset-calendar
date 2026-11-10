@@ -88,7 +88,7 @@ Each event is a period, and its description opens with the instants that bound i
 
 Sunrise and sunset are when the sun's top edge crosses the horizon, allowing for refraction. Weekly summaries are all-day events from Sunday to Saturday. Equinoxes and solstices are all-day events on their local date.
 
-When the sun never crosses a boundary, an event runs to or from solar noon or solar midnight instead, and its description says why. During polar night, civil twilight peaks at solar noon; under the midnight sun, daylight lasts 24 hours and no twilight or night events appear. Wherever the sun stays within 18° of the horizon all night (above about 48.6° latitude around the summer solstice), there are no night events.
+When the sun never crosses a boundary, an event runs to or from solar noon or solar midnight instead, and its description says why. During polar night, civil twilight peaks at solar noon; under the midnight sun, daylight lasts 24 hours and no twilight or night events appear. Wherever the sun stays within 18° of the horizon all night (above about 48.6° latitude around the summer solstice), there are no night events. Above about 84.6° latitude the noon sun can stay more than 18° below the horizon in winter; night then runs from solar noon to solar noon, around the clock.
 
 ## Development
 
