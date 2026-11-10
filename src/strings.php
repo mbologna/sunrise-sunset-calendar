@@ -118,6 +118,7 @@ return [
             . 'around the clock.',
         'average' => 'Average: %s',
         'week_daylight' => 'Daylight: %s on Sunday → %s on Saturday',
+        'week_sun' => 'Sunrise %s → %s · Sunset %s → %s', // Sunday → Saturday
         'week_moon' => 'Moon: %s',
         'offset_note' => 'Calendar times shifted from the actual times: start %s, end %s.',
         'good_for' => 'Good for: %s',

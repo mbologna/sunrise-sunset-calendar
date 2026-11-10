@@ -275,6 +275,7 @@ class CalendarFeedTest extends TestCase
             $this->assertSame(date('Ymd', strtotime($summary['DTSTART'] . ' +7 days')), $summary['DTEND']);
         }
         $this->assertMatchesRegularExpression('/^📉 \d+m less daylight this week$/', $summaries[0]['SUMMARY'], 'Days shorten in October');
+        $this->assertMatchesRegularExpression('/Sunrise \d\d:\d\d → \d\d:\d\d · Sunset \d\d:\d\d → \d\d:\d\d/', $summaries[0]['DESCRIPTION']);
     }
 
     public function testTimedEventsNameTheirBoundaryInstants(): void

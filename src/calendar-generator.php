@@ -318,6 +318,17 @@ function render_calendar(array $o): string
                 format_duration((int) round($week['start_length'])),
                 format_duration((int) round($week['end_length']))
             ) . "\n";
+            // Clock times people notice: in December sunsets stop getting earlier while sunrises keep getting later
+            $saturday = sun_events($day->modify('+6 days'), $lat, $lon);
+            if (!in_array(null, [$ev['sunrise'], $ev['sunset'], $saturday['sunrise'], $saturday['sunset']], true)) {
+                $desc .= sprintf(
+                    $S['labels']['week_sun'],
+                    format_local($ev['sunrise']),
+                    format_local($saturday['sunrise']),
+                    format_local($ev['sunset']),
+                    format_local($saturday['sunset'])
+                ) . "\n";
+            }
             $desc .= sprintf($S['labels']['average'], format_duration((int) round($week['avg_length']))) . "\n";
             $desc .= sprintf($S['labels']['week_moon'], implode('; ', $phases));
 
