@@ -272,18 +272,20 @@ return [
         'night' => '🌙 Night',
     ],
 
-    // Moon phase names and emojis, keyed by the names the astronomy code uses
+    // Moon phase emojis (as seen from the northern hemisphere, then the southern) and
+    // names, keyed by the names the astronomy code uses. South of the equator the
+    // moon looks mirrored: a waxing crescent is lit on the left.
     'moon_phases' => [
-        'New Moon' => ['🌑', 'New Moon'],
-        'Waxing Crescent' => ['🌒', 'Waxing Crescent'],
-        'First Quarter' => ['🌓', 'First Quarter'],
-        'Waxing Gibbous' => ['🌔', 'Waxing Gibbous'],
-        'Full Moon' => ['🌕', 'Full Moon'],
-        'Waning Gibbous' => ['🌖', 'Waning Gibbous'],
-        'Last Quarter' => ['🌗', 'Last Quarter'],
-        'Waning Crescent' => ['🌘', 'Waning Crescent'],
+        'New Moon' => ['🌑', '🌑', 'New Moon'],
+        'Waxing Crescent' => ['🌒', '🌘', 'Waxing Crescent'],
+        'First Quarter' => ['🌓', '🌗', 'First Quarter'],
+        'Waxing Gibbous' => ['🌔', '🌖', 'Waxing Gibbous'],
+        'Full Moon' => ['🌕', '🌕', 'Full Moon'],
+        'Waning Gibbous' => ['🌖', '🌔', 'Waning Gibbous'],
+        'Last Quarter' => ['🌗', '🌓', 'Last Quarter'],
+        'Waning Crescent' => ['🌘', '🌒', 'Waning Crescent'],
     ],
-    'moon_phase_unknown' => ['🌙', 'Moon'],
+    'moon_phase_unknown' => ['🌙', '🌙', 'Moon'],
 
     // Moon
     'moon' => [
