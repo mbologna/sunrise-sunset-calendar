@@ -203,16 +203,51 @@ function format_schedule_span(string $label, array $span, string $note): string
 }
 
 /**
- * Format the moon section: current phase, previous and next principal phase.
+ * When the moon is up during the night: "Sets at 21:45: moonless sky from then on."
  *
- * @param array $moon Result of get_accurate_moon_phase()
+ * @param array{up_at_start: bool, events: array<array{0: string, 1: int}>} $riseSet From moon_rise_set()
+ */
+function format_moon_rise_set(array $riseSet, array $S): string
+{
+    $M = $S['moon'];
+    $events = $riseSet['events'];
+    $time = fn(int $i) => format_local($events[$i][1]);
+    $kinds = implode(',', array_column($events, 0));
+
+    return match ($kinds) {
+        '' => $riseSet['up_at_start'] ? $M['up_all'] : $M['up_none'],
+        'rise' => sprintf($M['rises'], $time(0)),
+        'set' => sprintf($M['sets'], $time(0)),
+        'set,rise' => sprintf($M['sets_rises'], $time(0), $time(1)),
+        'rise,set' => sprintf($M['rises_sets'], $time(0), $time(1)),
+        default => ucfirst(implode('; ', array_map(
+            fn($e) => sprintf($M[$e[0] === 'rise' ? 'rise_at' : 'set_at'], format_local($e[1])),
+            $events
+        ))) . '.',
+    };
+}
+
+/**
+ * Format the moon section: phase, how much it brightens the sky, when it is up
+ * during the night (when 'rise_set' is given), previous and next principal phase.
+ *
+ * @param array $moon Result of get_accurate_moon_phase(), optionally with 'rise_set' from moon_rise_set()
  */
 function format_moon_section(array $moon, array $S): string
 {
+    $M = $S['moon'];
     $lit = (int) round($moon['illumination']);
-    $impact = $S['moon']['impact'][$lit < 25 ? 'dark' : ($lit <= 75 ? 'partial' : 'bright')];
-    $section = sprintf($S['headers']['moon'], get_moon_phase_emoji($moon['phase_name'])) . "\n";
-    $section .= sprintf($S['moon']['current'], $moon['phase_name'], $lit) . ' ' . $impact . "\n";
+    $riseSet = $moon['rise_set'] ?? null;
+    $belowAllNight = $riseSet !== null && !$riseSet['up_at_start'] && $riseSet['events'] === [];
+    $current = sprintf($M['current'], $moon['phase_name'], $lit);
+    if (!$belowAllNight) {
+        $current .= ' ' . $M['impact'][$lit < 25 ? 'dark' : ($lit <= 75 ? 'partial' : 'bright')];
+    }
+
+    $section = sprintf($S['headers']['moon'], get_moon_phase_emoji($moon['phase_name'])) . "\n" . $current . "\n";
+    if ($riseSet !== null) {
+        $section .= format_moon_rise_set($riseSet, $S) . "\n";
+    }
 
     foreach (['previous' => 'prev_phase', 'next' => 'next_phase'] as $label => $key) {
         if ($moon[$key]) {

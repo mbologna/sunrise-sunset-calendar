@@ -255,6 +255,9 @@ function render_calendar(array $o): string
         $lastNightSpan = solar_spans($prev, $ev)['night'];
         $lastNight = $lastNightSpan ? $lastNightSpan[1] - $lastNightSpan[0] : null;
         $moon = get_accurate_moon_phase($ev['solar_noon'] + 43200);
+        if ($spans['night'] !== null) {
+            $moon['rise_set'] = moon_rise_set($spans['night'][0], $spans['night'][1], $lat, $lon);
+        }
 
         $c = [
             'ev' => $ev,

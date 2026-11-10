@@ -355,6 +355,16 @@ class CalendarFeedTest extends TestCase
         $this->assertLessThan(strpos($text, 'ℹ️ About'), strpos($text, '☀️ Today'));
     }
 
+    public function testNightSaysWhenTheMoonIsUp(): void
+    {
+        $night = fn(string $today) => $this->eventsOfType($this->feed(['today' => $today, 'window_days' => 0]), 'night')[0]['DESCRIPTION'];
+
+        $this->assertStringContainsString('Sets at 21:45: moonless sky from then on.', $night('2026-11-15'));
+        $this->assertStringContainsString('Full Moon\\, 100% illuminated.', $night('2026-11-24'));
+        $this->assertStringContainsString('Above the horizon all night.', $night('2026-11-24'));
+        $this->assertStringContainsString('Below the horizon all night: a moonless sky throughout.', $night('2026-11-10'));
+    }
+
     public function testCivilTwilightListsBlueAndGoldenHour(): void
     {
         $ics = $this->feed(['window_days' => 0]);

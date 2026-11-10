@@ -485,6 +485,82 @@ function moon_illumination(int $timestamp): float
 }
 
 /**
+ * The moon's geocentric altitude above its rising threshold, in degrees.
+ *
+ * Position from the Astronomical Almanac's low-precision formulas (about 0.3°,
+ * a minute or two in rise and set times). The threshold h0 = 0.7275 π - 0.5667°
+ * (Meeus ch. 15) allows for parallax, refraction and the moon's radius, so the
+ * moon is rising or setting where this crosses zero.
+ */
+function moon_altitude(int $timestamp, float $lat, float $lon): float
+{
+    $d = $timestamp / 86400 + 2440587.5 - 2451545.0;
+    $T = $d / 36525;
+    $sin = fn(float $deg) => sin(deg2rad($deg));
+    $cos = fn(float $deg) => cos(deg2rad($deg));
+
+    $lambda = 218.32 + 481267.881 * $T
+        + 6.29 * $sin(135.0 + 477198.87 * $T) - 1.27 * $sin(259.3 - 413335.36 * $T)
+        + 0.66 * $sin(235.7 + 890534.22 * $T) + 0.21 * $sin(269.9 + 954397.70 * $T)
+        - 0.19 * $sin(357.5 + 35999.05 * $T) - 0.11 * $sin(186.6 + 966404.05 * $T);
+    $beta = 5.13 * $sin(93.3 + 483202.03 * $T) + 0.28 * $sin(228.2 + 960400.87 * $T)
+        - 0.28 * $sin(318.3 + 6003.18 * $T) - 0.17 * $sin(217.6 - 407332.20 * $T);
+    $parallax = 0.9508 + 0.0518 * $cos(135.0 + 477198.87 * $T) + 0.0095 * $cos(259.3 - 413335.38 * $T)
+        + 0.0078 * $cos(235.7 + 890534.23 * $T) + 0.0028 * $cos(269.9 + 954397.70 * $T);
+    $eps = 23.439 - 0.013 * $T;
+
+    // Ecliptic to equatorial coordinates
+    $l = $cos($beta) * $cos($lambda);
+    $m = $cos($eps) * $cos($beta) * $sin($lambda) - $sin($eps) * $sin($beta);
+    $n = $sin($eps) * $cos($beta) * $sin($lambda) + $cos($eps) * $sin($beta);
+    $ra = rad2deg(atan2($m, $l));
+    $dec = rad2deg(asin($n));
+
+    $hourAngle = 280.46061837 + 360.98564736629 * $d + $lon - $ra;
+    $altitude = rad2deg(asin($sin($lat) * $sin($dec) + $cos($lat) * $cos($dec) * $cos($hourAngle)));
+
+    return $altitude - (0.7275 * $parallax - 0.5667);
+}
+
+/**
+ * Moonrises and moonsets in [$from, $to].
+ *
+ * @return array{up_at_start: bool, events: array<array{0: string, 1: int}>}
+ *     Whether the moon is up at $from, then ['rise'|'set', timestamp] in order
+ */
+function moon_rise_set(int $from, int $to, float $lat, float $lon): array
+{
+    $step = 600;
+    $events = [];
+    $previous = moon_altitude($from, $lat, $lon);
+    $upAtStart = $previous > 0;
+
+    for ($t = $from + $step; $t - $step < $to; $t += $step) {
+        $t = min($t, $to);
+        $altitude = moon_altitude($t, $lat, $lon);
+        if (($previous > 0) !== ($altitude > 0)) {
+            // Bisect to within 30 seconds
+            [$lo, $hi] = [$t - $step, $t];
+            while ($hi - $lo > 30) {
+                $mid = intdiv($lo + $hi, 2);
+                if ((moon_altitude($mid, $lat, $lon) > 0) === ($altitude > 0)) {
+                    $hi = $mid;
+                } else {
+                    $lo = $mid;
+                }
+            }
+            $events[] = [$altitude > 0 ? 'rise' : 'set', intdiv($lo + $hi, 2)];
+        }
+        $previous = $altitude;
+        if ($t === $to) {
+            break;
+        }
+    }
+
+    return ['up_at_start' => $upAtStart, 'events' => $events];
+}
+
+/**
  * Principal moon phases (new, first quarter, full, last quarter) in [$from, $to).
  *
  * @return array<array{name: string, timestamp: int}> In chronological order

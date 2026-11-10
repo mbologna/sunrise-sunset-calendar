@@ -11,8 +11,8 @@ An iCalendar feed of daily sunrise, sunset and twilight events for any location,
 - Morning and evening civil, nautical and astronomical twilight as separate events
 - Daylight and night events with length in the title, rank within the year, day-to-day change and solstice comparisons
 - Blue hour and golden hour times, and the noon sun's height
-- Moon phase and illumination on night events
-- Weekly daylight summaries spanning Sunday to Saturday
+- Moon phase, illumination, and when the moon rises or sets during the night
+- Weekly daylight summaries spanning Sunday to Saturday, with sunrise and sunset drift
 - Equinoxes and solstices named by the local season, with the exact moment and facts for the location
 - A plain-language explanation of each period in its description
 - A calendar description with the location's daylight range, midnight sun, polar night and white nights
@@ -125,7 +125,7 @@ Solar positions come from the NREL SPA (Reda & Andreas, 2008), specified to ±0.
 
 - sunrise against PHP's `date_sun_info()` every day for a year in Rome, New York and Sydney, within 2 minutes;
 - twilight times for Mapello, Italy, against published reference times, within 1–2 minutes;
-- equinoxes, solstices and moon phases (Meeus, *Astronomical Algorithms*) against published dates, and moon illumination at each phase within 1%.
+- equinoxes, solstices and moon phases (Meeus, *Astronomical Algorithms*) against published dates, moon illumination at each phase within 1%, and moonrise and moonset against the US Naval Observatory within 3 minutes.
 
 ## License
 

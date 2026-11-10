@@ -271,6 +271,15 @@ return [
             'partial' => 'While it is up, its light washes out the faintest objects.',
             'bright' => 'While it is up, faint objects are washed out; a good night to look at the moon itself.',
         ],
+        // When the moon is above the horizon during the night
+        'up_none' => 'Below the horizon all night: a moonless sky throughout.',
+        'up_all' => 'Above the horizon all night.',
+        'rises' => 'Rises at %s: moonless sky until then.',
+        'sets' => 'Sets at %s: moonless sky from then on.',
+        'sets_rises' => 'Sets at %s and rises at %s: moonless sky in between.',
+        'rises_sets' => 'Up from %s to %s: moonless sky before and after.',
+        'rise_at' => 'rises at %s',
+        'set_at' => 'sets at %s',
         'previous' => 'Previous: %s %s, %s', // emoji, phase name, date
         'next' => 'Next: %s %s, %s',
         'phase_at' => '%s %s, %s', // emoji, phase name, date (weekly summary)
