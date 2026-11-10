@@ -446,6 +446,51 @@ function calculate_quarter_corrections(float $M, float $Mp, float $F, float $Ome
 }
 
 /**
+ * Illuminated fraction of the moon's disk, in percent (Meeus 48.1 and 48.4).
+ *
+ * The phase angle comes from the moon's mean elongation and anomalies with the
+ * main periodic terms, accurate to well under 1% of the disk.
+ */
+function moon_illumination(int $timestamp): float
+{
+    $T = ($timestamp / 86400 + 2440587.5 - 2451545.0) / 36525;
+
+    $D = deg2rad(297.8501921 + 445267.1114034 * $T - 0.0018819 * $T ** 2 + $T ** 3 / 545868 - $T ** 4 / 113065000);
+    $M = deg2rad(357.5291092 + 35999.0502909 * $T - 0.0001536 * $T ** 2 + $T ** 3 / 24490000);
+    $Mp = deg2rad(134.9633964 + 477198.8675055 * $T + 0.0087414 * $T ** 2 + $T ** 3 / 69699 - $T ** 4 / 14712000);
+
+    $i = 180 - rad2deg($D)
+        - 6.289 * sin($Mp)
+        + 2.100 * sin($M)
+        - 1.274 * sin(2 * $D - $Mp)
+        - 0.658 * sin(2 * $D)
+        - 0.214 * sin(2 * $Mp)
+        - 0.110 * sin($D);
+
+    return (1 + cos(deg2rad($i))) / 2 * 100;
+}
+
+/**
+ * Principal moon phases (new, first quarter, full, last quarter) in [$from, $to).
+ *
+ * @return array<array{name: string, timestamp: int}> In chronological order
+ */
+function moon_phases_between(int $from, int $to): array
+{
+    $phases = [];
+    for ($t = strtotime('first day of this month', $from); $t < $to; $t = strtotime('+1 month', $t)) {
+        foreach (calculate_moon_phases_for_month((int) date('Y', $t), (int) date('n', $t)) as $phase) {
+            if ($phase['timestamp'] >= $from && $phase['timestamp'] < $to) {
+                $phases[$phase['timestamp']] = ['name' => $phase['phase_name'], 'timestamp' => $phase['timestamp']];
+            }
+        }
+    }
+    ksort($phases);
+
+    return array_values($phases);
+}
+
+/**
  * Get accurate moon phase for a timestamp with caching.
  */
 function get_accurate_moon_phase(int $timestamp): array
@@ -508,28 +553,9 @@ function get_accurate_moon_phase(int $timestamp): array
         }
     }
 
-    if ($prev && $next) {
-        $new_moon_ts = null;
-        foreach (array_reverse($phases) as $phase) {
-            if ($phase['phase_name'] === 'New Moon' && $phase['timestamp'] <= $timestamp) {
-                $new_moon_ts = $phase['timestamp'];
-                break;
-            }
-        }
-
-        $illumination = 50.0;
-        if ($new_moon_ts !== null) {
-            $days_since_new = ($timestamp - $new_moon_ts) / 86400;
-            $angle = ($days_since_new / 29.53) * 2 * M_PI;
-            $illumination = round((1 - cos($angle)) * 50, 1);
-        }
-    } else {
-        $illumination = 0.0;
-    }
-
     return [
         'phase_name' => $current_phase_name,
-        'illumination' => $illumination,
+        'illumination' => round(moon_illumination($timestamp), 1),
         'prev_phase' => $prev ? [
             'name' => $prev['phase_name'],
             'date' => date('j M Y, H:i', $prev['timestamp']),

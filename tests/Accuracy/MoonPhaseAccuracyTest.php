@@ -259,24 +259,24 @@ class MoonPhaseAccuracyTest extends TestCase
     }
 
     /**
-     * Test illumination percentage calculations.
+     * Illumination at each principal phase of 2026: 0% at new moon, 50% at the
+     * quarters, 100% at full moon. Quarters fall 6.5 to 8.3 days after new moon,
+     * so a uniform-motion approximation would miss them by up to ~10 points.
      */
     public function testIlluminationPercentage()
     {
-        // At New Moon, illumination should be ~0%
-        $new_moon = strtotime('2026-02-17 12:01:00 UTC');
-        $moon_info = get_accurate_moon_phase($new_moon);
-        $this->assertLessThan(10, $moon_info['illumination'], 'New Moon should be <10% illuminated');
+        $expected = ['New Moon' => 0, 'First Quarter' => 50, 'Full Moon' => 100, 'Last Quarter' => 50];
+        $phases = moon_phases_between(strtotime('2026-01-01 00:00 UTC'), strtotime('2027-01-01 00:00 UTC'));
 
-        // At Full Moon, illumination should be ~100%
-        $full_moon = strtotime('2026-02-01 22:09:00 UTC');
-        $moon_info = get_accurate_moon_phase($full_moon);
-        $this->assertGreaterThan(90, $moon_info['illumination'], 'Full Moon should be >90% illuminated');
-
-        // At First/Last Quarter, illumination should be ~50%
-        $first_quarter = strtotime('2026-02-24 12:27:00 UTC');
-        $moon_info = get_accurate_moon_phase($first_quarter);
-        $this->assertEqualsWithDelta(50, $moon_info['illumination'], 15, 'Quarter should be ~50% illuminated');
+        $this->assertGreaterThanOrEqual(48, count($phases));
+        foreach ($phases as $phase) {
+            $this->assertEqualsWithDelta(
+                $expected[$phase['name']],
+                moon_illumination($phase['timestamp']),
+                1.0,
+                "{$phase['name']} on " . gmdate('Y-m-d H:i', $phase['timestamp'])
+            );
+        }
     }
 
     /**
