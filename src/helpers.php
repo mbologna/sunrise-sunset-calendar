@@ -154,8 +154,9 @@ function format_rank(float $percentile, string $kind, array $S): string
  *
  * @param int $diffSeconds This length minus the other
  * @param string $referent What it is compared with, e.g. "yesterday"
+ * @param bool $withSeconds Keep seconds (day-to-day changes) or round to the minute
  */
-function format_comparison(int $diffSeconds, string $referent, array $S): string
+function format_comparison(int $diffSeconds, string $referent, array $S, bool $withSeconds = true): string
 {
     if ($diffSeconds === 0) {
         return sprintf($S['comparisons']['same'], $referent);
@@ -163,7 +164,7 @@ function format_comparison(int $diffSeconds, string $referent, array $S): string
 
     return sprintf(
         $S['comparisons'][$diffSeconds > 0 ? 'longer' : 'shorter'],
-        format_duration($diffSeconds, true),
+        format_duration($diffSeconds, $withSeconds),
         $referent
     );
 }
@@ -208,8 +209,10 @@ function format_schedule_span(string $label, array $span, string $note): string
  */
 function format_moon_section(array $moon, array $S): string
 {
+    $lit = (int) round($moon['illumination']);
+    $impact = $S['moon']['impact'][$lit < 25 ? 'dark' : ($lit <= 75 ? 'partial' : 'bright')];
     $section = sprintf($S['headers']['moon'], get_moon_phase_emoji($moon['phase_name'])) . "\n";
-    $section .= sprintf($S['moon']['current'], $moon['phase_name'], (int) round($moon['illumination'])) . "\n";
+    $section .= sprintf($S['moon']['current'], $moon['phase_name'], $lit) . ' ' . $impact . "\n";
 
     foreach (['previous' => 'prev_phase', 'next' => 'next_phase'] as $label => $key) {
         if ($moon[$key]) {
@@ -331,13 +334,27 @@ function year_summary(float $lat, float $lon, int $year, float $utcOffset): arra
         $days
     );
 
+    // Twilight lengths by day, with the same solar noon and midnight stand-ins as
+    // solar_spans(), so the range always contains the length an event shows
     $bands = [];
     foreach (twilight_profile_fields() as $band => [$deep, $shallow]) {
+        ['deep' => $deepAngle, 'high' => $highAngle, 'morning' => $morning] = twilight_bands()[$band];
         $lengthsByDay = [];
         foreach ($days as $i => $d) {
-            if ($d[$deep] !== null && $d[$shallow] !== null) {
-                $lengthsByDay[$i] = (int) round(abs($d[$deep] - $d[$shallow]) * 86400);
+            $noon = $d['solar_noon_frac'];
+            if ($d[$deep] === null && $d[$shallow] === null) {
+                // Neither boundary crossed: the sun is inside the band all day, or never
+                $inBand = abs($lat + $d['declination_deg']) - 90 > -$deepAngle
+                    && 90 - abs($lat - $d['declination_deg']) < -$highAngle;
+                if ($inBand) {
+                    $lengthsByDay[$i] = 43200;
+                }
+                continue;
             }
+            $span = $morning
+                ? ($d[$shallow] ?? $noon) - ($d[$deep] ?? $noon - 0.5)
+                : ($d[$deep] ?? $noon + 0.5) - ($d[$shallow] ?? $noon);
+            $lengthsByDay[$i] = (int) round($span * 86400);
         }
         $allNight = array_map(fn($d) => $d[$deep] === null && $d[$shallow] !== null, $days);
         $bands[$band] = $lengthsByDay === [] ? null : [
@@ -586,33 +603,36 @@ function missing_boundaries(string $key, array $span): array
 }
 
 /**
- * Explain why a twilight runs to or from solar noon or midnight, when it does.
+ * The data lines of a twilight event: boundaries, length over the year, the sun's
+ * path when it misses a boundary, and blue and golden hour.
  *
- * @param string $key Twilight key, e.g. 'evening_nautical'
  * @param array $span From solar_spans()
- * @return array<string> Zero, one or two sentences
+ * @param array $ev sun_events() for the day
+ * @param array $year year_summary() for the day's year
  */
-function no_crossing_notes(string $key, array $span, array $S): array
+function twilight_details(string $key, array $span, array $ev, array $year, array $S): string
 {
-    $band = twilight_bands()[$key];
-    $N = $S['no_crossing'];
-    $notes = [];
-    [$deepMissing, $highMissing] = missing_boundaries($key, $span);
+    $L = $S['labels'];
+    $length = format_duration($span[1] - $span[0]);
+    $band = $year['bands'][$key];
 
-    if ($band['morning'] && $deepMissing) {
-        $notes[] = sprintf($N['deep_morning'], $band['deep']);
+    $lines = [format_span_line($span, $S)];
+    $lines[] = $band === null
+        ? sprintf($L['length'], $length)
+        : sprintf($L['length_range'], $length, format_duration($band['min'][0]), format_duration($band['max'][0]));
+    $path = twilight_path($key, $span, $ev, $S);
+    if ($path !== null) {
+        $lines[] = $path;
     }
-    if ($highMissing) {
-        $when = $band['morning'] ? 'morning' : 'evening';
-        $notes[] = $band['high'] === 0
-            ? $N["polar_{$when}"]
-            : sprintf($N["high_{$when}"], $band['high']);
+    if ($band !== null && $band['all_night'] !== []) {
+        $lines[] = sprintf($L['all_night'], format_runs($band['all_night'], $S));
     }
-    if (!$band['morning'] && $deepMissing) {
-        $notes[] = sprintf($N['deep_evening'], $band['deep']);
+    $light = str_ends_with($key, '_civil') ? light_line($key, $ev, $S) : null;
+    if ($light !== null) {
+        $lines[] = $light;
     }
 
-    return $notes;
+    return implode("\n", $lines);
 }
 
 /**
@@ -650,31 +670,48 @@ function light_line(string $key, array $ev, array $S): ?string
 }
 
 /**
- * Sequence line with the current twilight bracketed: "Night → [Astronomical] → …".
+ * Today's sequence with the current twilight bracketed: "Night → [Astronomical] → …".
+ *
+ * Only the twilights that occur today are listed, between the instants that
+ * actually open and close them (solar noon or midnight when the sun misses one).
+ *
+ * @param array $spans From solar_spans()
  */
-function format_sequence(string $key, array $S): string
+function format_sequence(string $key, array $spans, array $S): string
 {
-    $sequence = $S['sequence'][str_starts_with($key, 'morning') ? 'morning' : 'evening'];
+    $Q = $S['sequence'];
+    $morning = str_starts_with($key, 'morning');
+    $keys = $morning
+        ? ['morning_astronomical', 'morning_nautical', 'morning_civil']
+        : ['evening_civil', 'evening_nautical', 'evening_astronomical'];
+    $present = array_values(array_filter($keys, fn($k) => $spans[$k] !== null));
+    $first = $spans[$present[0]];
+    $last = $spans[$present[count($present) - 1]];
 
-    return implode(' → ', array_map(
-        fn($k, $name) => $k === $key ? "[{$name}]" : $name,
-        array_keys($sequence),
-        $sequence
-    ));
+    if ($morning) {
+        $open = $first[2] === 'solar_midnight' ? 'solar_midnight' : 'night';
+        $close = $last[3] === 'solar_noon' ? 'solar_noon' : 'sunrise';
+    } else {
+        $open = $first[2] === 'solar_noon' ? 'solar_noon' : 'sunset';
+        $close = $last[3] === 'solar_midnight' ? 'solar_midnight' : 'night';
+    }
+
+    $items = array_map(fn($k) => $k === $key ? "[{$Q[$k]}]" : $Q[$k], $present);
+
+    return implode(' → ', [$Q[$open], ...$items, $Q[$close]]);
 }
 
 /**
- * How the sun moves through a twilight: the usual angles, or today's actual path
- * when it never reaches one of the boundaries.
+ * The sun's path through a twilight on a day it misses one of the boundaries, or null.
  *
  * @param array $span From solar_spans()
  * @param array $ev sun_events() for the day
  */
-function twilight_path(string $key, array $span, array $ev, array $S): string
+function twilight_path(string $key, array $span, array $ev, array $S): ?string
 {
     [$deepMissing, $highMissing] = missing_boundaries($key, $span);
     if (!$deepMissing && !$highMissing) {
-        return $S['about'][$key]['angles'];
+        return null;
     }
 
     $band = twilight_bands()[$key];
@@ -690,49 +727,39 @@ function twilight_path(string $key, array $span, array $ev, array $S): string
             $civil => $S['instants']['sunrise'],
             default => sprintf($D['to_angle'], $band['high']),
         };
-        return sprintf($D['path_morning'], $from, $to);
+        $path = sprintf($D['path_morning'], $from, $to);
+    } else {
+        $from = match (true) {
+            $highMissing => sprintf($D['from_noon'], $noon),
+            $civil => $S['instants']['sunset'],
+            default => sprintf($D['from_angle'], $band['high']),
+        };
+        $to = $deepMissing ? sprintf($D['to_midnight'], $midnight) : sprintf($D['to_angle'], $band['deep']);
+        $path = sprintf($D['path_evening'], $from, $to);
     }
 
-    $from = match (true) {
-        $highMissing => sprintf($D['from_noon'], $noon),
-        $civil => $S['instants']['sunset'],
-        default => sprintf($D['from_angle'], $band['high']),
-    };
-    $to = $deepMissing ? sprintf($D['to_midnight'], $midnight) : sprintf($D['to_angle'], $band['deep']);
-
-    return sprintf($D['path_evening'], $from, $to);
+    // A civil twilight that never reaches the horizon means the sun does not rise
+    return $civil && $highMissing ? $D['polar_night'] . lcfirst($path) : $path;
 }
 
 /**
- * The "About" section of a twilight: what is happening, its length over the year, what it is good for.
+ * The "About" section of a twilight: what is happening and what it is good for.
  *
  * @param array $span From solar_spans()
- * @param array $ev sun_events() for the day
- * @param array $year year_summary() for the day's year
+ * @param array $spans All of today's spans, for the sequence
  */
-function twilight_about(string $key, array $span, array $ev, array $year, array $S): string
+function twilight_about(string $key, array $span, array $spans, array $S): string
 {
     $about = $S['about'][$key];
-    $D = $S['about_dynamic'];
-    $date = fn(int $ts) => format_local($ts, 'date_short');
-    $text = sprintf($S['headers']['about'], $S['names'][$key]) . "\n"
-        . format_sequence($key, $S) . "\n\n" . twilight_path($key, $span, $ev, $S) . ' ' . $about['text'];
+    [$deepMissing, $highMissing] = missing_boundaries($key, $span);
+    // The usual angles are wrong on a day the data lines describe a different path
+    $angles = ($deepMissing || $highMissing) ? '' : $about['angles'] . ' ';
 
-    $band = $year['bands'][$key];
-    if ($band !== null) {
-        $text .= "\n\n" . sprintf(
-            $D[str_starts_with($key, 'morning') ? 'range_morning' : 'range_evening'],
-            format_duration($band['min'][0]),
-            $date($band['min'][1]),
-            format_duration($band['max'][0]),
-            $date($band['max'][1])
-        );
-        if ($band['all_night'] !== []) {
-            $text .= ' ' . sprintf($D['all_night'], format_runs($band['all_night'], $S));
-        }
-    }
-
-    return $text . "\n\n" . sprintf($S['labels']['good_for'], $about['good_for']);
+    return sprintf($S['headers']['about'], $S['names'][$key]) . "\n"
+        . format_sequence($key, $spans, $S) . "\n\n"
+        . $angles . $about['text'] . ' '
+        . $S['about_dynamic'][str_starts_with($key, 'morning') ? 'length_morning' : 'length_evening'] . "\n\n"
+        . sprintf($S['labels']['good_for'], $about['good_for']);
 }
 
 /**
@@ -815,17 +842,11 @@ function daylight_about(array $ev, array $S): string
 }
 
 /**
- * The "About" section of the Night event, with a sentence on tonight's moon.
- *
- * @param array $moon Result of get_accurate_moon_phase()
+ * The "About" section of the Night event.
  */
-function night_about(array $moon, array $S): string
+function night_about(array $S): string
 {
-    $lit = (int) round($moon['illumination']);
-    $bucket = $lit < 25 ? 'moon_dark' : ($lit <= 75 ? 'moon_partial' : 'moon_bright');
-
-    return sprintf($S['headers']['about'], $S['names']['night']) . "\n"
-        . $S['about']['night']['text'] . ' ' . sprintf($S['about_dynamic'][$bucket], $lit);
+    return sprintf($S['headers']['about'], $S['names']['night']) . "\n" . $S['about']['night']['text'];
 }
 
 /**

@@ -165,16 +165,17 @@ class CalendarFeedTest extends TestCase
         $this->assertSame($dawn['DTEND'], $dusk['DTSTART']);
         $this->assertStringStartsWith('From civil dawn ', $dawn['DESCRIPTION']);
         $this->assertStringContainsString(' to solar noon ', $dawn['DESCRIPTION']);
-        $this->assertStringContainsString("Polar night: the sun doesn't rise today", $dawn['DESCRIPTION']);
         $this->assertStringContainsString(
-            'Today the sun climbs from 6° below the horizon to 3° below at solar noon\\, its highest today.',
+            'Polar night: today the sun climbs from 6° below the horizon to 3° below at solar noon\\, its highest today.',
             $dawn['DESCRIPTION']
         );
         $this->assertStringNotContainsString('to sunrise', $dawn['DESCRIPTION']);
+        $this->assertStringContainsString('→ [Civil] → Solar noon', $dawn['DESCRIPTION']);
         $this->assertStringContainsString(
-            'Today the sun sinks from 3° below the horizon at solar noon\\, its highest today\\, to 6° below.',
+            'Polar night: today the sun sinks from 3° below the horizon at solar noon\\, its highest today\\, to 6° below.',
             $dusk['DESCRIPTION']
         );
+        $this->assertStringContainsString('Solar noon → [Civil] →', $dusk['DESCRIPTION']);
 
         [$solstice] = $this->eventsOfType($ics, 'winter-solstice');
         $this->assertStringContainsString('The sun stays 3° below the horizon even at noon.', $solstice['DESCRIPTION']);
@@ -212,7 +213,7 @@ class CalendarFeedTest extends TestCase
 
         $this->assertStringStartsWith('From civil dusk ', $dusk['DESCRIPTION']);
         $this->assertStringContainsString(' to solar midnight ', $dusk['DESCRIPTION']);
-        $this->assertStringContainsString("The sun doesn't get 12° below the horizon tonight", $dusk['DESCRIPTION']);
+        $this->assertStringContainsString('Sunset → Civil → [Nautical] → Solar midnight', $dusk['DESCRIPTION']);
         $this->assertStringContainsString(
             'Today the sun sinks from 6° below the horizon to 7° below at solar midnight\\, its lowest tonight.',
             $dusk['DESCRIPTION']
@@ -339,6 +340,18 @@ class CalendarFeedTest extends TestCase
         $this->assertStringContainsString('The shortest day of the year: 9h 08m of daylight.', $solstice['DESCRIPTION']);
         $this->assertStringContainsString('The noon sun is at its lowest of the year: 25°', $solstice['DESCRIPTION']);
         $this->assertStringContainsString('Neither falls on the solstice itself.', $solstice['DESCRIPTION']);
+    }
+
+    public function testTwilightDataComesBeforeTheExplanation(): void
+    {
+        [$dawn] = $this->eventsOfType($this->feed([
+            'window_days' => 0,
+            'enabled' => ['civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => true],
+        ]), 'morning-civil-twilight');
+        $text = $dawn['DESCRIPTION'];
+
+        $this->assertMatchesRegularExpression('/^From civil dawn [0-9:]+ to sunrise [0-9:]+\\\\nLength: \d+m \(2\dm–3\dm over the year\)/', $text);
+        $this->assertLessThan(strpos($text, 'ℹ️ About'), strpos($text, '☀️ Today'));
     }
 
     public function testCivilTwilightListsBlueAndGoldenHour(): void

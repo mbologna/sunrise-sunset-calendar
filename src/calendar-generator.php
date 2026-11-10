@@ -272,12 +272,14 @@ function render_calendar(array $o): string
                     format_comparison(
                         $daylightSeconds - $solstices[$year]['winter']['seconds'],
                         sprintf($S['comparisons']['winter_solstice'], $solstices[$year]['winter']['info']),
-                        $S
+                        $S,
+                        false
                     ),
                     format_comparison(
                         $daylightSeconds - $solstices[$year]['summer']['seconds'],
                         sprintf($S['comparisons']['summer_solstice'], $solstices[$year]['summer']['info']),
-                        $S
+                        $S,
+                        false
                     ),
                 ],
             ],
@@ -343,18 +345,10 @@ function render_calendar(array $o): string
             $span = $spans[$key];
             $offset = $band['morning'] ? $o['rise_offset'] : $o['set_offset'];
 
-            $lines = [
-                format_span_line($span, $S),
-                sprintf($S['labels']['length'], format_duration($span[1] - $span[0])),
-            ];
-            array_push($lines, ...no_crossing_notes($key, $span, $S));
-            $light = str_ends_with($key, '_civil') ? light_line($key, $ev, $S) : null;
-            if ($light !== null) {
-                $lines[] = $light;
-            }
-
-            $desc = implode("\n", $lines) . "\n\n" . twilight_about($key, $span, $ev, $yearInfo, $S);
+            // Data first, then the rest of today's schedule, then the explanation
+            $desc = twilight_details($key, $span, $ev, $yearInfo, $S);
             $desc .= $band['morning'] ? build_dawn_supplemental($c, $S) : build_dusk_supplemental($c, $S);
+            $desc .= "\n\n" . twilight_about($key, $span, $spans, $S);
             $desc .= $offsetNote($offset, $offset);
 
             $out .= ical_event(
@@ -386,7 +380,7 @@ function render_calendar(array $o): string
         if ($enabled['daylight'] && $spans['night'] !== null) {
             [$start, $end] = $spans['night'];
 
-            $desc = night_details($c, $S) . "\n" . night_about($moon, $S)
+            $desc = night_details($c, $S) . "\n" . night_about($S)
                 . $offsetNote($o['set_offset'], $o['rise_offset']) . $customNote;
 
             $out .= ical_event(

@@ -18,8 +18,9 @@ return [
     // Calendar metadata
     'calendar_prodid' => '-//Sun & Twilight Calendar//EN',
     'calendar_name_format' => '🌅 %s · Sun & Twilight', // %s = location name, or coordinates
-    'calendar_description_format' => 'Sunrise, sunset and twilight for %1$s, times in %2$s. '
-        . 'Computed with the NREL Solar Position Algorithm.', // %1$s = place, %2$s = time zone
+    'calendar_description_format' => 'Sunrise, sunset and twilight for %1$s, times in %2$s. Sunrise and '
+        . 'sunset computed with the NREL Solar Position Algorithm; twilight and the moon with standard '
+        . 'astronomical formulas.', // %1$s = place, %2$s = time zone
     'place_named' => '%1$s (%2$s, %3$s)', // name, latitude, longitude
     'place_coordinates' => '%2$s, %3$s',
 
@@ -78,22 +79,19 @@ return [
     ],
     'span_line' => 'From %s %s to %s %s', // start instant, time, end instant, time
 
-    // Where each twilight sits in the sequence; the current one is bracketed
+    // Today's sequence of twilights; the current one is bracketed
     'sequence' => [
-        'morning' => [
-            'night' => 'Night',
-            'morning_astronomical' => 'Astronomical',
-            'morning_nautical' => 'Nautical',
-            'morning_civil' => 'Civil',
-            'sunrise' => 'Sunrise',
-        ],
-        'evening' => [
-            'sunset' => 'Sunset',
-            'evening_civil' => 'Civil',
-            'evening_nautical' => 'Nautical',
-            'evening_astronomical' => 'Astronomical',
-            'night' => 'Night',
-        ],
+        'night' => 'Night',
+        'sunrise' => 'Sunrise',
+        'sunset' => 'Sunset',
+        'solar_noon' => 'Solar noon',
+        'solar_midnight' => 'Solar midnight',
+        'morning_astronomical' => 'Astronomical',
+        'morning_nautical' => 'Nautical',
+        'morning_civil' => 'Civil',
+        'evening_civil' => 'Civil',
+        'evening_nautical' => 'Nautical',
+        'evening_astronomical' => 'Astronomical',
     ],
 
     // Section headers
@@ -108,7 +106,9 @@ return [
     // Data lines
     'labels' => [
         'length' => 'Length: %s',
-        'length_share' => 'Length: %s, %d%% of the day',
+        'length_range' => 'Length: %s (%s–%s over the year)', // today, shortest, longest
+        'length_share' => 'Length: %s, %d%% of 24 hours',
+        'all_night' => 'Over the year it also lasts all night, from %s.',
         'solar_noon' => 'Solar noon: %s · Sun at noon: %d°',
         'solar_noon_midnight_sun' => 'Solar noon: %s · Sun at noon: %d°, at solar midnight: %d°',
         'solar_midnight' => 'Solar midnight: %s',
@@ -180,14 +180,14 @@ return [
             'text' => 'Civil dawn, when the sun climbs past 6° below, is when there is enough light for everyday '
                 . '("civil") activity: under a clear sky you can be outdoors without lamps. Colours return, '
                 . 'only the brightest stars and planets remain, and streetlights typically switch off.',
-            'good_for' => 'blue hour (sun 6° to 4° below) and the start of golden hour; early walks and runs.',
+            'good_for' => 'blue hour and the start of golden hour; early walks and runs.',
         ],
         'evening_civil' => [
             'angles' => "The sun sinks from sunset to 6° below the horizon (about three fingers at arm's length).",
             'text' => 'Civil dusk, when the sun sinks past 6° below, is the last moment with enough light for '
                 . 'everyday ("civil") activity without lamps. Colours fade, the brightest stars and planets '
                 . 'appear, and streetlights typically switch on.',
-            'good_for' => 'the end of golden hour and blue hour (sun 4° to 6° below); evening walks.',
+            'good_for' => 'the end of golden hour, then blue hour; evening walks.',
         ],
         'evening_nautical' => [
             'angles' => "The sun sinks from 6° to 12° below the horizon (about three fingers to just over one "
@@ -219,7 +219,7 @@ return [
         ],
     ],
 
-    // Today's facts in the About section
+    // Sentences that depend on the day
     'about_dynamic' => [
         // The sun's path on a day when solar noon or midnight bounds the twilight
         'path_morning' => 'Today the sun climbs from %s to %s.',
@@ -230,30 +230,16 @@ return [
         'to_angle' => '%d° below',
         'to_noon' => '%d° below at solar noon, its highest today',
         'to_midnight' => '%d° below at solar midnight, its lowest tonight',
-        'range_morning' => 'Here it lasts from %s (%s) to %s (%s) over the year: the more gently the sun '
-            . 'rises, the longer twilight lasts.',
-        'range_evening' => 'Here it lasts from %s (%s) to %s (%s) over the year: the more gently the sun '
-            . 'sets, the longer twilight lasts.',
-        'all_night' => 'From %s it lasts all night.',
-        'moon_dark' => 'The moon is only %d%% lit: among the darkest skies of the month for galaxies and '
-            . 'the Milky Way.',
-        'moon_partial' => 'The moon is %d%% lit: while it is up, its light washes out the faintest objects.',
-        'moon_bright' => 'The moon is %d%% lit: while it is up, faint objects are washed out, but it is a '
-            . 'good night to look at the moon itself.',
+        'polar_night' => 'Polar night: ',
+        // Why the length in the "Length" line changes over the year
+        'length_morning' => 'Its length changes over the year: the more gently the sun rises, the longer '
+            . 'twilight lasts.',
+        'length_evening' => 'Its length changes over the year: the more gently the sun sets, the longer '
+            . 'twilight lasts.',
     ],
 
-    // When the sun does not reach a twilight's boundary, solar noon or midnight stands in
+    // When the sun stays more than 18° below the horizon all day, solar noon bounds the night
     'no_crossing' => [
-        'deep_morning' => "The sun didn't get %d° below the horizon last night, so this twilight began at "
-            . 'solar midnight.',
-        'deep_evening' => "The sun doesn't get %d° below the horizon tonight, so this twilight lasts until "
-            . 'solar midnight.',
-        'high_morning' => 'The sun stays more than %d° below the horizon all day, so this twilight lasts '
-            . 'until solar noon.',
-        'high_evening' => 'The sun stays more than %d° below the horizon all day, so this twilight starts '
-            . 'at solar noon.',
-        'polar_morning' => "Polar night: the sun doesn't rise today, so this twilight lasts until solar noon.",
-        'polar_evening' => "Polar night: the sun doesn't rise today, so this twilight starts at solar noon.",
         'night_from_noon' => 'The sun stays more than 18° below the horizon all day today, so this night starts '
             . 'at solar noon.',
         'night_to_noon' => 'The sun stays more than 18° below the horizon all day tomorrow, so this night lasts '
@@ -276,7 +262,13 @@ return [
 
     // Moon
     'moon' => [
-        'current' => '%s, %d%% illuminated', // phase name, illumination
+        'current' => '%s, %d%% illuminated.', // phase name, illumination
+        // How much the moon brightens the sky, by illumination (under 25%, up to 75%, above)
+        'impact' => [
+            'dark' => 'Too thin to brighten the sky much: among the darkest nights of the month.',
+            'partial' => 'While it is up, its light washes out the faintest objects.',
+            'bright' => 'While it is up, faint objects are washed out; a good night to look at the moon itself.',
+        ],
         'previous' => 'Previous: %s %s, %s', // emoji, phase name, date
         'next' => 'Next: %s %s, %s',
         'phase_at' => '%s %s, %s', // emoji, phase name, date (weekly summary)
