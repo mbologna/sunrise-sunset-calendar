@@ -257,10 +257,10 @@ class CalendarFeedTest extends TestCase
         ]);
         [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
 
-        $this->assertStringContainsString('⚓ Morning Nautical Twilight: ', $dawn['DESCRIPTION']);
-        $this->assertStringContainsString('🌌 Morning Astronomical Twilight: ', $dawn['DESCRIPTION']);
+        $this->assertStringContainsString('⚓ Nautical Twilight: ', $dawn['DESCRIPTION']);
+        $this->assertStringContainsString('🌌 Astronomical Twilight: ', $dawn['DESCRIPTION']);
         $this->assertStringContainsString('☀️ Daylight\\nFrom sunrise ', $dawn['DESCRIPTION']);
-        $this->assertStringNotContainsString('🌅 Morning Civil Twilight: ', $dawn['DESCRIPTION']);
+        $this->assertStringNotContainsString('🌅 Civil Twilight: ', $dawn['DESCRIPTION']);
         $this->assertSame([], $this->eventsOfType($ics, 'daylight'));
     }
 

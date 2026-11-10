@@ -75,16 +75,16 @@ Twilight types not subscribed to as events are listed in the description of the 
 
 Each event is a period, and its description opens with the instants that bound it, e.g. "From civil dawn 06:37 to sunrise 07:06". Twilights are periods; dawns and dusks are the instants when the sun crosses 18°, 12° or 6° below the horizon.
 
-| Event | From | To |
-|-------|------|----|
-| Morning Astronomical Twilight | astronomical dawn (sun 18° below) | nautical dawn (12° below) |
-| Morning Nautical Twilight | nautical dawn | civil dawn (6° below) |
-| Morning Civil Twilight | civil dawn | sunrise |
-| Daylight | sunrise | sunset |
-| Evening Civil Twilight | sunset | civil dusk (6° below) |
-| Evening Nautical Twilight | civil dusk | nautical dusk (12° below) |
-| Evening Astronomical Twilight | nautical dusk | astronomical dusk (18° below) |
-| Night | astronomical dusk | the next astronomical dawn |
+| Event | Title | From | To |
+|-------|-------|------|----|
+| Morning astronomical twilight | 🌌 Astronomical Twilight | astronomical dawn (sun 18° below) | nautical dawn (12° below) |
+| Morning nautical twilight | ⚓ Nautical Twilight | nautical dawn | civil dawn (6° below) |
+| Morning civil twilight | 🌅 Civil Twilight | civil dawn | sunrise |
+| Daylight | ☀️ Daylight · *length* | sunrise | sunset |
+| Evening civil twilight | 🌇 Civil Twilight | sunset | civil dusk (6° below) |
+| Evening nautical twilight | ⚓ Nautical Twilight | civil dusk | nautical dusk (12° below) |
+| Evening astronomical twilight | 🌌 Astronomical Twilight | nautical dusk | astronomical dusk (18° below) |
+| Night | *moon phase* Night · *length* | astronomical dusk | the next astronomical dawn |
 
 Sunrise and sunset are when the sun's top edge crosses the horizon, allowing for refraction. Weekly summaries are all-day events from Sunday to Saturday. Equinoxes and solstices are all-day events on their local date.
 
