@@ -86,23 +86,26 @@ function calculate_daylight_percentile(
 /**
  * Get emoji for moon phase.
  *
- * @param string $phaseName Name of the moon phase
+ * @param string $phaseName Phase name as get_accurate_moon_phase() reports it
  * @return string Moon phase emoji
  */
 function get_moon_phase_emoji(string $phaseName): string
 {
-    $emojis = [
-        'New Moon' => '🌑',
-        'Waxing Crescent' => '🌒',
-        'First Quarter' => '🌓',
-        'Waxing Gibbous' => '🌔',
-        'Full Moon' => '🌕',
-        'Waning Gibbous' => '🌖',
-        'Last Quarter' => '🌗',
-        'Waning Crescent' => '🌘',
-    ];
+    $S = get_strings();
 
-    return $emojis[$phaseName] ?? '🌙';
+    return ($S['moon_phases'][$phaseName] ?? $S['moon_phase_unknown'])[0];
+}
+
+/**
+ * Display name of a moon phase, from strings['moon_phases'].
+ *
+ * @param string $phaseName Phase name as get_accurate_moon_phase() reports it
+ */
+function moon_phase_name(string $phaseName): string
+{
+    $S = get_strings();
+
+    return ($S['moon_phases'][$phaseName] ?? $S['moon_phase_unknown'])[1];
 }
 
 // ============================================================================
@@ -239,7 +242,7 @@ function format_moon_section(array $moon, array $S): string
     $lit = (int) round($moon['illumination']);
     $riseSet = $moon['rise_set'] ?? null;
     $belowAllNight = $riseSet !== null && !$riseSet['up_at_start'] && $riseSet['events'] === [];
-    $current = sprintf($M['current'], $moon['phase_name'], $lit);
+    $current = sprintf($M['current'], moon_phase_name($moon['phase_name']), $lit);
     if (!$belowAllNight) {
         $current .= ' ' . $M['impact'][$lit < 25 ? 'dark' : ($lit <= 75 ? 'partial' : 'bright')];
     }
@@ -254,7 +257,7 @@ function format_moon_section(array $moon, array $S): string
             $section .= sprintf(
                 $S['moon'][$label],
                 get_moon_phase_emoji($moon[$key]['name']),
-                $moon[$key]['name'],
+                moon_phase_name($moon[$key]['name']),
                 format_local($moon[$key]['timestamp'], 'datetime')
             ) . "\n";
         }

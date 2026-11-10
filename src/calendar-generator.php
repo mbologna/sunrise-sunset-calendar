@@ -137,7 +137,7 @@ function ical_duration(int $seconds): string
  */
 function format_time(?int $timestamp): string
 {
-    return $timestamp === null ? '—' : format_local($timestamp);
+    return $timestamp === null ? get_strings()['none'] : format_local($timestamp);
 }
 
 /**
@@ -306,14 +306,14 @@ function render_calendar(array $o): string
                 fn($p) => sprintf(
                     $S['moon']['phase_at'],
                     get_moon_phase_emoji($p['name']),
-                    $p['name'],
+                    moon_phase_name($p['name']),
                     format_local($p['timestamp'], 'datetime')
                 ),
                 moon_phases_between($day->getTimestamp(), $day->modify('+7 days')->getTimestamp())
             );
             if ($phases === []) {
                 $phaseName = get_accurate_moon_phase($day->getTimestamp())['phase_name'];
-                $phases = [get_moon_phase_emoji($phaseName) . " {$phaseName}"];
+                $phases = [get_moon_phase_emoji($phaseName) . ' ' . moon_phase_name($phaseName)];
             }
 
             $desc = sprintf(

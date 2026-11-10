@@ -22,13 +22,13 @@ async function geocodeAddress() {
 
     if (!address) {
         status.className = 'error';
-        status.textContent = 'Please enter an address';
+        status.textContent = STRINGS.enter_address;
         return;
     }
 
     status.className = '';
     status.style.display = 'block';
-    status.textContent = 'Searching...';
+    status.textContent = STRINGS.searching;
 
     try {
         const [place] = await nominatim('search', { q: address, limit: 1 });
@@ -39,14 +39,14 @@ async function geocodeAddress() {
             document.getElementById('location').value = place.display_name.split(',')[0];
 
             status.className = 'success';
-            status.textContent = '✓ Location found: ' + place.display_name;
+            status.textContent = STRINGS.found + place.display_name;
         } else {
             status.className = 'error';
-            status.textContent = '✗ Location not found';
+            status.textContent = STRINGS.not_found;
         }
     } catch (error) {
         status.className = 'error';
-        status.textContent = '✗ Error searching location';
+        status.textContent = STRINGS.search_error;
     }
 }
 
@@ -82,7 +82,7 @@ function getLocation() {
 
     if (!navigator.geolocation) {
         status.className = 'error';
-        status.textContent = 'Geolocation not supported.';
+        status.textContent = STRINGS.no_geolocation;
         status.style.display = 'block';
         return;
     }
@@ -93,26 +93,26 @@ function getLocation() {
             document.getElementById('lon').value = Math.round(position.coords.longitude * 1000000) / 1000000;
 
             status.className = 'success';
-            status.textContent = '✓ Location retrieved!';
+            status.textContent = STRINGS.located;
             status.style.display = 'block';
 
             reverseGeocode();
         },
         function (error) {
             status.className = 'error';
-            let message = 'Unable to retrieve location. ';
+            let message = STRINGS.locate_failed;
             switch (error.code) {
                 case error.PERMISSION_DENIED:
-                    message += 'Permission denied.';
+                    message += STRINGS.permission_denied;
                     break;
                 case error.POSITION_UNAVAILABLE:
-                    message += 'Location unavailable.';
+                    message += STRINGS.unavailable;
                     break;
                 case error.TIMEOUT:
-                    message += 'Request timed out.';
+                    message += STRINGS.timeout;
                     break;
                 default:
-                    message += 'Error: ' + error.message;
+                    message += error.message;
             }
             status.textContent = message;
             status.style.display = 'block';
@@ -128,13 +128,13 @@ function validateForm() {
     const daynight = document.getElementById('daynight').checked;
 
     if (!civil && !nautical && !astro && !daynight) {
-        alert('Please select at least one event type.');
+        alert(STRINGS.select_type);
         return false;
     }
 
     const password = document.getElementById('password').value;
     if (!password) {
-        alert('Please enter the password.');
+        alert(STRINGS.enter_password);
         return false;
     }
 
@@ -147,7 +147,7 @@ function copyToClipboard(elementId, button) {
     navigator.clipboard.writeText(text).then(
         function () {
             const originalText = button.textContent;
-            button.textContent = '✓ Copied!';
+            button.textContent = STRINGS.copied;
             button.style.background = '#28a745';
 
             setTimeout(function () {
@@ -156,7 +156,7 @@ function copyToClipboard(elementId, button) {
             }, 2000);
         },
         function (err) {
-            alert('Failed to copy: ' + err);
+            alert(STRINGS.copy_failed + err);
         }
     );
 }

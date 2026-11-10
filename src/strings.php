@@ -30,6 +30,15 @@ return [
         'date_short' => 'M j',
         'datetime' => 'D, M j, H:i',
     ],
+    'none' => '—', // a time that does not occur today
+
+    // Duration units: "9h 05m", "32m", "2m 05s", "45s"
+    'units' => [
+        'hours_minutes' => '%dh %02dm',
+        'minutes' => '%dm',
+        'minutes_seconds' => '%dm %02ds',
+        'seconds' => '%ds',
+    ],
     'date_range' => '%s to %s',
     'range_join' => ' and from ',
 
@@ -263,6 +272,19 @@ return [
         'night' => '🌙 Night',
     ],
 
+    // Moon phase names and emojis, keyed by the names the astronomy code uses
+    'moon_phases' => [
+        'New Moon' => ['🌑', 'New Moon'],
+        'Waxing Crescent' => ['🌒', 'Waxing Crescent'],
+        'First Quarter' => ['🌓', 'First Quarter'],
+        'Waxing Gibbous' => ['🌔', 'Waxing Gibbous'],
+        'Full Moon' => ['🌕', 'Full Moon'],
+        'Waning Gibbous' => ['🌖', 'Waning Gibbous'],
+        'Last Quarter' => ['🌗', 'Last Quarter'],
+        'Waning Crescent' => ['🌘', 'Waning Crescent'],
+    ],
+    'moon_phase_unknown' => ['🌙', 'Moon'],
+
     // Moon
     'moon' => [
         'current' => '%s, %d%% illuminated.', // phase name, illumination
@@ -335,5 +357,109 @@ return [
         'polar_night' => 'Polar night from %s.',
         'white_nights' => 'From %s the sun never gets 18° below the horizon, so there is no '
             . 'astronomical night and the calendar has no Night events.',
+    ],
+
+    // Responses of the HTTP entry point
+    'errors' => [
+        'missing_token' => 'Error: Please set AUTH_TOKEN via environment variable or config/config.php',
+        'invalid_token' => 'Invalid authentication token',
+        'invalid_password' => 'Invalid password',
+    ],
+
+    // Web page for generating subscription URLs
+    'web' => [
+        'title' => 'Sun & Twilight Calendar',
+        'heading' => '🌅 Sun & Twilight Calendar',
+        'today_heading' => "Today in Rome",
+        'today_date' => 'Date: %s',
+        'today_date_format' => 'l, F j, Y',
+        'today_times' => [
+            'astro_begin' => 'Astronomical dawn',
+            'nautical_begin' => 'Nautical dawn',
+            'civil_begin' => 'Civil dawn',
+            'sunrise' => 'Sunrise',
+            'solar_noon' => 'Solar noon',
+            'sunset' => 'Sunset',
+            'civil_end' => 'Civil dusk',
+            'nautical_end' => 'Nautical dusk',
+            'astro_end' => 'Astronomical dusk',
+        ],
+        'day_length' => 'Day length: %s',
+        'error' => 'Error:',
+        'generated' => '✅ Subscription URL generated',
+        'subscription_url' => 'Your calendar subscription URL:',
+        'copy_url' => '📋 Copy URL',
+        'webcal_url' => 'Webcal URL (recommended):',
+        'copy_webcal' => '📋 Copy webcal URL',
+        'google_heading' => 'Adding it to Google Calendar',
+        'google_link' => 'Google Calendar',
+        'google_steps' => [
+            'Copy the webcal URL above.',
+            'Open %s.', // %s = link to Google Calendar
+            'Click + next to "Other calendars".',
+            'Choose "From URL".',
+            'Paste the URL.',
+            'Click "Add calendar".',
+        ],
+        'auth_heading' => '🔒 Password required',
+        'auth_text' => 'Generating a calendar feed needs the password.',
+        'use_location' => '📍 Use my current location',
+        'search_address' => '🔍 Search for an address',
+        'address' => 'Address',
+        'address_placeholder' => 'e.g. Rome, Italy',
+        'search_location' => 'Search',
+        'password' => 'Password',
+        'location' => 'Location name',
+        'location_placeholder' => 'e.g. Rome',
+        'location_help' => 'Calendar name: "🌅 Your location · Sun & Twilight"',
+        'latitude' => 'Latitude',
+        'latitude_help' => 'Decimal degrees, e.g. 41.9028',
+        'longitude' => 'Longitude',
+        'longitude_help' => 'Decimal degrees, e.g. 12.4964',
+        'timezone' => 'Time zone',
+        'event_types' => 'Event types',
+        'event_types_help' => '💡 Each adds a morning and an evening event. The times of types you leave out '
+            . 'are still listed in the notes of the others.',
+        'types' => [
+            'civil' => '🌅 Civil twilight: civil dawn → sunrise, sunset → civil dusk',
+            'nautical' => '⚓ Nautical twilight: nautical dawn → civil dawn, civil dusk → nautical dusk',
+            'astro' => '🌌 Astronomical twilight: astronomical dawn → nautical dawn, nautical dusk → '
+                . 'astronomical dusk',
+            'daynight' => '☀️🌙 Daylight & night: sunrise → sunset, astronomical dusk → astronomical dawn (with '
+                . 'day length, the moon and a weekly summary)',
+        ],
+        'rise_offset' => 'Morning offset (minutes)',
+        'set_offset' => 'Evening offset (minutes)',
+        'offset_help' => 'Negative shifts events earlier, positive later',
+        'note' => 'Custom note (optional)',
+        'note_placeholder' => 'Added to daylight and night events',
+        'submit' => 'Generate subscription URL',
+        'footer' => [
+            ['How it is calculated', 'Sunrise and sunset come from the NREL Solar Position Algorithm, which allows '
+                . 'for refraction; twilight and the moon from standard astronomical formulas.'],
+            ['Twilight', 'Civil: from 6° below the horizon to sunrise or sunset, enough light to be outdoors '
+                . 'without lamps. Nautical: 6° to 12° below, the horizon visible at sea while bright stars are '
+                . 'out. Astronomical: 12° to 18° below, the last trace of sunlight before full darkness.'],
+            ['Tip', 'Choose only Daylight & night for an uncluttered calendar: the Daylight event still lists '
+                . 'every twilight time.'],
+        ],
+        // Messages shown by assets/script.js
+        'js' => [
+            'enter_address' => 'Please enter an address.',
+            'searching' => 'Searching…',
+            'found' => '✓ Location found: ',
+            'not_found' => '✗ Location not found',
+            'search_error' => '✗ Error searching for the location',
+            'no_geolocation' => 'Your browser does not support geolocation.',
+            'located' => '✓ Location found',
+            'locate_failed' => 'Unable to get your location: ',
+            'permission_denied' => 'permission denied.',
+            'unavailable' => 'location unavailable.',
+            'timeout' => 'the request timed out.',
+            'select_type' => 'Please select at least one event type.',
+            'enter_password' => 'Please enter the password.',
+            'copied' => '✓ Copied',
+            'copy_failed' => 'Failed to copy: ',
+        ],
     ],
 ];

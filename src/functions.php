@@ -108,17 +108,18 @@ function verify_token(string $providedToken): bool
  */
 function format_duration(int $seconds, bool $withSeconds = false): string
 {
+    $U = get_strings()['units'];
     $seconds = abs($seconds);
     if ($withSeconds && $seconds < 3600) {
         return $seconds < 60
-            ? sprintf('%ds', $seconds)
-            : sprintf('%dm %02ds', intdiv($seconds, 60), $seconds % 60);
+            ? sprintf($U['seconds'], $seconds)
+            : sprintf($U['minutes_seconds'], intdiv($seconds, 60), $seconds % 60);
     }
 
     $minutes = (int) round($seconds / 60);
     return $minutes < 60
-        ? sprintf('%dm', $minutes)
-        : sprintf('%dh %02dm', intdiv($minutes, 60), $minutes % 60);
+        ? sprintf($U['minutes'], $minutes)
+        : sprintf($U['hours_minutes'], intdiv($minutes, 60), $minutes % 60);
 }
 
 /**

@@ -1,5 +1,7 @@
 <?php
 // Web interface for generating calendar URLs; rendered by sunrise-sunset-calendar.php
+$W = get_strings()['web'];
+$e = fn(string $text): string => htmlspecialchars($text);
 $today = sun_events(new DateTimeImmutable('today', new DateTimeZone(DEFAULT_TIMEZONE)), DEFAULT_LAT, DEFAULT_LON);
 $daylight_seconds = (int) round($today['daylength_h'] * 3600);
 ?>
@@ -9,77 +11,68 @@ $daylight_seconds = (int) round($today['daylength_h'] * 3600);
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sun &amp; Twilight Calendar</title>
+    <title><?= $e($W['title']) ?></title>
     <link rel="stylesheet" href="assets/styles.css">
 </head>
 
 <body>
     <div class="container">
-        <h1>🌅 Sun &amp; Twilight Calendar</h1>
+        <h1><?= $e($W['heading']) ?></h1>
 
         <div class="info-box">
-            <strong>Today's Information (Rome, Italy)</strong><br>
-            Date: <?= date('F j, Y') ?><br>
+            <strong><?= $e($W['today_heading']) ?></strong><br>
+            <?= $e(sprintf($W['today_date'], date($W['today_date_format']))) ?><br>
             <span id="time-display">
-                Astronomical Dawn: <?= format_time($today['astro_begin']) ?><br>
-                Nautical Dawn: <?= format_time($today['nautical_begin']) ?><br>
-                Civil Dawn: <?= format_time($today['civil_begin']) ?><br>
-                Sunrise: <?= format_time($today['sunrise']) ?><br>
-                Solar Noon: <?= format_time($today['solar_noon']) ?><br>
-                Sunset: <?= format_time($today['sunset']) ?><br>
-                Civil Dusk: <?= format_time($today['civil_end']) ?><br>
-                Nautical Dusk: <?= format_time($today['nautical_end']) ?><br>
-                Astronomical Dusk: <?= format_time($today['astro_end']) ?><br>
-                <strong>Day Length: <?= format_duration($daylight_seconds) ?></strong>
+                <?php foreach ($W['today_times'] as $key => $label): ?>
+                    <?= $e($label) ?>: <?= $e(format_time($today[$key])) ?><br>
+                <?php endforeach; ?>
+                <strong><?= $e(sprintf($W['day_length'], format_duration($daylight_seconds))) ?></strong>
             </span>
         </div>
 
         <?php if (isset($error)): ?>
             <div class="error-box">
-                <strong>Error:</strong> <?= htmlspecialchars($error) ?>
+                <strong><?= $e($W['error']) ?></strong> <?= $e($error) ?>
             </div>
         <?php endif; ?>
 
         <?php if (isset($subscription_url, $webcal_url)): ?>
             <div class="success-box">
-                <h3>✅ Subscription URL Generated!</h3>
-                <p><strong>Your Calendar Subscription URL:</strong></p>
-                <div class="url-display" id="subscription-url"><?= htmlspecialchars($subscription_url) ?></div>
-                <button class="copy-button" onclick="copyToClipboard('subscription-url', this)">📋 Copy URL</button>
+                <h3><?= $e($W['generated']) ?></h3>
+                <p><strong><?= $e($W['subscription_url']) ?></strong></p>
+                <div class="url-display" id="subscription-url"><?= $e($subscription_url) ?></div>
+                <button class="copy-button" onclick="copyToClipboard('subscription-url', this)"><?= $e($W['copy_url']) ?></button>
 
-                <p style="margin-top: 20px;"><strong>Webcal URL (recommended):</strong></p>
-                <div class="url-display" id="webcal-url"><?= htmlspecialchars($webcal_url) ?></div>
-                <button class="copy-button" onclick="copyToClipboard('webcal-url', this)">📋 Copy Webcal URL</button>
+                <p style="margin-top: 20px;"><strong><?= $e($W['webcal_url']) ?></strong></p>
+                <div class="url-display" id="webcal-url"><?= $e($webcal_url) ?></div>
+                <button class="copy-button" onclick="copyToClipboard('webcal-url', this)"><?= $e($W['copy_webcal']) ?></button>
 
                 <hr>
-                <h4>How to Add to Google Calendar:</h4>
+                <h4><?= $e($W['google_heading']) ?></h4>
                 <ol>
-                    <li>Copy the webcal URL above</li>
-                    <li>Open <a href="https://calendar.google.com" target="_blank">Google Calendar</a></li>
-                    <li>Click the <strong>+</strong> next to "Other calendars"</li>
-                    <li>Select <strong>"From URL"</strong></li>
-                    <li>Paste your subscription URL</li>
-                    <li>Click <strong>"Add calendar"</strong></li>
+                    <?php foreach ($W['google_steps'] as $step): ?>
+                        <li><?= str_replace('%s', '<a href="https://calendar.google.com" target="_blank">' . $e($W['google_link']) . '</a>', $e($step)) ?></li>
+                    <?php endforeach; ?>
                 </ol>
             </div>
         <?php endif; ?>
 
         <div class="warning-box">
-            <strong>🔒 Authentication Required</strong><br>
-            This page requires a password to generate calendar feeds.
+            <strong><?= $e($W['auth_heading']) ?></strong><br>
+            <?= $e($W['auth_text']) ?>
         </div>
 
         <div class="button-row">
-            <button onclick="getLocation()" class="secondary">📍 Use My Current Location</button>
-            <button onclick="showAddressSearch()" class="secondary">🔍 Search Address</button>
+            <button onclick="getLocation()" class="secondary"><?= $e($W['use_location']) ?></button>
+            <button onclick="showAddressSearch()" class="secondary"><?= $e($W['search_address']) ?></button>
         </div>
         <div id="location-status"></div>
 
         <div id="address-search" style="display: none; margin-top: 15px;">
             <div class="form-group">
-                <label for="address-input">Address</label>
-                <input type="text" id="address-input" placeholder="e.g., Rome, Italy">
-                <button onclick="geocodeAddress()" style="margin-top: 10px;">Search Location</button>
+                <label for="address-input"><?= $e($W['address']) ?></label>
+                <input type="text" id="address-input" placeholder="<?= $e($W['address_placeholder']) ?>">
+                <button onclick="geocodeAddress()" style="margin-top: 10px;"><?= $e($W['search_location']) ?></button>
             </div>
             <div id="geocode-status"></div>
         </div>
@@ -88,34 +81,34 @@ $daylight_seconds = (int) round($today['daylength_h'] * 3600);
             <hr>
 
             <div class="form-group">
-                <label for="password">Password <span class="required">*</span></label>
+                <label for="password"><?= $e($W['password']) ?> <span class="required">*</span></label>
                 <input type="password" name="password" id="password" required>
             </div>
 
             <hr>
 
             <div class="form-group">
-                <label for="location">Location Name</label>
-                <input type="text" name="location" id="location" placeholder="e.g., Rome">
-                <div class="help-text">Calendar name: "☀️🌅 Sun & Twilight - Your Location"</div>
+                <label for="location"><?= $e($W['location']) ?></label>
+                <input type="text" name="location" id="location" placeholder="<?= $e($W['location_placeholder']) ?>">
+                <div class="help-text"><?= $e($W['location_help']) ?></div>
             </div>
 
             <div class="form-group">
-                <label for="lat">Latitude <span class="required">*</span></label>
+                <label for="lat"><?= $e($W['latitude']) ?> <span class="required">*</span></label>
                 <input type="number" name="lat" id="lat" step="0.000001" min="-90" max="90"
                     value="<?= DEFAULT_LAT ?>" required onchange="reverseGeocode()">
-                <div class="help-text">Decimal format (e.g., 41.9028)</div>
+                <div class="help-text"><?= $e($W['latitude_help']) ?></div>
             </div>
 
             <div class="form-group">
-                <label for="lon">Longitude <span class="required">*</span></label>
+                <label for="lon"><?= $e($W['longitude']) ?> <span class="required">*</span></label>
                 <input type="number" name="lon" id="lon" step="0.000001" min="-180" max="180"
                     value="<?= DEFAULT_LON ?>" required onchange="reverseGeocode()">
-                <div class="help-text">Decimal format (e.g., 12.4964)</div>
+                <div class="help-text"><?= $e($W['longitude_help']) ?></div>
             </div>
 
             <div class="form-group">
-                <label for="zone">Timezone <span class="required">*</span></label>
+                <label for="zone"><?= $e($W['timezone']) ?> <span class="required">*</span></label>
                 <select name="zone" id="zone" required>
                     <?php foreach (timezone_identifiers_list() as $zone): ?>
                         <option value="<?= htmlspecialchars($zone) ?>"<?= $zone === DEFAULT_TIMEZONE ? ' selected' : '' ?>><?= htmlspecialchars($zone) ?></option>
@@ -126,67 +119,50 @@ $daylight_seconds = (int) round($today['daylength_h'] * 3600);
             <hr>
 
             <div class="form-group">
-                <strong>Event Types <span class="required">*</span></strong>
-                <div class="help-text" style="margin-bottom: 10px;">💡 Each creates 2 events (morning + evening). Times of the types you leave out are still listed in the notes of the others.</div>
-                <div class="checkbox-group">
-                    <input type="checkbox" name="civil" id="civil" checked>
-                    <label for="civil">🌅 Civil Twilight: civil dawn → sunrise, sunset → civil dusk</label>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" name="nautical" id="nautical">
-                    <label for="nautical">⚓ Nautical Twilight: nautical dawn → civil dawn, civil dusk → nautical dusk</label>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" name="astro" id="astro">
-                    <label for="astro">🌌 Astronomical Twilight: astronomical dawn → nautical dawn, nautical dusk → astronomical dusk</label>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" name="daynight" id="daynight" checked>
-                    <label for="daynight">☀️🌙 Daylight &amp; Night: sunrise → sunset, astronomical dusk → astronomical dawn (with day length, moon phase and a weekly summary)</label>
-                </div>
+                <strong><?= $e($W['event_types']) ?> <span class="required">*</span></strong>
+                <div class="help-text" style="margin-bottom: 10px;"><?= $e($W['event_types_help']) ?></div>
+                <?php foreach ($W['types'] as $type => $label): ?>
+                    <div class="checkbox-group">
+                        <input type="checkbox" name="<?= $type ?>" id="<?= $type ?>"<?= in_array($type, ['civil', 'daynight'], true) ? ' checked' : '' ?>>
+                        <label for="<?= $type ?>"><?= $e($label) ?></label>
+                    </div>
+                <?php endforeach; ?>
             </div>
 
             <hr>
 
             <div class="form-group">
-                <label for="rise_off">Morning Event Offset (minutes)</label>
+                <label for="rise_off"><?= $e($W['rise_offset']) ?></label>
                 <input type="number" name="rise_off" id="rise_off" value="0" min="-1440" max="1440">
-                <div class="help-text">Shift earlier (negative) or later (positive)</div>
+                <div class="help-text"><?= $e($W['offset_help']) ?></div>
             </div>
 
             <div class="form-group">
-                <label for="set_off">Evening Event Offset (minutes)</label>
+                <label for="set_off"><?= $e($W['set_offset']) ?></label>
                 <input type="number" name="set_off" id="set_off" value="0" min="-1440" max="1440">
-                <div class="help-text">Shift earlier (negative) or later (positive)</div>
+                <div class="help-text"><?= $e($W['offset_help']) ?></div>
             </div>
 
             <hr>
 
             <div class="form-group">
-                <label for="description">Custom Note (optional)</label>
+                <label for="description"><?= $e($W['note']) ?></label>
                 <textarea name="description" id="description" rows="3"
-                    placeholder="Added to daylight and night events"></textarea>
+                    placeholder="<?= $e($W['note_placeholder']) ?>"></textarea>
             </div>
 
-            <input type="submit" name="generate_url" value="Generate Subscription URL">
+            <input type="submit" name="generate_url" value="<?= $e($W['submit']) ?>">
         </form>
 
         <div class="footer">
-            <strong>High-Precision NREL Calculations:</strong>
-            <p>Uses the NREL Solar Position Algorithm, with proper solar declination, equation of time, and atmospheric refraction. Always displays 24-hour time format.</p>
-            
-            <strong>Astronomical Terminology:</strong>
-            <ul>
-                <li><strong>Civil:</strong> Sun 0-6° below horizon - outdoor activities possible</li>
-                <li><strong>Nautical:</strong> Sun 6-12° below horizon - horizon visible at sea</li>
-                <li><strong>Astronomical:</strong> Sun 12-18° below horizon - last/first astronomical light</li>
-            </ul>
-
-            <strong>Smart Mode:</strong>
-            <p>Select only <strong>Day & Night</strong> events to get all twilight times embedded in notes for a clean calendar!</p>
+            <?php foreach ($W['footer'] as [$heading, $text]): ?>
+                <strong><?= $e($heading) ?></strong>
+                <p><?= $e($text) ?></p>
+            <?php endforeach; ?>
         </div>
     </div>
 
+    <script>const STRINGS = <?= json_encode($W['js'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;</script>
     <script src="assets/script.js"></script>
 </body>
 
