@@ -910,6 +910,31 @@ function build_dusk_supplemental(array $c, array $S): string
 }
 
 /**
+ * All of today's twilights, for a calendar subscribed to no twilight events, so
+ * Daylight (or Night, when the sun does not rise) still carries every time.
+ *
+ * @param array $c Day context: spans, enabled
+ */
+function build_twilight_schedule(array $c, array $S): string
+{
+    if ($c['enabled']['civil'] || $c['enabled']['nautical'] || $c['enabled']['astro']) {
+        return '';
+    }
+    $keys = [
+        'morning_astronomical', 'morning_nautical', 'morning_civil',
+        'evening_civil', 'evening_nautical', 'evening_astronomical',
+    ];
+    $info = '';
+    foreach ($keys as $key) {
+        if ($c['spans'][$key] !== null) {
+            $info .= format_schedule_span($S['summaries'][$key], $c['spans'][$key], $S['supplemental'][$key]);
+        }
+    }
+
+    return $info === '' ? '' : "\n\n" . $S['headers']['twilight'] . "\n" . rtrim($info, "\n");
+}
+
+/**
  * @param array<string> $twilights Twilight keys in chronological order
  * @param string $period 'daylight' or 'night', listed after the twilights
  */

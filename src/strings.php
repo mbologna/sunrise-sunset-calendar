@@ -102,6 +102,7 @@ return [
         'moon' => '%s Moon', // %s = moon phase emoji
         'today' => '☀️ Today',
         'tonight' => '🌙 Tonight',
+        'twilight' => '🌗 Twilight today',
     ],
 
     // Data lines

@@ -378,7 +378,8 @@ function render_calendar(array $o): string
         if ($enabled['daylight'] && $spans['daylight'] !== null) {
             [$start, $end] = $spans['daylight'];
 
-            $desc = daylight_details($c, $S) . "\n" . daylight_about($ev, $S)
+            $desc = rtrim(daylight_details($c, $S)) . build_twilight_schedule($c, $S)
+                . "\n\n" . daylight_about($ev, $S)
                 . $offsetNote($o['rise_offset'], $o['set_offset']) . $customNote;
 
             $out .= ical_event(
@@ -394,7 +395,9 @@ function render_calendar(array $o): string
         if ($enabled['daylight'] && $spans['night'] !== null) {
             [$start, $end] = $spans['night'];
 
-            $desc = night_details($c, $S) . "\n" . night_about($S)
+            // With no Daylight event today, the night carries the twilight times instead
+            $schedule = $spans['daylight'] === null ? build_twilight_schedule($c, $S) : '';
+            $desc = rtrim(night_details($c, $S)) . $schedule . "\n\n" . night_about($S)
                 . $offsetNote($o['set_offset'], $o['rise_offset']) . $customNote;
 
             $out .= ical_event(

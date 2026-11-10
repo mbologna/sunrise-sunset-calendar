@@ -264,6 +264,38 @@ class CalendarFeedTest extends TestCase
         $this->assertSame([], $this->eventsOfType($ics, 'daylight'));
     }
 
+    public function testDaylightOnlyCalendarStillListsEveryTwilight(): void
+    {
+        $ics = $this->feed([
+            'window_days' => 0,
+            'enabled' => ['civil' => false, 'nautical' => false, 'astro' => false, 'daylight' => true],
+        ]);
+        [$daylight] = $this->eventsOfType($ics, 'daylight');
+        [$night] = $this->eventsOfType($ics, 'night');
+
+        foreach (['🌌 Astronomical Twilight: ', '⚓ Nautical Twilight: ', '🌅 Civil Twilight: ', '🌇 Civil Twilight: '] as $line) {
+            $this->assertStringContainsString($line, $daylight['DESCRIPTION']);
+        }
+        $this->assertSame(2, substr_count($daylight['DESCRIPTION'], '🌌 Astronomical Twilight: '), 'Morning and evening');
+        $this->assertStringNotContainsString('Twilight today', $night['DESCRIPTION'], 'Listed once, on Daylight');
+
+        // With civil twilight subscribed, its events carry the rest instead
+        [$daylight] = $this->eventsOfType($this->feed(['window_days' => 0, 'enabled' => ['civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => true]]), 'daylight');
+        $this->assertStringNotContainsString('Twilight today', $daylight['DESCRIPTION']);
+    }
+
+    public function testPolarNightCarriesTwilightsOnTheNight(): void
+    {
+        $ics = $this->feed([
+            'lat' => 69.65, 'lon' => 18.96, 'timezone' => 'Europe/Oslo', 'today' => '2026-12-21', 'window_days' => 0,
+            'enabled' => ['civil' => false, 'nautical' => false, 'astro' => false, 'daylight' => true],
+        ]);
+        [$night] = $this->eventsOfType($ics, 'night');
+
+        $this->assertStringContainsString('🌗 Twilight today', $night['DESCRIPTION']);
+        $this->assertStringContainsString('🌅 Civil Twilight: ', $night['DESCRIPTION']);
+    }
+
     public function testWeekSummaryOnSundaysOnly(): void
     {
         $summaries = $this->eventsOfType($this->feed(['window_days' => 13]), 'week');
