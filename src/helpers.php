@@ -302,7 +302,8 @@ function twilight_profile_fields(): array
  *     daylight_min: array{0: float, 1: int}, daylight_max: array{0: float, 1: int},
  *     midnight_sun: array, polar_night: array, white_nights: array,
  *     bands: array<string, ?array{min: array{0: int, 1: int}, max: array{0: int, 1: int}, all_night: array}>,
- *     extremes: ?array{earliest_sunrise: int, latest_sunrise: int, earliest_sunset: int, latest_sunset: int}
+ *     extremes: ?array{earliest_sunrise: int, latest_sunrise: int, earliest_sunset: int, latest_sunset: int},
+ *     nights: array<?int>
  * } Lengths in hours (daylight) or seconds (bands), each paired with its day's timestamp
  */
 function year_summary(float $lat, float $lon, int $year, float $utcOffset): array
@@ -346,6 +347,15 @@ function year_summary(float $lat, float $lon, int $year, float $utcOffset): arra
         ];
     }
 
+    // Night lengths by day. December's last night borrows January 1 of the same year
+    // for its morning; the dates differ by a year, not the sun.
+    $nights = [];
+    foreach ($days as $i => $d) {
+        $start = $d['astro_end_frac'];
+        $end = $days[($i + 1) % count($days)]['astro_begin_frac'];
+        $nights[$i] = ($start !== null && $end !== null) ? (int) round(($end + 1 - $start) * 86400) : null;
+    }
+
     $polar = in_array(true, $polarDay, true) || in_array(true, $polarNight, true);
     $extremes = null;
     if (!$polar) {
@@ -369,7 +379,29 @@ function year_summary(float $lat, float $lon, int $year, float $utcOffset): arra
         'white_nights' => day_runs($whiteNights, $timestamps),
         'bands' => $bands,
         'extremes' => $extremes,
+        'nights' => $nights,
     ];
+}
+
+/**
+ * Where a night ranks among this year's nights, as a percentile of their lengths.
+ *
+ * @param array $year year_summary() for the night's year
+ * @param int $dayIndex Day of the year (0-based) the night starts on
+ * @return float 100 for the longest night, 0 for the shortest
+ */
+function night_percentile(array $year, int $dayIndex): float
+{
+    $lengths = array_values(array_filter($year['nights'], fn($n) => $n !== null));
+    $length = $year['nights'][$dayIndex] ?? null;
+    if ($length === null || $lengths === []) {
+        return 0.0;
+    }
+    if ($length >= max($lengths)) {
+        return 100.0;
+    }
+
+    return round(count(array_filter($lengths, fn($n) => $n < $length)) / count($lengths) * 100, 1);
 }
 
 /**

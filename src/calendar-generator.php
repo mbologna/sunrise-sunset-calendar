@@ -273,7 +273,7 @@ function render_calendar(array $o): string
             ],
             'night' => [
                 'seconds' => $nightSeconds,
-                'percentile' => 100 - $daylightPercentile,
+                'percentile' => night_percentile($yearInfo, (int) $day->format('z')),
                 'comparison' => ($spans['night'] && $lastNight !== null)
                     ? format_comparison($nightSeconds - $lastNight, $S['comparisons']['last_night'], $S)
                     : null,

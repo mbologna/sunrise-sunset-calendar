@@ -358,6 +358,17 @@ class CalendarFeedTest extends TestCase
         $this->assertStringContainsString('Calendar times shifted from the actual times: start -10m\, end +15m.', $daylight['DESCRIPTION']);
     }
 
+    public function testNightRankComesFromNightLengths(): void
+    {
+        // Daylight is 0h through Tromsø's polar night, but nights still differ in length
+        $tromso = ['lat' => 69.65, 'lon' => 18.96, 'timezone' => 'Europe/Oslo', 'window_days' => 0];
+
+        [$december1] = $this->eventsOfType($this->feed($tromso + ['today' => '2026-12-01']), 'night');
+        [$solstice] = $this->eventsOfType($this->feed($tromso + ['today' => '2026-12-21']), 'night');
+        $this->assertStringNotContainsString('Longest night of the year', $december1['DESCRIPTION']);
+        $this->assertStringContainsString('Longest night of the year', $solstice['DESCRIPTION']);
+    }
+
     public function testDefaultTimezoneIsRestored(): void
     {
         $this->feed(['window_days' => 0]);
