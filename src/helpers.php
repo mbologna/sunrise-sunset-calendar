@@ -821,7 +821,10 @@ function daylight_details(array $c, array $S): string
         )
         : sprintf($L['solar_noon'], format_local($ev['solar_noon']), round($ev['noon_elevation']));
     $lines[] = sprintf($L['length_share'], format_duration($d['seconds']), round($d['seconds'] / 864));
-    $lines[] = format_percentile_bar($d['percentile']) . ' ' . format_rank($d['percentile'], 'daylight', $S);
+    // Midnight-sun days all tie at 24 hours: no rank to give
+    if ($ev['polar'] !== 'day') {
+        $lines[] = format_percentile_bar($d['percentile']) . ' ' . format_rank($d['percentile'], 'daylight', $S);
+    }
     $light = light_line('daylight', $ev, $S);
     if ($light !== null) {
         $lines[] = $light;

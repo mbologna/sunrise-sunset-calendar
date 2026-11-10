@@ -190,6 +190,7 @@ class CalendarFeedTest extends TestCase
         $length = strtotime($daylight['DTEND']) - strtotime($daylight['DTSTART']);
         $this->assertSame(86400, $length);
         $this->assertStringStartsWith('Midnight sun: the sun does not set today.', $daylight['DESCRIPTION']);
+        $this->assertStringNotContainsString('of the year', $daylight['DESCRIPTION'], 'No rank among tied 24-hour days');
 
         $types = [
             'morning-civil-twilight', 'morning-nautical-twilight', 'morning-astronomical-twilight',
