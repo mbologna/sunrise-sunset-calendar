@@ -36,7 +36,7 @@ if (file_exists($configFile)) {
 
 if (!defined('AUTH_TOKEN') || AUTH_TOKEN === '' || AUTH_TOKEN === 'CHANGE_ME_TO_A_RANDOM_STRING') {
     http_response_code(500);
-    exit('Error: Please set AUTH_TOKEN via environment variable or config/config.php');
+    exit(get_strings()['errors']['missing_token']);
 }
 
 defined('CALENDAR_WINDOW_DAYS') || define('CALENDAR_WINDOW_DAYS', 400);
@@ -72,7 +72,7 @@ if (isset($_GET['health'])) {
 if (isset($_GET['feed'])) {
     if (!verify_token(param($_GET, 'token'))) {
         http_response_code(403);
-        exit('Invalid authentication token');
+        exit(get_strings()['errors']['invalid_token']);
     }
 
     $flag = fn(string $key) => param($_GET, $key) === '1';
@@ -104,7 +104,7 @@ if (isset($_GET['feed'])) {
 // URL generation form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_url'])) {
     if (!verify_token(param($_POST, 'password'))) {
-        $error = 'Invalid password';
+        $error = get_strings()['errors']['invalid_password'];
     } else {
         $params = [
             'feed' => '1',

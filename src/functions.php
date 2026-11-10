@@ -97,21 +97,35 @@ function verify_token(string $providedToken): bool
 // ============================================================================
 
 /**
- * Format duration in short form.
+ * Format a duration compactly: "9h 05m", "32m", or with seconds "2m 05s".
  *
- * @param int $seconds Duration in seconds
+ * Seconds are shown only when asked for and under an hour; otherwise the value
+ * is rounded to the minute.
+ *
+ * @param int $seconds Duration in seconds (sign is ignored)
+ * @param bool $withSeconds Keep seconds for durations under an hour
  * @return string Formatted duration
  */
-function format_duration_short(int $seconds): string
+function format_duration(int $seconds, bool $withSeconds = false): string
 {
-    $hours = (int) floor($seconds / 3600);
-    $minutes = (int) floor(($seconds % 3600) / 60);
-    $secs = $seconds % 60;
-
-    if ($hours > 0) {
-        return sprintf('%dh %dm', $hours, $minutes);
-    } elseif ($minutes > 0) {
-        return sprintf('%dm %ds', $minutes, $secs);
+    $U = get_strings()['units'];
+    $seconds = abs($seconds);
+    if ($withSeconds && $seconds < 3600) {
+        return $seconds < 60
+            ? sprintf($U['seconds'], $seconds)
+            : sprintf($U['minutes_seconds'], intdiv($seconds, 60), $seconds % 60);
     }
-    return sprintf('%ds', $secs);
+
+    $minutes = (int) round($seconds / 60);
+    return $minutes < 60
+        ? sprintf($U['minutes'], $minutes)
+        : sprintf($U['hours_minutes'], intdiv($minutes, 60), $minutes % 60);
+}
+
+/**
+ * Format a signed duration rounded to the minute: "+15m", "-1h 05m".
+ */
+function format_signed_duration(int $seconds): string
+{
+    return ($seconds <= -30 ? '-' : '+') . format_duration($seconds);
 }

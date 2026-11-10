@@ -10,51 +10,74 @@ use Tests\BaseTest;
  */
 class FormatTest extends BaseTest
 {
-    public function testShortDurationFormatting2Hours30Minutes(): void
+    public function testDurationHoursPadMinutes(): void
     {
-        $this->assertEquals('2h 30m', format_duration_short(2 * 3600 + 30 * 60));
+        $this->assertSame('9h 05m', format_duration(9 * 3600 + 5 * 60));
     }
 
-    public function testShortDurationFormatting45Minutes30Seconds(): void
+    public function testDurationUnderAnHourRoundsToMinutes(): void
     {
-        $this->assertEquals('45m 30s', format_duration_short(45 * 60 + 30));
+        $this->assertSame('32m', format_duration(32 * 60 + 20));
     }
 
-    public function testShortDurationFormatting30Seconds(): void
+    public function testDurationWithSecondsUnderAnHour(): void
     {
-        $this->assertEquals('30s', format_duration_short(30));
+        $this->assertSame('2m 05s', format_duration(125, true));
+        $this->assertSame('45s', format_duration(45, true));
     }
 
-    public function testDayLengthComparisonPositive(): void
+    public function testDurationWithSecondsDropsThemFromAnHour(): void
     {
-        $this->assertEquals(
-            '+2m 30s',
-            format_day_length_comparison(150)
-        );
+        $this->assertSame('5h 25m', format_duration(5 * 3600 + 25 * 60 + 20, true));
     }
 
-    public function testDayLengthComparisonNegative(): void
+    public function testDurationIgnoresSign(): void
     {
-        $this->assertEquals(
-            '-1m 45s',
-            format_day_length_comparison(-105)
-        );
+        $this->assertSame('1h 30m', format_duration(-5400));
     }
 
-    public function testDayLengthComparisonZero(): void
+    public function testSignedDuration(): void
     {
-        $this->assertEquals(
-            'same length as yesterday',
-            format_day_length_comparison(0)
-        );
+        $this->assertSame('-10m', format_signed_duration(-600));
+        $this->assertSame('+15m', format_signed_duration(900));
+        $this->assertSame('+0m', format_signed_duration(-20), 'No negative zero');
     }
 
-    public function testDayLengthComparisonWholeMinutesKeepsSeconds(): void
+    public function testComparisonLonger(): void
     {
-        $this->assertEquals(
-            '+5m 00s',
-            format_day_length_comparison(300)
-        );
+        $this->assertSame('2m 30s longer than yesterday', format_comparison(150, 'yesterday', get_strings()));
+    }
+
+    public function testComparisonShorter(): void
+    {
+        $this->assertSame('1m 45s shorter than last night', format_comparison(-105, 'last night', get_strings()));
+    }
+
+    public function testComparisonSame(): void
+    {
+        $this->assertSame('Same length as yesterday', format_comparison(0, 'yesterday', get_strings()));
+    }
+
+    public function testRankNamesTheExtremes(): void
+    {
+        $S = get_strings();
+        $this->assertSame('Longest day of the year', format_rank(100.0, 'daylight', $S));
+        $this->assertSame('Shortest night of the year', format_rank(0.0, 'night', $S));
+    }
+
+    public function testRankNeverRoundsToAnExtreme(): void
+    {
+        $S = get_strings();
+        $this->assertSame("Longer than 99% of this year's days", format_rank(99.7, 'daylight', $S));
+        $this->assertSame("Longer than 1% of this year's nights", format_rank(0.3, 'night', $S));
+    }
+
+    public function testDayRunsMergeAcrossNewYear(): void
+    {
+        $flags = [true, true, false, false, true, false, true];
+        $runs = day_runs($flags, range(0, 6));
+
+        $this->assertSame([[4, 4], [6, 1]], $runs);
     }
 
     public function testSanitizeFloatValidLatitude(): void

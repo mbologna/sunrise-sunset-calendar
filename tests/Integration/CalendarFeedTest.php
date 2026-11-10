@@ -88,7 +88,7 @@ class CalendarFeedTest extends TestCase
     {
         $ics = str_replace("\r\n ", '', $this->feed(['location' => 'Foo, Bar; Baz']));
 
-        $this->assertStringContainsString('X-WR-CALNAME:🌅☀️🌙 Sun\, Twilight & Moon - Foo\, Bar\; Baz', $ics);
+        $this->assertStringContainsString('X-WR-CALNAME:🌅 Foo\, Bar\; Baz · Sun & Twilight', $ics);
     }
 
     public function testEveryEventEndsAfterItStarts(): void
@@ -138,19 +138,19 @@ class CalendarFeedTest extends TestCase
 
         $special = array_map(
             fn($e) => $e['DTSTART'] . ' ' . $e['SUMMARY'],
-            $this->eventsOfType($ics, 'special')
+            array_filter($this->events($ics), fn($e) => preg_match('/^(spring|autumn)-equinox-|^(summer|winter)-solstice-/', $e['UID']))
         );
 
         $this->assertSame([
-            '20260320 ⚖️ March Equinox',
-            '20260621 ☀️ June Solstice',
-            '20260923 ⚖️ September Equinox',
-            '20261221 🌙 December Solstice',
-            '20270320 ⚖️ March Equinox',
-            '20270621 ☀️ June Solstice',
-            '20270923 ⚖️ September Equinox',
-            '20271222 🌙 December Solstice',
-        ], $special);
+            '20260320 🌱 Spring Equinox',
+            '20260621 ☀️ Summer Solstice',
+            '20260923 🍂 Autumn Equinox',
+            '20261221 ❄️ Winter Solstice',
+            '20270320 🌱 Spring Equinox',
+            '20270621 ☀️ Summer Solstice',
+            '20270923 🍂 Autumn Equinox',
+            '20271222 ❄️ Winter Solstice',
+        ], array_values($special));
     }
 
     public function testPolarNightHasMiddayTwilightAndNoDaylight(): void
@@ -159,11 +159,27 @@ class CalendarFeedTest extends TestCase
 
         $this->assertSame([], $this->eventsOfType($ics, 'daylight'));
 
-        // The sun peaks inside civil twilight, so dawn runs up to solar noon and dusk starts there
-        [$dawn] = $this->eventsOfType($ics, 'civil-dawn');
-        [$dusk] = $this->eventsOfType($ics, 'civil-dusk');
+        // The sun peaks inside civil twilight, so morning twilight runs up to solar noon and evening starts there
+        [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
+        [$dusk] = $this->eventsOfType($ics, 'evening-civil-twilight');
         $this->assertSame($dawn['DTEND'], $dusk['DTSTART']);
-        $this->assertStringContainsString('Sunrise: —', $dawn['DESCRIPTION']);
+        $this->assertStringStartsWith('From civil dawn ', $dawn['DESCRIPTION']);
+        $this->assertStringContainsString(' to solar noon ', $dawn['DESCRIPTION']);
+        $this->assertStringContainsString(
+            'Polar night: today the sun climbs from 6° below the horizon to 3° below at solar noon\\, its highest today.',
+            $dawn['DESCRIPTION']
+        );
+        $this->assertStringNotContainsString('to sunrise', $dawn['DESCRIPTION']);
+        $this->assertStringContainsString('→ [Civil] → Solar noon', $dawn['DESCRIPTION']);
+        $this->assertStringContainsString(
+            'Polar night: today the sun sinks from 3° below the horizon at solar noon\\, its highest today\\, to 6° below.',
+            $dusk['DESCRIPTION']
+        );
+        $this->assertStringContainsString('Solar noon → [Civil] →', $dusk['DESCRIPTION']);
+
+        [$solstice] = $this->eventsOfType($ics, 'winter-solstice');
+        $this->assertStringContainsString('The sun stays 3° below the horizon even at noon.', $solstice['DESCRIPTION']);
+        $this->assertStringContainsString('Polar night here from Nov 28 to Jan 14.', $solstice['DESCRIPTION']);
     }
 
     public function testMidnightSunHasAllDayDaylightAndNoTwilight(): void
@@ -173,8 +189,13 @@ class CalendarFeedTest extends TestCase
         [$daylight] = $this->eventsOfType($ics, 'daylight');
         $length = strtotime($daylight['DTEND']) - strtotime($daylight['DTSTART']);
         $this->assertSame(86400, $length);
+        $this->assertStringStartsWith('Midnight sun: the sun does not set today.', $daylight['DESCRIPTION']);
 
-        foreach (['civil-dawn', 'nautical-dawn', 'astro-dawn', 'civil-dusk', 'nautical-dusk', 'astro-dusk', 'night'] as $type) {
+        $types = [
+            'morning-civil-twilight', 'morning-nautical-twilight', 'morning-astronomical-twilight',
+            'evening-civil-twilight', 'evening-nautical-twilight', 'evening-astronomical-twilight', 'night',
+        ];
+        foreach ($types as $type) {
             $this->assertSame([], $this->eventsOfType($ics, $type), "No {$type} under the midnight sun");
         }
     }
@@ -184,11 +205,22 @@ class CalendarFeedTest extends TestCase
         // Stockholm in June: the sun dips below the horizon but never below -12°
         $ics = $this->feed(['lat' => 59.33, 'lon' => 18.07, 'timezone' => 'Europe/Stockholm', 'today' => '2027-06-21', 'window_days' => 1]);
 
-        [$dusk] = $this->eventsOfType($ics, 'nautical-dusk');
-        [, $nextDawn] = $this->eventsOfType($ics, 'nautical-dawn');
+        [$dusk] = $this->eventsOfType($ics, 'evening-nautical-twilight');
+        [, $nextDawn] = $this->eventsOfType($ics, 'morning-nautical-twilight');
         $this->assertEqualsWithDelta(strtotime($dusk['DTEND']), strtotime($nextDawn['DTSTART']), 120);
-        $this->assertSame([], $this->eventsOfType($ics, 'astro-dusk'));
+        $this->assertSame([], $this->eventsOfType($ics, 'evening-astronomical-twilight'));
         $this->assertSame([], $this->eventsOfType($ics, 'night'));
+
+        $this->assertStringStartsWith('From civil dusk ', $dusk['DESCRIPTION']);
+        $this->assertStringContainsString(' to solar midnight ', $dusk['DESCRIPTION']);
+        $this->assertStringContainsString('Sunset → Civil → [Nautical] → Solar midnight', $dusk['DESCRIPTION']);
+        $this->assertStringContainsString(
+            'Today the sun sinks from 6° below the horizon to 7° below at solar midnight\\, its lowest tonight.',
+            $dusk['DESCRIPTION']
+        );
+        $this->assertStringNotContainsString('from 6° to 12° below', $dusk['DESCRIPTION']);
+        $this->assertStringStartsWith('From solar midnight ', $nextDawn['DESCRIPTION']);
+        $this->assertStringContainsString('the sun never gets 18° below the horizon', str_replace("\r\n ", '', $ics));
     }
 
     public function testSouthernHemisphereWinterSolsticeIsInJune(): void
@@ -196,7 +228,7 @@ class CalendarFeedTest extends TestCase
         $ics = $this->feed(['lat' => -33.8688, 'lon' => 151.2093, 'timezone' => 'Australia/Sydney', 'window_days' => 0]);
 
         [$daylight] = $this->eventsOfType($ics, 'daylight');
-        $this->assertMatchesRegularExpression('/Compared to Winter Solstice: \+[^\\\\]*\\\\n  \(Jun 21\)/', $daylight['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/\\\\n[^\\\\]+ longer than the winter solstice \(Jun 21\)/', $daylight['DESCRIPTION']);
     }
 
     public function testOffsetsShiftMorningAndEveningEvents(): void
@@ -213,10 +245,8 @@ class CalendarFeedTest extends TestCase
         [$night] = $this->eventsOfType($this->feed(['window_days' => 0]), 'night');
         $minutes = (int) round((strtotime($night['DTEND']) - strtotime($night['DTSTART'])) / 60);
 
-        $this->assertStringContainsString(
-            'Duration: ' . format_duration_full($minutes * 60),
-            $night['DESCRIPTION']
-        );
+        $this->assertStringContainsString('Length: ' . format_duration($minutes * 60) . '\,', $night['DESCRIPTION']);
+        $this->assertStringContainsString(' Night · ' . format_duration($minutes * 60), $night['SUMMARY']);
     }
 
     public function testSupplementalScheduleListsOnlyDisabledTypes(): void
@@ -225,24 +255,192 @@ class CalendarFeedTest extends TestCase
             'window_days' => 0,
             'enabled' => ['civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => false],
         ]);
-        [$dawn] = $this->eventsOfType($ics, 'civil-dawn');
+        [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
 
-        $this->assertStringContainsString('⚓ Nautical Dawn: ', $dawn['DESCRIPTION']);
-        $this->assertStringContainsString('🌌 Astronomical Dawn: ', $dawn['DESCRIPTION']);
-        $this->assertStringContainsString('☀️ Daylight', $dawn['DESCRIPTION']);
-        $this->assertStringNotContainsString('🌅 Civil Dawn: ', $dawn['DESCRIPTION']);
+        $this->assertStringContainsString('⚓ Nautical Twilight: ', $dawn['DESCRIPTION']);
+        $this->assertStringContainsString('🌌 Astronomical Twilight: ', $dawn['DESCRIPTION']);
+        $this->assertStringContainsString('☀️ Daylight\\nFrom sunrise ', $dawn['DESCRIPTION']);
+        $this->assertStringNotContainsString('🌅 Civil Twilight: ', $dawn['DESCRIPTION']);
         $this->assertSame([], $this->eventsOfType($ics, 'daylight'));
+    }
+
+    public function testDaylightOnlyCalendarStillListsEveryTwilight(): void
+    {
+        $ics = $this->feed([
+            'window_days' => 0,
+            'enabled' => ['civil' => false, 'nautical' => false, 'astro' => false, 'daylight' => true],
+        ]);
+        [$daylight] = $this->eventsOfType($ics, 'daylight');
+        [$night] = $this->eventsOfType($ics, 'night');
+
+        foreach (['🌌 Astronomical Twilight: ', '⚓ Nautical Twilight: ', '🌅 Civil Twilight: ', '🌇 Civil Twilight: '] as $line) {
+            $this->assertStringContainsString($line, $daylight['DESCRIPTION']);
+        }
+        $this->assertSame(2, substr_count($daylight['DESCRIPTION'], '🌌 Astronomical Twilight: '), 'Morning and evening');
+        $this->assertStringNotContainsString('Twilight today', $night['DESCRIPTION'], 'Listed once, on Daylight');
+
+        // With civil twilight subscribed, its events carry the rest instead
+        [$daylight] = $this->eventsOfType($this->feed(['window_days' => 0, 'enabled' => ['civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => true]]), 'daylight');
+        $this->assertStringNotContainsString('Twilight today', $daylight['DESCRIPTION']);
+    }
+
+    public function testPolarNightCarriesTwilightsOnTheNight(): void
+    {
+        $ics = $this->feed([
+            'lat' => 69.65, 'lon' => 18.96, 'timezone' => 'Europe/Oslo', 'today' => '2026-12-21', 'window_days' => 0,
+            'enabled' => ['civil' => false, 'nautical' => false, 'astro' => false, 'daylight' => true],
+        ]);
+        [$night] = $this->eventsOfType($ics, 'night');
+
+        $this->assertStringContainsString('🌗 Twilight today', $night['DESCRIPTION']);
+        $this->assertStringContainsString('🌅 Civil Twilight: ', $night['DESCRIPTION']);
     }
 
     public function testWeekSummaryOnSundaysOnly(): void
     {
-        $summaries = $this->eventsOfType($this->feed(['window_days' => 13]), 'week-summary');
+        $summaries = $this->eventsOfType($this->feed(['window_days' => 13]), 'week');
 
         $this->assertCount(2, $summaries);
         foreach ($summaries as $summary) {
+            // All-day from Sunday through Saturday: DTEND is the following Sunday
             $this->assertSame('0', date('w', strtotime($summary['DTSTART'])));
+            $this->assertSame(date('Ymd', strtotime($summary['DTSTART'] . ' +7 days')), $summary['DTEND']);
         }
-        $this->assertStringContainsString('Weekly Change: -', $summaries[0]['DESCRIPTION'], 'Days shorten in October');
+        $this->assertMatchesRegularExpression('/^📉 \d+m less daylight this week$/', $summaries[0]['SUMMARY'], 'Days shorten in October');
+        $this->assertMatchesRegularExpression('/Sunrise \d\d:\d\d → \d\d:\d\d · Sunset \d\d:\d\d → \d\d:\d\d/', $summaries[0]['DESCRIPTION']);
+    }
+
+    public function testTimedEventsNameTheirBoundaryInstants(): void
+    {
+        $timed = array_filter($this->events($this->feed(['window_days' => 6])), fn($e) => str_contains($e['DTSTART'], 'T'));
+
+        $this->assertNotEmpty($timed);
+        foreach ($timed as $event) {
+            $this->assertMatchesRegularExpression('/^From [a-z ]+ \d\d:\d\d to [a-z ]+ \d\d:\d\d\\\\n/', $event['DESCRIPTION'], $event['UID']);
+        }
+    }
+
+    public function testCalendarDescriptionHasLocationFacts(): void
+    {
+        $ics = str_replace("\r\n ", '', $this->feed(['window_days' => 0]));
+
+        $this->assertMatchesRegularExpression(
+            '/X-WR-CALDESC:Sunrise\\\\, sunset and twilight for Rome \(41\.9028\\\\, 12\.4964\)\\\\, times in Europe\/Rome\..*'
+                . 'Daylight here ranges from 9h 0\dm \(Dec 2\d\) to 15h 1\dm \(Jun 2\d\) over the year\./',
+            $ics
+        );
+    }
+
+    public function testSouthernHemisphereSeasonNames(): void
+    {
+        // The March equinox falls on Mar 21 in Sydney's time zone
+        $ics = $this->feed(['lat' => -33.8688, 'lon' => 151.2093, 'timezone' => 'Australia/Sydney', 'today' => '2027-03-21', 'window_days' => 0]);
+
+        [$equinox] = $this->eventsOfType($ics, 'autumn-equinox');
+        $this->assertSame('🍂 Autumn Equinox', $equinox['SUMMARY']);
+        $this->assertStringStartsWith('The March equinox is at 07:24.', $equinox['DESCRIPTION']);
+        $this->assertStringContainsString('Autumn begins here by the astronomical calendar', $equinox['DESCRIPTION']);
+    }
+
+    public function testSeasonUidsDependOnLocation(): void
+    {
+        $uid = fn(float $lat, float $lon) => $this->eventsOfType(
+            $this->feed(['lat' => $lat, 'lon' => $lon, 'today' => '2026-06-21', 'window_days' => 0]),
+            'summer-solstice'
+        )[0]['UID'];
+
+        $this->assertNotSame($uid(41.9028, 12.4964), $uid(45.4642, 9.19));
+    }
+
+    public function testTropicsSkipSolsticeClaimsThatDoNotHold(): void
+    {
+        $quito = ['lat' => -0.1807, 'lon' => -78.4678, 'timezone' => 'America/Guayaquil', 'window_days' => 0];
+
+        // Day length varies by seconds here, and the year's shortest day is not the solstice
+        [$june] = $this->eventsOfType($this->feed($quito + ['today' => '2027-06-21']), 'winter-solstice');
+        $this->assertStringNotContainsString('shortest day', $june['DESCRIPTION']);
+
+        // Inside the tropics the noon sun is highest when it passes overhead, not at the solstice
+        [$december] = $this->eventsOfType($this->feed($quito + ['today' => '2026-12-21']), 'summer-solstice');
+        $this->assertStringContainsString('In the tropics the sun is highest on two other days', $december['DESCRIPTION']);
+        $this->assertStringNotContainsString('at its highest of the year', $december['DESCRIPTION']);
+    }
+
+    public function testMidLatitudeSolsticeClaims(): void
+    {
+        [$solstice] = $this->eventsOfType($this->feed(['today' => '2026-12-21', 'window_days' => 0]), 'winter-solstice');
+
+        $this->assertStringContainsString('The shortest day of the year: 9h 08m of daylight.', $solstice['DESCRIPTION']);
+        $this->assertStringContainsString('The noon sun is at its lowest of the year: 25°', $solstice['DESCRIPTION']);
+        $this->assertStringContainsString('Neither falls on the solstice itself.', $solstice['DESCRIPTION']);
+    }
+
+    public function testTwilightDataComesBeforeTheExplanation(): void
+    {
+        [$dawn] = $this->eventsOfType($this->feed([
+            'window_days' => 0,
+            'enabled' => ['civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => true],
+        ]), 'morning-civil-twilight');
+        $text = $dawn['DESCRIPTION'];
+
+        $this->assertMatchesRegularExpression('/^From civil dawn [0-9:]+ to sunrise [0-9:]+\\\\nLength: \d+m \(2\dm–3\dm over the year\)/', $text);
+        $this->assertLessThan(strpos($text, 'ℹ️ About'), strpos($text, '☀️ Today'));
+    }
+
+    public function testNightSaysWhenTheMoonIsUp(): void
+    {
+        $night = fn(string $today) => $this->eventsOfType($this->feed(['today' => $today, 'window_days' => 0]), 'night')[0]['DESCRIPTION'];
+
+        $this->assertStringContainsString('Sets at 21:45: moonless sky from then on.', $night('2026-11-15'));
+        $this->assertStringContainsString('Full Moon\\, 100% illuminated.', $night('2026-11-24'));
+        $this->assertStringContainsString('Above the horizon all night.', $night('2026-11-24'));
+        $this->assertStringContainsString('Below the horizon all night: a moonless sky throughout.', $night('2026-11-10'));
+    }
+
+    public function testCivilTwilightListsBlueAndGoldenHour(): void
+    {
+        $ics = $this->feed(['window_days' => 0]);
+
+        [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
+        [$dusk] = $this->eventsOfType($ics, 'evening-civil-twilight');
+        $this->assertMatchesRegularExpression('/Blue hour: \d\d:\d\d–\d\d:\d\d · Golden hour from \d\d:\d\d/', $dawn['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/Golden hour until \d\d:\d\d · Blue hour: \d\d:\d\d–\d\d:\d\d/', $dusk['DESCRIPTION']);
+    }
+
+    public function testOffsetsAreExplained(): void
+    {
+        [$daylight] = $this->eventsOfType($this->feed(['window_days' => 0, 'rise_offset' => -600, 'set_offset' => 900]), 'daylight');
+
+        $this->assertStringContainsString('Calendar times shifted from the actual times: start -10m\, end +15m.', $daylight['DESCRIPTION']);
+    }
+
+    public function testDeepPolarNightLastsAroundTheClock(): void
+    {
+        // At 88°S the noon sun stays more than 18° below the horizon from May 21
+        $ics = $this->feed(['lat' => -88.0, 'lon' => 0.0, 'timezone' => 'Antarctica/McMurdo', 'today' => '2027-05-19', 'window_days' => 4]);
+        $nights = $this->eventsOfType($ics, 'night');
+
+        $this->assertCount(5, $nights);
+        // From May 20's night on, solar noon joins each night to the next
+        for ($i = 2; $i < count($nights); $i++) {
+            $this->assertSame($nights[$i - 1]['DTEND'], $nights[$i]['DTSTART'], 'Nights join up without gaps');
+        }
+        $this->assertStringContainsString(' to solar noon ', $nights[1]['DESCRIPTION']);
+        $this->assertStringContainsString('all day tomorrow\, so this night lasts until solar noon.', $nights[1]['DESCRIPTION']);
+        $this->assertStringStartsWith('Polar night: the sun stays more than 18° below the horizon all day', $nights[2]['DESCRIPTION']);
+        $this->assertStringNotContainsString('this year\'s nights', $nights[2]['DESCRIPTION']);
+        $this->assertStringContainsString(' Night · 24h 00m', $nights[3]['SUMMARY']);
+    }
+
+    public function testNightRankComesFromNightLengths(): void
+    {
+        // Daylight is 0h through Tromsø's polar night, but nights still differ in length
+        $tromso = ['lat' => 69.65, 'lon' => 18.96, 'timezone' => 'Europe/Oslo', 'window_days' => 0];
+
+        [$december1] = $this->eventsOfType($this->feed($tromso + ['today' => '2026-12-01']), 'night');
+        [$solstice] = $this->eventsOfType($this->feed($tromso + ['today' => '2026-12-21']), 'night');
+        $this->assertStringNotContainsString('Longest night of the year', $december1['DESCRIPTION']);
+        $this->assertStringContainsString('Longest night of the year', $solstice['DESCRIPTION']);
     }
 
     public function testDefaultTimezoneIsRestored(): void

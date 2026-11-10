@@ -126,6 +126,9 @@ function calculate_sun_times(
         $HA_civil = sunriseHourAngle($lat, $decl, -6.0);
         $HA_nautical = sunriseHourAngle($lat, $decl, -12.0);
         $HA_astro = sunriseHourAngle($lat, $decl, -18.0);
+        // Blue hour ends and golden hour starts at -4°; golden hour ends at +6°
+        $HA_minus4 = sunriseHourAngle($lat, $decl, -4.0);
+        $HA_plus6 = sunriseHourAngle($lat, $decl, 6.0);
 
         return [
             'declination_deg' => $decl,
@@ -141,6 +144,10 @@ function calculate_sun_times(
             'nautical_end_frac' => $end($HA_nautical),
             'astro_begin_frac' => $begin($HA_astro),
             'astro_end_frac' => $end($HA_astro),
+            'minus4_begin_frac' => $begin($HA_minus4),
+            'minus4_end_frac' => $end($HA_minus4),
+            'plus6_begin_frac' => $begin($HA_plus6),
+            'plus6_end_frac' => $end($HA_plus6),
         ];
     });
 
@@ -181,14 +188,15 @@ function fraction_to_timestamp(int $y, int $m, int $d, float $frac, float $utcOf
  *
  * Uses the UTC offset in effect on that date in the date's own time zone, so
  * feeds that span DST changes stay correct. Events the sun does not reach that
- * day are null.
+ * day are null. Elevations are geometric, in degrees, at solar noon and midnight.
  *
  * @param DateTimeImmutable $date Local date (time of day is ignored)
  * @return array{
  *     sunrise: ?int, sunset: ?int, solar_noon: int,
  *     civil_begin: ?int, civil_end: ?int, nautical_begin: ?int, nautical_end: ?int,
- *     astro_begin: ?int, astro_end: ?int, daylength_h: float, polar: ?string,
- *     declination: float, utc_offset: float
+ *     astro_begin: ?int, astro_end: ?int, minus4_begin: ?int, minus4_end: ?int,
+ *     plus6_begin: ?int, plus6_end: ?int, daylength_h: float, polar: ?string,
+ *     declination: float, noon_elevation: float, midnight_elevation: float, utc_offset: float
  * }
  */
 function sun_events(DateTimeImmutable $date, float $lat, float $lon): array
@@ -208,9 +216,15 @@ function sun_events(DateTimeImmutable $date, float $lat, float $lon): array
         'nautical_end' => $ts($calc['nautical_end_frac']),
         'astro_begin' => $ts($calc['astro_begin_frac']),
         'astro_end' => $ts($calc['astro_end_frac']),
+        'minus4_begin' => $ts($calc['minus4_begin_frac']),
+        'minus4_end' => $ts($calc['minus4_end_frac']),
+        'plus6_begin' => $ts($calc['plus6_begin_frac']),
+        'plus6_end' => $ts($calc['plus6_end_frac']),
         'daylength_h' => $calc['daylength_h'],
         'polar' => $calc['polar'],
         'declination' => $calc['declination_deg'],
+        'noon_elevation' => 90 - abs($lat - $calc['declination_deg']),
+        'midnight_elevation' => abs($lat + $calc['declination_deg']) - 90,
         'utc_offset' => $offset,
     ];
 }
@@ -446,6 +460,127 @@ function calculate_quarter_corrections(float $M, float $Mp, float $F, float $Ome
 }
 
 /**
+ * Illuminated fraction of the moon's disk, in percent (Meeus 48.1 and 48.4).
+ *
+ * The phase angle comes from the moon's mean elongation and anomalies with the
+ * main periodic terms, accurate to well under 1% of the disk.
+ */
+function moon_illumination(int $timestamp): float
+{
+    $T = ($timestamp / 86400 + 2440587.5 - 2451545.0) / 36525;
+
+    $D = deg2rad(297.8501921 + 445267.1114034 * $T - 0.0018819 * $T ** 2 + $T ** 3 / 545868 - $T ** 4 / 113065000);
+    $M = deg2rad(357.5291092 + 35999.0502909 * $T - 0.0001536 * $T ** 2 + $T ** 3 / 24490000);
+    $Mp = deg2rad(134.9633964 + 477198.8675055 * $T + 0.0087414 * $T ** 2 + $T ** 3 / 69699 - $T ** 4 / 14712000);
+
+    $i = 180 - rad2deg($D)
+        - 6.289 * sin($Mp)
+        + 2.100 * sin($M)
+        - 1.274 * sin(2 * $D - $Mp)
+        - 0.658 * sin(2 * $D)
+        - 0.214 * sin(2 * $Mp)
+        - 0.110 * sin($D);
+
+    return (1 + cos(deg2rad($i))) / 2 * 100;
+}
+
+/**
+ * The moon's geocentric altitude above its rising threshold, in degrees.
+ *
+ * Position from the Astronomical Almanac's low-precision formulas (about 0.3°,
+ * a minute or two in rise and set times). The threshold h0 = 0.7275 π - 0.5667°
+ * (Meeus ch. 15) allows for parallax, refraction and the moon's radius, so the
+ * moon is rising or setting where this crosses zero.
+ */
+function moon_altitude(int $timestamp, float $lat, float $lon): float
+{
+    $d = $timestamp / 86400 + 2440587.5 - 2451545.0;
+    $T = $d / 36525;
+    $sin = fn(float $deg) => sin(deg2rad($deg));
+    $cos = fn(float $deg) => cos(deg2rad($deg));
+
+    $lambda = 218.32 + 481267.881 * $T
+        + 6.29 * $sin(135.0 + 477198.87 * $T) - 1.27 * $sin(259.3 - 413335.36 * $T)
+        + 0.66 * $sin(235.7 + 890534.22 * $T) + 0.21 * $sin(269.9 + 954397.70 * $T)
+        - 0.19 * $sin(357.5 + 35999.05 * $T) - 0.11 * $sin(186.6 + 966404.05 * $T);
+    $beta = 5.13 * $sin(93.3 + 483202.03 * $T) + 0.28 * $sin(228.2 + 960400.87 * $T)
+        - 0.28 * $sin(318.3 + 6003.18 * $T) - 0.17 * $sin(217.6 - 407332.20 * $T);
+    $parallax = 0.9508 + 0.0518 * $cos(135.0 + 477198.87 * $T) + 0.0095 * $cos(259.3 - 413335.38 * $T)
+        + 0.0078 * $cos(235.7 + 890534.23 * $T) + 0.0028 * $cos(269.9 + 954397.70 * $T);
+    $eps = 23.439 - 0.013 * $T;
+
+    // Ecliptic to equatorial coordinates
+    $l = $cos($beta) * $cos($lambda);
+    $m = $cos($eps) * $cos($beta) * $sin($lambda) - $sin($eps) * $sin($beta);
+    $n = $sin($eps) * $cos($beta) * $sin($lambda) + $cos($eps) * $sin($beta);
+    $ra = rad2deg(atan2($m, $l));
+    $dec = rad2deg(asin($n));
+
+    $hourAngle = 280.46061837 + 360.98564736629 * $d + $lon - $ra;
+    $altitude = rad2deg(asin($sin($lat) * $sin($dec) + $cos($lat) * $cos($dec) * $cos($hourAngle)));
+
+    return $altitude - (0.7275 * $parallax - 0.5667);
+}
+
+/**
+ * Moonrises and moonsets in [$from, $to].
+ *
+ * @return array{up_at_start: bool, events: array<array{0: string, 1: int}>}
+ *     Whether the moon is up at $from, then ['rise'|'set', timestamp] in order
+ */
+function moon_rise_set(int $from, int $to, float $lat, float $lon): array
+{
+    $step = 600;
+    $events = [];
+    $previous = moon_altitude($from, $lat, $lon);
+    $upAtStart = $previous > 0;
+
+    for ($t = $from + $step; $t - $step < $to; $t += $step) {
+        $t = min($t, $to);
+        $altitude = moon_altitude($t, $lat, $lon);
+        if (($previous > 0) !== ($altitude > 0)) {
+            // Bisect to within 30 seconds
+            [$lo, $hi] = [$t - $step, $t];
+            while ($hi - $lo > 30) {
+                $mid = intdiv($lo + $hi, 2);
+                if ((moon_altitude($mid, $lat, $lon) > 0) === ($altitude > 0)) {
+                    $hi = $mid;
+                } else {
+                    $lo = $mid;
+                }
+            }
+            $events[] = [$altitude > 0 ? 'rise' : 'set', intdiv($lo + $hi, 2)];
+        }
+        $previous = $altitude;
+        if ($t === $to) {
+            break;
+        }
+    }
+
+    return ['up_at_start' => $upAtStart, 'events' => $events];
+}
+
+/**
+ * Principal moon phases (new, first quarter, full, last quarter) in [$from, $to).
+ *
+ * @return array<array{name: string, timestamp: int}> In chronological order
+ */
+function moon_phases_between(int $from, int $to): array
+{
+    $phases = [];
+    for ($t = strtotime('first day of this month', $from); $t < $to; $t = strtotime('+1 month', $t)) {
+        foreach (calculate_moon_phases_for_month((int) date('Y', $t), (int) date('n', $t)) as $phase) {
+            if ($phase['timestamp'] >= $from && $phase['timestamp'] < $to) {
+                $phases[$phase['timestamp']] = ['name' => $phase['phase_name'], 'timestamp' => $phase['timestamp']];
+            }
+        }
+    }
+    ksort($phases);
+
+    return array_values($phases);
+}
+
+/**
  * Get accurate moon phase for a timestamp with caching.
  */
 function get_accurate_moon_phase(int $timestamp): array
@@ -508,38 +643,11 @@ function get_accurate_moon_phase(int $timestamp): array
         }
     }
 
-    if ($prev && $next) {
-        $new_moon_ts = null;
-        foreach (array_reverse($phases) as $phase) {
-            if ($phase['phase_name'] === 'New Moon' && $phase['timestamp'] <= $timestamp) {
-                $new_moon_ts = $phase['timestamp'];
-                break;
-            }
-        }
-
-        $illumination = 50.0;
-        if ($new_moon_ts !== null) {
-            $days_since_new = ($timestamp - $new_moon_ts) / 86400;
-            $angle = ($days_since_new / 29.53) * 2 * M_PI;
-            $illumination = round((1 - cos($angle)) * 50, 1);
-        }
-    } else {
-        $illumination = 0.0;
-    }
-
     return [
         'phase_name' => $current_phase_name,
-        'illumination' => $illumination,
-        'prev_phase' => $prev ? [
-            'name' => $prev['phase_name'],
-            'date' => date('j M Y, H:i', $prev['timestamp']),
-            'timestamp' => $prev['timestamp'],
-        ] : null,
-        'next_phase' => $next ? [
-            'name' => $next['phase_name'],
-            'date' => date('j M Y, H:i', $next['timestamp']),
-            'timestamp' => $next['timestamp'],
-        ] : null,
+        'illumination' => round(moon_illumination($timestamp), 1),
+        'prev_phase' => $prev ? ['name' => $prev['phase_name'], 'timestamp' => $prev['timestamp']] : null,
+        'next_phase' => $next ? ['name' => $next['phase_name'], 'timestamp' => $next['timestamp']] : null,
     ];
 }
 
