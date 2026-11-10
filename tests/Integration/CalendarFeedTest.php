@@ -397,6 +397,18 @@ class CalendarFeedTest extends TestCase
         $this->assertStringContainsString('Below the horizon all night: a moonless sky throughout.', $night('2026-11-10'));
     }
 
+    public function testMoonEmojiIsMirroredSouthOfTheEquator(): void
+    {
+        // Waxing crescent on Nov 15, 2026: lit on the right from Rome, on the left from Sydney
+        $night = fn(array $place) => $this->eventsOfType($this->feed($place + ['today' => '2026-11-15', 'window_days' => 0]), 'night')[0];
+
+        $rome = $night([]);
+        $sydney = $night(['lat' => -33.8688, 'lon' => 151.2093, 'timezone' => 'Australia/Sydney']);
+        $this->assertStringStartsWith('🌒 Night', $rome['SUMMARY']);
+        $this->assertStringStartsWith('🌘 Night', $sydney['SUMMARY']);
+        $this->assertStringContainsString('🌘 Moon\\nWaxing Crescent', $sydney['DESCRIPTION']);
+    }
+
     public function testCivilTwilightListsBlueAndGoldenHour(): void
     {
         $ics = $this->feed(['window_days' => 0]);

@@ -84,16 +84,17 @@ function calculate_daylight_percentile(
 
 
 /**
- * Get emoji for moon phase.
+ * Get emoji for moon phase, as the moon looks from the observer's hemisphere.
  *
  * @param string $phaseName Phase name as get_accurate_moon_phase() reports it
+ * @param float $lat Observer's latitude; south of the equator the lit side is mirrored
  * @return string Moon phase emoji
  */
-function get_moon_phase_emoji(string $phaseName): string
+function get_moon_phase_emoji(string $phaseName, float $lat = 0.0): string
 {
     $S = get_strings();
 
-    return ($S['moon_phases'][$phaseName] ?? $S['moon_phase_unknown'])[0];
+    return ($S['moon_phases'][$phaseName] ?? $S['moon_phase_unknown'])[$lat < 0 ? 1 : 0];
 }
 
 /**
@@ -105,7 +106,7 @@ function moon_phase_name(string $phaseName): string
 {
     $S = get_strings();
 
-    return ($S['moon_phases'][$phaseName] ?? $S['moon_phase_unknown'])[1];
+    return ($S['moon_phases'][$phaseName] ?? $S['moon_phase_unknown'])[2];
 }
 
 // ============================================================================
@@ -235,6 +236,7 @@ function format_moon_rise_set(array $riseSet, array $S): string
  * during the night (when 'rise_set' is given), previous and next principal phase.
  *
  * @param array $moon Result of get_accurate_moon_phase(), optionally with 'rise_set' from moon_rise_set()
+ *     and the observer's 'lat' for the emojis
  */
 function format_moon_section(array $moon, array $S): string
 {
@@ -247,7 +249,8 @@ function format_moon_section(array $moon, array $S): string
         $current .= ' ' . $M['impact'][$lit < 25 ? 'dark' : ($lit <= 75 ? 'partial' : 'bright')];
     }
 
-    $section = sprintf($S['headers']['moon'], get_moon_phase_emoji($moon['phase_name'])) . "\n" . $current . "\n";
+    $lat = $moon['lat'] ?? 0.0;
+    $section = sprintf($S['headers']['moon'], get_moon_phase_emoji($moon['phase_name'], $lat)) . "\n" . $current . "\n";
     if ($riseSet !== null) {
         $section .= format_moon_rise_set($riseSet, $S) . "\n";
     }
@@ -256,7 +259,7 @@ function format_moon_section(array $moon, array $S): string
         if ($moon[$key]) {
             $section .= sprintf(
                 $S['moon'][$label],
-                get_moon_phase_emoji($moon[$key]['name']),
+                get_moon_phase_emoji($moon[$key]['name'], $lat),
                 moon_phase_name($moon[$key]['name']),
                 format_local($moon[$key]['timestamp'], 'datetime')
             ) . "\n";

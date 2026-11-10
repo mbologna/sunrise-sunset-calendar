@@ -254,7 +254,7 @@ function render_calendar(array $o): string
         $nightSeconds = $spans['night'] ? $spans['night'][1] - $spans['night'][0] : 0;
         $lastNightSpan = solar_spans($prev, $ev)['night'];
         $lastNight = $lastNightSpan ? $lastNightSpan[1] - $lastNightSpan[0] : null;
-        $moon = get_accurate_moon_phase($ev['solar_noon'] + 43200);
+        $moon = get_accurate_moon_phase($ev['solar_noon'] + 43200) + ['lat' => $lat];
         if ($spans['night'] !== null) {
             $moon['rise_set'] = moon_rise_set($spans['night'][0], $spans['night'][1], $lat, $lon);
         }
@@ -305,7 +305,7 @@ function render_calendar(array $o): string
             $phases = array_map(
                 fn($p) => sprintf(
                     $S['moon']['phase_at'],
-                    get_moon_phase_emoji($p['name']),
+                    get_moon_phase_emoji($p['name'], $lat),
                     moon_phase_name($p['name']),
                     format_local($p['timestamp'], 'datetime')
                 ),
@@ -313,7 +313,7 @@ function render_calendar(array $o): string
             );
             if ($phases === []) {
                 $phaseName = get_accurate_moon_phase($day->getTimestamp())['phase_name'];
-                $phases = [get_moon_phase_emoji($phaseName) . ' ' . moon_phase_name($phaseName)];
+                $phases = [get_moon_phase_emoji($phaseName, $lat) . ' ' . moon_phase_name($phaseName)];
             }
 
             $desc = sprintf(
@@ -405,7 +405,7 @@ function render_calendar(array $o): string
                 $timed($start + $o['set_offset'], $end + $o['rise_offset']),
                 sprintf(
                     $S['summaries']['night'],
-                    get_moon_phase_emoji($moon['phase_name']),
+                    get_moon_phase_emoji($moon['phase_name'], $lat),
                     format_duration($nightSeconds)
                 ),
                 $desc,
