@@ -7,57 +7,86 @@
 declare(strict_types=1);
 
 /**
- * Split one day into calendar spans, from astronomical dawn to night.
+ * The six twilights: subscription flag, depression angles bounding them, and UID prefix.
  *
- * Each twilight band lies between two solar altitudes. When the sun never
- * crosses one of them, solar noon (the sun peaks inside the band) or solar
- * midnight (it bottoms out inside it) stands in, so polar days and white
- * nights yield continuous, well-ordered spans instead of empty or inverted ones.
+ * @return array<string, array{flag: string, deep: int, high: int, morning: bool, uid: string}>
+ */
+function twilight_bands(): array
+{
+    $band = fn(string $flag, int $deep, int $high, bool $morning, string $uid) =>
+        ['flag' => $flag, 'deep' => $deep, 'high' => $high, 'morning' => $morning, 'uid' => $uid];
+
+    return [
+        'morning_astronomical' => $band('astro', 18, 12, true, 'morning-astronomical-twilight'),
+        'morning_nautical' => $band('nautical', 12, 6, true, 'morning-nautical-twilight'),
+        'morning_civil' => $band('civil', 6, 0, true, 'morning-civil-twilight'),
+        'evening_civil' => $band('civil', 6, 0, false, 'evening-civil-twilight'),
+        'evening_nautical' => $band('nautical', 12, 6, false, 'evening-nautical-twilight'),
+        'evening_astronomical' => $band('astro', 18, 12, false, 'evening-astronomical-twilight'),
+    ];
+}
+
+/**
+ * Split one day into calendar periods, from morning astronomical twilight to night.
+ *
+ * Each twilight lies between two solar altitudes. When the sun never crosses
+ * one of them, solar noon (the sun peaks inside the band) or solar midnight
+ * (it bottoms out inside it) stands in, so polar days and white nights yield
+ * continuous, well-ordered periods instead of empty or inverted ones. Each
+ * period also names the instants that bound it, keyed like strings['instants'].
  *
  * @param array $ev sun_events() for the day
  * @param array $next sun_events() for the following day
- * @param float $lat Latitude in degrees
- * @return array<string, array{0: int, 1: int}|null> Start/end timestamps keyed like strings['summaries']
+ * @return array<string, array{0: int, 1: int, 2: string, 3: string}|null>
+ *     Start, end, start instant, end instant; keyed like strings['summaries']
  */
-function solar_spans(array $ev, array $next, float $lat): array
+function solar_spans(array $ev, array $next): array
 {
     $noon = $ev['solar_noon'];
-    $noonElevation = 90 - abs($lat - $ev['declination']);
-    $midnightElevation = abs($lat + $ev['declination']) - 90;
 
-    // Altitude with its rising and setting crossing times, deepest first
+    // Altitude with its rising and setting crossings and their instant names, deepest first
     $crossings = [
-        [-18.0, $ev['astro_begin'], $ev['astro_end']],
-        [-12.0, $ev['nautical_begin'], $ev['nautical_end']],
-        [-6.0, $ev['civil_begin'], $ev['civil_end']],
-        [0.0, $ev['sunrise'], $ev['sunset']],
+        [-18.0, $ev['astro_begin'], $ev['astro_end'], 'astronomical_dawn', 'astronomical_dusk'],
+        [-12.0, $ev['nautical_begin'], $ev['nautical_end'], 'nautical_dawn', 'nautical_dusk'],
+        [-6.0, $ev['civil_begin'], $ev['civil_end'], 'civil_dawn', 'civil_dusk'],
+        [0.0, $ev['sunrise'], $ev['sunset'], 'sunrise', 'sunset'],
     ];
 
     $spans = [];
     foreach (['astronomical', 'nautical', 'civil'] as $i => $band) {
-        [$lowAltitude, $lowRise, $lowSet] = $crossings[$i];
-        [$highAltitude, $highRise, $highSet] = $crossings[$i + 1];
+        [$lowAltitude, $lowRise, $lowSet, $lowDawn, $lowDusk] = $crossings[$i];
+        [$highAltitude, $highRise, $highSet, $highDawn, $highDusk] = $crossings[$i + 1];
 
         if ($lowRise === null && $highRise === null) {
             // Neither altitude crossed: the sun is inside the band all day, or never
-            $inBand = $midnightElevation > $lowAltitude && $noonElevation < $highAltitude;
-            $spans["{$band}_dawn"] = $inBand ? [$noon - 43200, $noon] : null;
-            $spans["{$band}_dusk"] = $inBand ? [$noon, $noon + 43200] : null;
+            $inBand = $ev['midnight_elevation'] > $lowAltitude && $ev['noon_elevation'] < $highAltitude;
+            $spans["morning_{$band}"] = $inBand ? [$noon - 43200, $noon, 'solar_midnight', 'solar_noon'] : null;
+            $spans["evening_{$band}"] = $inBand ? [$noon, $noon + 43200, 'solar_noon', 'solar_midnight'] : null;
         } else {
-            $spans["{$band}_dawn"] = [$lowRise ?? $noon - 43200, $highRise ?? $noon];
-            $spans["{$band}_dusk"] = [$highSet ?? $noon, $lowSet ?? $noon + 43200];
+            $spans["morning_{$band}"] = [
+                $lowRise ?? $noon - 43200,
+                $highRise ?? $noon,
+                $lowRise === null ? 'solar_midnight' : $lowDawn,
+                $highRise === null ? 'solar_noon' : $highDawn,
+            ];
+            $spans["evening_{$band}"] = [
+                $highSet ?? $noon,
+                $lowSet ?? $noon + 43200,
+                $highSet === null ? 'solar_noon' : $highDusk,
+                $lowSet === null ? 'solar_midnight' : $lowDusk,
+            ];
         }
     }
 
     $daylight = null;
     if ($ev['sunrise'] !== null && $ev['sunset'] !== null) {
-        $daylight = [$ev['sunrise'], $ev['sunset']];
+        $daylight = [$ev['sunrise'], $ev['sunset'], 'sunrise', 'sunset'];
     } elseif ($ev['polar'] === 'day') {
-        $daylight = [$noon - 43200, $noon + 43200];
+        $daylight = [$noon - 43200, $noon + 43200, 'solar_midnight', 'solar_midnight'];
     }
 
     $night = ($ev['astro_end'] !== null && $next['astro_begin'] !== null)
-        ? [$ev['astro_end'], $next['astro_begin']]
+        ? [$ev['astro_end'], $next['astro_begin'], 'astronomical_dusk', 'astronomical_dawn']
         : null;
 
     return $spans + ['daylight' => $daylight, 'night' => $night];
@@ -77,7 +106,7 @@ function solstice_daylight(int $year, float $lat, float $lon, DateTimeZone $tz):
         $date = (new DateTimeImmutable("@{$timestamp}"))->setTimezone($tz);
         return [
             'seconds' => (int) round(sun_events($date, $lat, $lon)['daylength_h'] * 3600),
-            'info' => $date->format('M j'),
+            'info' => format_local($timestamp, 'date_short'),
         ];
     };
 
@@ -97,7 +126,7 @@ function ical_duration(int $seconds): string
  */
 function format_time(?int $timestamp): string
 {
-    return $timestamp === null ? '—' : date('H:i', $timestamp);
+    return $timestamp === null ? '—' : format_local($timestamp);
 }
 
 /**
@@ -158,160 +187,168 @@ function render_calendar(array $o): string
         'DTSTART:' . gmdate('Ymd\THis\Z', $start),
         'DTEND:' . gmdate('Ymd\THis\Z', $end),
     ];
-    $allDay = fn(DateTimeImmutable $day) => [
+    $allDay = fn(DateTimeImmutable $day, int $days = 1) => [
         'DTSTART;VALUE=DATE:' . $day->format('Ymd'),
-        'DTEND;VALUE=DATE:' . $day->modify('+1 day')->format('Ymd'),
+        'DTEND;VALUE=DATE:' . $day->modify("+{$days} days")->format('Ymd'),
     ];
-    $signed = fn(int $diff) => ($diff >= 0 ? '+' : '-') . format_duration_short(abs($diff));
+    // Offsets move an event away from the instants its description names; say so
+    $offsetNote = fn(int $start, int $end) => ($start === 0 && $end === 0) ? '' : "\n\n" . sprintf(
+        $S['labels']['offset_note'],
+        format_signed_duration($start),
+        format_signed_duration($end)
+    );
+    $customNote = $o['description'] !== '' ? "\n\n" . $o['description'] : '';
+
+    $today = new DateTimeImmutable($o['today'] ?? 'today', $tz);
+    $todayYear = year_summary($lat, $lon, (int) $today->format('Y'), $today->setTime(12, 0)->getOffset() / 3600);
+    $place = sprintf($o['location'] !== '' ? $S['place_named'] : $S['place_coordinates'], $o['location'], $lat, $lon);
+    $calendarDescription = implode(' ', [
+        sprintf($S['calendar_description_format'], $place, $o['timezone']),
+        ...location_facts($todayYear, $S),
+    ]);
 
     $out = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:{$S['calendar_prodid']}\r\n"
         . "CALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n"
         . ical_text_property('X-WR-CALNAME', sprintf($S['calendar_name_format'], $o['location'] ?: "{$lat}, {$lon}"))
+        . ical_text_property('X-WR-CALDESC', $calendarDescription)
         . "X-WR-TIMEZONE:{$o['timezone']}\r\n"
         . "X-PUBLISHED-TTL:{$refresh}\r\nREFRESH-INTERVAL;VALUE=DURATION:{$refresh}\r\n";
 
-    $today = new DateTimeImmutable($o['today'] ?? 'today', $tz);
     $first = $today->modify("-{$o['past_days']} days");
     $last = $today->modify("+{$o['window_days']} days");
 
     // Equinoxes and solstices by local date, for every year the window touches
     $specialEvents = [];
     for ($y = (int) $first->format('Y'); $y <= (int) $last->format('Y'); $y++) {
-        foreach (get_special_astronomical_events($y) as $event) {
+        foreach (get_special_astronomical_events($y, $lat) as $event) {
             $specialEvents[date('Y-m-d', $event['date'])] = $event;
         }
     }
 
     $solstices = [];
-    $locationNotes = get_location_notes($lat);
-    $notesShown = false;
 
     for ($day = $first; $day <= $last; $day = $day->modify('+1 day')) {
         $year = (int) $day->format('Y');
         $dateStr = $day->format('Ymd');
         $ev = sun_events($day, $lat, $lon);
         $prev = sun_events($day->modify('-1 day'), $lat, $lon);
-        $spans = solar_spans($ev, sun_events($day->modify('+1 day'), $lat, $lon), $lat);
+        $spans = solar_spans($ev, sun_events($day->modify('+1 day'), $lat, $lon));
+        $yearInfo = year_summary($lat, $lon, $year, $ev['utc_offset']);
         $solstices[$year] ??= solstice_daylight($year, $lat, $lon, $tz);
 
         $daylightSeconds = (int) round($ev['daylength_h'] * 3600);
         $daylightPercentile = calculate_daylight_percentile($ev['daylength_h'], $lat, $lon, $year, $ev['utc_offset']);
-        $dayStats = [
-            'daylight_seconds' => $daylightSeconds,
-            'daylight_pct' => round($daylightSeconds / 864, 1),
-            'daylight_percentile' => $daylightPercentile,
-            'day_length_comparison' => format_day_length_comparison(
-                $daylightSeconds - (int) round($prev['daylength_h'] * 3600)
-            ),
-            'solar_noon_time' => date('H:i', $ev['solar_noon']),
-            'winter_comparison' => $signed($daylightSeconds - $solstices[$year]['winter']['seconds']),
-            'winter_solstice_info' => $solstices[$year]['winter']['info'],
-            'summer_comparison' => $signed($daylightSeconds - $solstices[$year]['summer']['seconds']),
-            'summer_solstice_info' => $solstices[$year]['summer']['info'],
-        ];
 
         // Night runs from astronomical dusk to the next astronomical dawn
         $nightSeconds = $spans['night'] ? $spans['night'][1] - $spans['night'][0] : 0;
         $lastNight = ($prev['astro_end'] !== null && $ev['astro_begin'] !== null)
             ? $ev['astro_begin'] - $prev['astro_end']
             : null;
-        $nightStats = [
-            'night_seconds' => $nightSeconds,
-            'night_pct' => round($nightSeconds / 864, 1),
-            'night_percentile' => 100 - $daylightPercentile,
-            'night_length_comparison' => ($spans['night'] && $lastNight !== null)
-                ? format_day_length_comparison($nightSeconds - $lastNight)
-                : null,
-            'moon_info' => get_accurate_moon_phase($ev['solar_noon'] + 43200),
+        $moon = get_accurate_moon_phase($ev['solar_noon'] + 43200);
+
+        $c = [
+            'ev' => $ev,
+            'spans' => $spans,
+            'enabled' => $enabled,
+            'daylight' => [
+                'seconds' => $daylightSeconds,
+                'percentile' => $daylightPercentile,
+                'comparisons' => [
+                    format_comparison(
+                        $daylightSeconds - (int) round($prev['daylength_h'] * 3600),
+                        $S['comparisons']['yesterday'],
+                        $S
+                    ),
+                    format_comparison(
+                        $daylightSeconds - $solstices[$year]['winter']['seconds'],
+                        sprintf($S['comparisons']['winter_solstice'], $solstices[$year]['winter']['info']),
+                        $S
+                    ),
+                    format_comparison(
+                        $daylightSeconds - $solstices[$year]['summer']['seconds'],
+                        sprintf($S['comparisons']['summer_solstice'], $solstices[$year]['summer']['info']),
+                        $S
+                    ),
+                ],
+            ],
+            'night' => [
+                'seconds' => $nightSeconds,
+                'percentile' => 100 - $daylightPercentile,
+                'comparison' => ($spans['night'] && $lastNight !== null)
+                    ? format_comparison($nightSeconds - $lastNight, $S['comparisons']['last_night'], $S)
+                    : null,
+                'moon' => $moon,
+            ],
         ];
 
-        // Week summary (Sundays)
+        // Weekly summary: an all-day event spanning Sunday through Saturday
         if ($enabled['daylight'] && $day->format('w') === '0') {
             $week = SunCalendar\Cache::getInstance()
                 ->getWeekSummary($day->getTimestamp(), $lat, $lon, $ev['utc_offset']);
-            $lastYear = get_last_year_week_data($day->getTimestamp(), $lat, $lon, $ev['utc_offset']);
 
-            $desc = "{$S['headers']['at_a_glance']}\n\n";
-            $desc .= "{$S['labels']['trend']}: {$week['trend_emoji']} {$week['trend']}\n";
-            $desc .= "{$S['labels']['average']}: " . format_duration_full((int) $week['avg_length']) . "\n\n";
-            $desc .= "{$S['headers']['details']}\n\n";
-            $desc .= "{$S['labels']['change']}: " . $signed((int) $week['total_change']) . "\n";
-            $desc .= "{$S['labels']['shortest']}: " . date('l, M j', $week['shortest_day']) . "\n";
-            $desc .= '  ' . format_duration_full((int) $week['min_length']) . "\n";
-            $desc .= "{$S['labels']['longest']}: " . date('l, M j', $week['longest_day']) . "\n";
-            $desc .= '  ' . format_duration_full((int) $week['max_length']) . "\n\n";
-            $desc .= "{$S['headers']['comparisons']}\n\n";
-            $desc .= "{$S['labels']['vs_last_year']}: " . $signed((int) ($week['avg_length'] - $lastYear['avg_length']))
-                . "\n  (Week of " . date('M j, Y', $lastYear['week_start']) . ")\n\n";
-            $desc .= "{$S['labels']['moon']}: " . get_moon_phase_emoji($week['moon_phase']) . " {$week['moon_phase']}";
-
-            // Location notes go on the first week summary only
-            if (!$notesShown && $locationNotes) {
-                $desc .= "\n\n{$S['headers']['location_notes']}\n" . implode("\n", $locationNotes) . "\n";
-                $notesShown = true;
+            $phases = array_map(
+                fn($p) => sprintf(
+                    $S['moon']['phase_at'],
+                    get_moon_phase_emoji($p['name']),
+                    $p['name'],
+                    format_local($p['timestamp'], 'datetime')
+                ),
+                moon_phases_between($day->getTimestamp(), $day->modify('+7 days')->getTimestamp())
+            );
+            if ($phases === []) {
+                $phaseName = get_accurate_moon_phase($day->getTimestamp())['phase_name'];
+                $phases = [get_moon_phase_emoji($phaseName) . " {$phaseName}"];
             }
 
-            $summary = sprintf(
-                $S['week_summary']['title_format'],
-                $day->format('M j'),
-                $day->modify('+6 days')->format('M j')
-            );
-            $out .= ical_event("week-summary-{$dateStr}-{$uidSuffix}", $allDay($day), $summary, $desc, $dtstamp);
+            $desc = sprintf(
+                $S['labels']['week_daylight'],
+                format_duration((int) round($week['start_length'])),
+                format_duration((int) round($week['end_length']))
+            ) . "\n";
+            $desc .= sprintf($S['labels']['average'], format_duration((int) round($week['avg_length']))) . "\n";
+            $desc .= sprintf($S['labels']['week_moon'], implode('; ', $phases));
+
+            $summary = sprintf($S['week_titles'][$week['trend']], format_duration((int) round($week['total_change'])));
+            $out .= ical_event("week-{$dateStr}-{$uidSuffix}", $allDay($day, 7), $summary, $desc, $dtstamp);
         }
 
-        // Equinoxes and solstices
+        // Equinoxes and solstices: all day on the local date, exact moment in the description
         $special = $specialEvents[$day->format('Y-m-d')] ?? null;
         if ($special) {
-            $desc = "{$S['headers']['astronomical_event']}\n\n";
-            $desc .= "{$S['labels']['event']}: {$special['name']}\n";
-            $desc .= "{$S['labels']['date']}: " . date('F j, Y, H:i', $special['date']) . "\n\n";
-            $desc .= $special['description'];
-
-            $slug = strtolower(str_replace(' ', '-', $special['name']));
             $out .= ical_event(
-                "special-{$slug}-{$dateStr}@sun-calendar",
+                str_replace('_', '-', $special['season']) . "-{$dateStr}-{$uidSuffix}",
                 $allDay($day),
-                "{$special['emoji']} {$special['name']}",
-                $desc,
+                $S['seasons'][$special['season']]['title'],
+                season_description($special, $ev, $yearInfo, $lat, $S),
                 $dtstamp
             );
         }
 
-        // Twilight events: span key => [enabled flag, UID prefix, morning?]
-        $twilights = [
-            'civil_dawn' => ['civil', 'civil-dawn', true],
-            'nautical_dawn' => ['nautical', 'nautical-dawn', true],
-            'astronomical_dawn' => ['astro', 'astro-dawn', true],
-            'civil_dusk' => ['civil', 'civil-dusk', false],
-            'nautical_dusk' => ['nautical', 'nautical-dusk', false],
-            'astronomical_dusk' => ['astro', 'astro-dusk', false],
-        ];
-        foreach ($twilights as $key => [$type, $uid, $morning]) {
-            if (!$enabled[$type] || $spans[$key] === null) {
+        // Twilights
+        foreach (twilight_bands() as $key => $band) {
+            if (!$enabled[$band['flag']] || $spans[$key] === null) {
                 continue;
             }
-            [$start, $end] = $spans[$key];
-            $offset = $morning ? $o['rise_offset'] : $o['set_offset'];
+            $span = $spans[$key];
+            $offset = $band['morning'] ? $o['rise_offset'] : $o['set_offset'];
 
-            $desc = "{$S['headers']['at_a_glance']}\n\n";
-            $desc .= "{$S['labels']['duration']}: " . format_duration_full($end - $start) . "\n\n";
-            $desc .= "{$S['headers']['details']}\n\n";
-            if ($key === 'civil_dawn') {
-                $desc .= "{$S['labels']['first_light']}: " . format_time($start) . "\n";
+            $lines = [
+                format_span_line($span, $S),
+                sprintf($S['labels']['length'], format_duration($span[1] - $span[0])),
+            ];
+            array_push($lines, ...no_crossing_notes($key, $span, $S));
+            $light = str_ends_with($key, '_civil') ? light_line($key, $ev, $S) : null;
+            if ($light !== null) {
+                $lines[] = $light;
             }
-            $desc .= "{$S['labels']['sunrise']}: " . format_time($ev['sunrise']) . "\n";
-            $desc .= "{$S['labels']['sunset']}: " . format_time($ev['sunset']) . "\n";
-            if ($key === 'civil_dusk') {
-                $desc .= "{$S['labels']['last_light']}: " . format_time($end) . "\n";
-            }
-            $desc .= "\n{$S['headers']['context']}\n\n{$S['twilight_descriptions'][$key]}";
-            $desc .= $morning
-                ? build_dawn_supplemental(['spans' => $spans, 'enabled' => $enabled, 'daylight' => $dayStats], $S)
-                : build_dusk_supplemental(['spans' => $spans, 'enabled' => $enabled, 'night' => $nightStats], $S);
+
+            $desc = implode("\n", $lines) . "\n\n" . twilight_about($key, $span, $ev, $yearInfo, $S);
+            $desc .= $band['morning'] ? build_dawn_supplemental($c, $S) : build_dusk_supplemental($c, $S);
+            $desc .= $offsetNote($offset, $offset);
 
             $out .= ical_event(
-                "{$uid}-{$dateStr}-{$uidSuffix}",
-                $timed($start + $offset, $end + $offset),
+                "{$band['uid']}-{$dateStr}-{$uidSuffix}",
+                $timed($span[0] + $offset, $span[1] + $offset),
                 $S['summaries'][$key],
                 $desc,
                 $dtstamp
@@ -322,29 +359,13 @@ function render_calendar(array $o): string
         if ($enabled['daylight'] && $spans['daylight'] !== null) {
             [$start, $end] = $spans['daylight'];
 
-            $desc = "{$S['headers']['at_a_glance']}\n\n";
-            $desc .= "{$S['labels']['duration']}: " . format_duration_full($daylightSeconds) . "\n";
-            $desc .= "{$S['labels']['progress']}: " . format_percentile_bar($daylightPercentile) . "\n\n";
-            $desc .= "{$S['headers']['details']}\n\n";
-            $desc .= "{$S['labels']['sunrise']}: " . format_time($ev['sunrise']) . "\n";
-            $desc .= "{$S['labels']['sunset']}: " . format_time($ev['sunset']) . "\n";
-            $desc .= "{$S['labels']['solar_noon']}: {$dayStats['solar_noon_time']}\n";
-            $desc .= "{$S['labels']['of_day']}: " . number_format($dayStats['daylight_pct'], 1) . "%\n\n";
-            $desc .= "{$S['headers']['comparisons']}\n\n";
-            $desc .= "{$S['labels']['vs_yesterday']}: {$dayStats['day_length_comparison']}\n";
-            $desc .= "{$S['labels']['vs_winter_solstice']}: {$dayStats['winter_comparison']}\n";
-            $desc .= "  ({$dayStats['winter_solstice_info']})\n";
-            $desc .= "{$S['labels']['vs_summer_solstice']}: {$dayStats['summer_comparison']}\n";
-            $desc .= "  ({$dayStats['summer_solstice_info']})\n\n";
-            $desc .= "{$S['headers']['context']}\n\n{$S['twilight_descriptions']['daylight']}";
-            if ($o['description'] !== '') {
-                $desc .= "\n\n" . $o['description'];
-            }
+            $desc = daylight_details($c, $S) . "\n" . daylight_about($ev, $S)
+                . $offsetNote($o['rise_offset'], $o['set_offset']) . $customNote;
 
             $out .= ical_event(
                 "daylight-{$dateStr}-{$uidSuffix}",
                 $timed($start + $o['rise_offset'], $end + $o['set_offset']),
-                $S['summaries']['daylight'],
+                sprintf($S['summaries']['daylight'], format_duration($daylightSeconds)),
                 $desc,
                 $dtstamp
             );
@@ -354,26 +375,17 @@ function render_calendar(array $o): string
         if ($enabled['daylight'] && $spans['night'] !== null) {
             [$start, $end] = $spans['night'];
 
-            $desc = "{$S['headers']['at_a_glance']}\n\n";
-            $desc .= "{$S['labels']['duration']}: " . format_duration_full($nightSeconds) . "\n";
-            $desc .= "{$S['labels']['progress']}: " . format_percentile_bar($nightStats['night_percentile']) . "\n\n";
-            $desc .= "{$S['headers']['details']}\n\n";
-            $desc .= "{$S['labels']['solar_midnight']}: " . date('H:i', intdiv($start + $end, 2)) . "\n";
-            $desc .= "{$S['labels']['of_day']}: " . number_format($nightStats['night_pct'], 1) . "%\n\n";
-            if ($nightStats['night_length_comparison'] !== null) {
-                $desc .= "{$S['headers']['comparisons']}\n\n";
-                $desc .= "{$S['labels']['vs_yesterday']}: {$nightStats['night_length_comparison']}\n\n";
-            }
-            $desc .= format_moon_section($nightStats['moon_info'], $S) . "\n";
-            $desc .= "{$S['headers']['context']}\n\n{$S['twilight_descriptions']['night']}";
-            if ($o['description'] !== '') {
-                $desc .= "\n\n" . $o['description'];
-            }
+            $desc = night_details($c, $S) . "\n" . night_about($moon, $S)
+                . $offsetNote($o['set_offset'], $o['rise_offset']) . $customNote;
 
             $out .= ical_event(
                 "night-{$dateStr}-{$uidSuffix}",
                 $timed($start + $o['set_offset'], $end + $o['rise_offset']),
-                $S['summaries']['night'],
+                sprintf(
+                    $S['summaries']['night'],
+                    get_moon_phase_emoji($moon['phase_name']),
+                    format_duration($nightSeconds)
+                ),
                 $desc,
                 $dtstamp
             );

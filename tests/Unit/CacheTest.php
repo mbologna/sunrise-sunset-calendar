@@ -90,7 +90,7 @@ class CacheTest extends BaseTest
         $summary = $cache->getWeekSummary($weekStart, 40.0, 15.0, 1.0);
 
         $this->assertSame($summary, $cache->getWeekSummary($weekStart, 40.0, 15.0, 1.0));
-        $this->assertSame($weekStart, $summary['shortest_day'], 'Days lengthen in February');
-        $this->assertSame('Increasing', $summary['trend']);
+        $this->assertGreaterThan($summary['start_length'], $summary['end_length'], 'Days lengthen in February');
+        $this->assertSame('increasing', $summary['trend']);
     }
 }

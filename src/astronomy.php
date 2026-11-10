@@ -126,6 +126,9 @@ function calculate_sun_times(
         $HA_civil = sunriseHourAngle($lat, $decl, -6.0);
         $HA_nautical = sunriseHourAngle($lat, $decl, -12.0);
         $HA_astro = sunriseHourAngle($lat, $decl, -18.0);
+        // Blue hour ends and golden hour starts at -4°; golden hour ends at +6°
+        $HA_minus4 = sunriseHourAngle($lat, $decl, -4.0);
+        $HA_plus6 = sunriseHourAngle($lat, $decl, 6.0);
 
         return [
             'declination_deg' => $decl,
@@ -141,6 +144,10 @@ function calculate_sun_times(
             'nautical_end_frac' => $end($HA_nautical),
             'astro_begin_frac' => $begin($HA_astro),
             'astro_end_frac' => $end($HA_astro),
+            'minus4_begin_frac' => $begin($HA_minus4),
+            'minus4_end_frac' => $end($HA_minus4),
+            'plus6_begin_frac' => $begin($HA_plus6),
+            'plus6_end_frac' => $end($HA_plus6),
         ];
     });
 
@@ -181,14 +188,15 @@ function fraction_to_timestamp(int $y, int $m, int $d, float $frac, float $utcOf
  *
  * Uses the UTC offset in effect on that date in the date's own time zone, so
  * feeds that span DST changes stay correct. Events the sun does not reach that
- * day are null.
+ * day are null. Elevations are geometric, in degrees, at solar noon and midnight.
  *
  * @param DateTimeImmutable $date Local date (time of day is ignored)
  * @return array{
  *     sunrise: ?int, sunset: ?int, solar_noon: int,
  *     civil_begin: ?int, civil_end: ?int, nautical_begin: ?int, nautical_end: ?int,
- *     astro_begin: ?int, astro_end: ?int, daylength_h: float, polar: ?string,
- *     declination: float, utc_offset: float
+ *     astro_begin: ?int, astro_end: ?int, minus4_begin: ?int, minus4_end: ?int,
+ *     plus6_begin: ?int, plus6_end: ?int, daylength_h: float, polar: ?string,
+ *     declination: float, noon_elevation: float, midnight_elevation: float, utc_offset: float
  * }
  */
 function sun_events(DateTimeImmutable $date, float $lat, float $lon): array
@@ -208,9 +216,15 @@ function sun_events(DateTimeImmutable $date, float $lat, float $lon): array
         'nautical_end' => $ts($calc['nautical_end_frac']),
         'astro_begin' => $ts($calc['astro_begin_frac']),
         'astro_end' => $ts($calc['astro_end_frac']),
+        'minus4_begin' => $ts($calc['minus4_begin_frac']),
+        'minus4_end' => $ts($calc['minus4_end_frac']),
+        'plus6_begin' => $ts($calc['plus6_begin_frac']),
+        'plus6_end' => $ts($calc['plus6_end_frac']),
         'daylength_h' => $calc['daylength_h'],
         'polar' => $calc['polar'],
         'declination' => $calc['declination_deg'],
+        'noon_elevation' => 90 - abs($lat - $calc['declination_deg']),
+        'midnight_elevation' => abs($lat + $calc['declination_deg']) - 90,
         'utc_offset' => $offset,
     ];
 }
@@ -556,16 +570,8 @@ function get_accurate_moon_phase(int $timestamp): array
     return [
         'phase_name' => $current_phase_name,
         'illumination' => round(moon_illumination($timestamp), 1),
-        'prev_phase' => $prev ? [
-            'name' => $prev['phase_name'],
-            'date' => date('j M Y, H:i', $prev['timestamp']),
-            'timestamp' => $prev['timestamp'],
-        ] : null,
-        'next_phase' => $next ? [
-            'name' => $next['phase_name'],
-            'date' => date('j M Y, H:i', $next['timestamp']),
-            'timestamp' => $next['timestamp'],
-        ] : null,
+        'prev_phase' => $prev ? ['name' => $prev['phase_name'], 'timestamp' => $prev['timestamp']] : null,
+        'next_phase' => $next ? ['name' => $next['phase_name'], 'timestamp' => $next['timestamp']] : null,
     ];
 }
 

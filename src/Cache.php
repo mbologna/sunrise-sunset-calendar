@@ -22,6 +22,9 @@ class Cache
     /** @var array<string, array<float>> Percentile cache keyed by lat:lon:year */
     private array $percentileCache = [];
 
+    /** @var array<string, array<array>> Per-day solar data keyed by lat:lon:year:offset */
+    private array $yearProfileCache = [];
+
     /** @var array<string, array> Week summary cache */
     private array $weekSummaryCache = [];
 
@@ -76,21 +79,47 @@ class Cache
         $cacheKey = sprintf('%.4f:%.4f:%d:%.2f', $lat, $lon, $year, $utcOffset);
 
         if (!isset($this->percentileCache[$cacheKey])) {
-            $daylightLengths = [];
-            $daysInYear = checkdate(2, 29, $year) ? 366 : 365;
-
-            for ($day = 1; $day <= $daysInYear; $day++) {
-                // mktime normalizes day-of-year overflow into the right month
-                $date = getdate(mktime(12, 0, 0, 1, $day, $year));
-                $result = calculate_sun_times($date['year'], $date['mon'], $date['mday'], $lat, $lon, $utcOffset);
-                $daylightLengths[] = $result['daylength_h'];
-            }
+            $daylightLengths = array_column($this->getYearProfile($lat, $lon, $year, $utcOffset), 'daylength_h');
             sort($daylightLengths);
-
             $this->percentileCache[$cacheKey] = $daylightLengths;
         }
 
         return $this->percentileCache[$cacheKey];
+    }
+
+    /**
+     * Get the solar calculations for every day of a year, in calendar order.
+     *
+     * One fixed UTC offset applies to the whole year, so day fractions compare
+     * across DST changes. Each record adds 'timestamp' (local noon) to the
+     * calculate_sun_times() result.
+     *
+     * @param float $lat Latitude
+     * @param float $lon Longitude
+     * @param int $year Year
+     * @param float $utcOffset UTC offset in hours
+     * @return array<array> One record per day
+     */
+    public function getYearProfile(float $lat, float $lon, int $year, float $utcOffset): array
+    {
+        $cacheKey = sprintf('%.4f:%.4f:%d:%.2f', $lat, $lon, $year, $utcOffset);
+
+        if (!isset($this->yearProfileCache[$cacheKey])) {
+            $profile = [];
+            $daysInYear = checkdate(2, 29, $year) ? 366 : 365;
+
+            for ($day = 1; $day <= $daysInYear; $day++) {
+                // mktime normalizes day-of-year overflow into the right month
+                $timestamp = mktime(12, 0, 0, 1, $day, $year);
+                $date = getdate($timestamp);
+                $profile[] = ['timestamp' => $timestamp]
+                    + calculate_sun_times($date['year'], $date['mon'], $date['mday'], $lat, $lon, $utcOffset);
+            }
+
+            $this->yearProfileCache[$cacheKey] = $profile;
+        }
+
+        return $this->yearProfileCache[$cacheKey];
     }
 
     /**
@@ -100,23 +129,20 @@ class Cache
      * @param float $lat Latitude
      * @param float $lon Longitude
      * @param float $utcOffset UTC offset
-     * @return array Week summary data
+     * @return array{avg_length: float, start_length: float, end_length: float, total_change: float, trend: string}
+     *     Lengths in seconds; trend is 'increasing', 'decreasing' or 'stable'
      */
     public function getWeekSummary(int $weekStart, float $lat, float $lon, float $utcOffset): array
     {
-        $strings = $this->getStrings();
         $cacheKey = sprintf('%d:%.4f:%.4f:%.2f', $weekStart, $lat, $lon, $utcOffset);
 
         if (isset($this->weekSummaryCache[$cacheKey])) {
             return $this->weekSummaryCache[$cacheKey];
         }
 
-        $weekEnd = strtotime('+6 days', $weekStart);
-        $dayLengths = [];
-        $current = $weekStart;
-
-        while ($current <= $weekEnd) {
-            $dateParts = getdate($current);
+        $lengths = [];
+        for ($i = 0; $i < 7; $i++) {
+            $dateParts = getdate(strtotime("+{$i} days", $weekStart));
             $result = calculate_sun_times(
                 $dateParts['year'],
                 $dateParts['mon'],
@@ -125,44 +151,22 @@ class Cache
                 $lon,
                 $utcOffset
             );
-            $dayLengths[] = [
-                'timestamp' => $current,
-                'length' => $result['daylength_h'] * 3600,
-            ];
-            $current = strtotime('+1 day', $current);
+            $lengths[] = $result['daylength_h'] * 3600;
         }
 
-        $lengths = array_column($dayLengths, 'length');
-        $avgLength = array_sum($lengths) / count($lengths);
-        $minLength = min($lengths);
-        $maxLength = max($lengths);
         $totalChange = end($lengths) - $lengths[0];
-
-        if ($totalChange > 300) {
-            $trend = $strings['trends']['increasing'];
-            $trendEmoji = $strings['trend_emojis']['increasing'];
-        } elseif ($totalChange < -300) {
-            $trend = $strings['trends']['decreasing'];
-            $trendEmoji = $strings['trend_emojis']['decreasing'];
-        } else {
-            $trend = $strings['trends']['stable'];
-            $trendEmoji = $strings['trend_emojis']['stable'];
-        }
-
-        $shortestIdx = array_search($minLength, $lengths);
-        $longestIdx = array_search($maxLength, $lengths);
-        $moonInfo = get_accurate_moon_phase($weekStart);
+        $trend = match (true) {
+            $totalChange > 300 => 'increasing',
+            $totalChange < -300 => 'decreasing',
+            default => 'stable',
+        };
 
         $summary = [
-            'avg_length' => $avgLength,
-            'min_length' => $minLength,
-            'max_length' => $maxLength,
+            'avg_length' => array_sum($lengths) / count($lengths),
+            'start_length' => $lengths[0],
+            'end_length' => end($lengths),
             'total_change' => $totalChange,
             'trend' => $trend,
-            'trend_emoji' => $trendEmoji,
-            'shortest_day' => $dayLengths[$shortestIdx]['timestamp'],
-            'longest_day' => $dayLengths[$longestIdx]['timestamp'],
-            'moon_phase' => $moonInfo['phase_name'],
         ];
 
         $this->weekSummaryCache[$cacheKey] = $summary;

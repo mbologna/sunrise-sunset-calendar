@@ -1,7 +1,7 @@
 <?php
 // Web interface for generating calendar URLs; rendered by sunrise-sunset-calendar.php
 $today = sun_events(new DateTimeImmutable('today', new DateTimeZone(DEFAULT_TIMEZONE)), DEFAULT_LAT, DEFAULT_LON);
-$daylight_minutes = (int) round($today['daylength_h'] * 60);
+$daylight_seconds = (int) round($today['daylength_h'] * 3600);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -30,7 +30,7 @@ $daylight_minutes = (int) round($today['daylength_h'] * 60);
                 Civil Dusk: <?= format_time($today['civil_end']) ?><br>
                 Nautical Dusk: <?= format_time($today['nautical_end']) ?><br>
                 Astronomical Dusk: <?= format_time($today['astro_end']) ?><br>
-                <strong>Day Length: <?= intdiv($daylight_minutes, 60) ?>h <?= $daylight_minutes % 60 ?>m</strong>
+                <strong>Day Length: <?= format_duration($daylight_seconds) ?></strong>
             </span>
         </div>
 
@@ -127,22 +127,22 @@ $daylight_minutes = (int) round($today['daylength_h'] * 60);
 
             <div class="form-group">
                 <strong>Event Types <span class="required">*</span></strong>
-                <div class="help-text" style="margin-bottom: 10px;">💡 Each creates 2 events (dawn + dusk). Select fewer to get complete data in notes!</div>
+                <div class="help-text" style="margin-bottom: 10px;">💡 Each creates 2 events (morning + evening). Times of the types you leave out are still listed in the notes of the others.</div>
                 <div class="checkbox-group">
                     <input type="checkbox" name="civil" id="civil" checked>
-                    <label for="civil">🌅 Civil Twilight - First Light → Sunrise | Sunset → Last Light</label>
+                    <label for="civil">🌅 Civil Twilight: civil dawn → sunrise, sunset → civil dusk</label>
                 </div>
                 <div class="checkbox-group">
                     <input type="checkbox" name="nautical" id="nautical">
-                    <label for="nautical">⚓ Nautical Twilight - Nautical Dawn → First Light | Last Light → Nautical Dusk</label>
+                    <label for="nautical">⚓ Nautical Twilight: nautical dawn → civil dawn, civil dusk → nautical dusk</label>
                 </div>
                 <div class="checkbox-group">
                     <input type="checkbox" name="astro" id="astro">
-                    <label for="astro">🌌 Astronomical Twilight - Astro Dawn → Nautical Dawn | Nautical Dusk → Astro Dusk</label>
+                    <label for="astro">🌌 Astronomical Twilight: astronomical dawn → nautical dawn, nautical dusk → astronomical dusk</label>
                 </div>
                 <div class="checkbox-group">
                     <input type="checkbox" name="daynight" id="daynight" checked>
-                    <label for="daynight">☀️🌙 Day & Night - Daylight (with stats) | Night (with stats & moon phase)</label>
+                    <label for="daynight">☀️🌙 Daylight &amp; Night: sunrise → sunset, astronomical dusk → astronomical dawn (with day length, moon phase and a weekly summary)</label>
                 </div>
             </div>
 
@@ -165,7 +165,7 @@ $daylight_minutes = (int) round($today['daylength_h'] * 60);
             <div class="form-group">
                 <label for="description">Custom Note (optional)</label>
                 <textarea name="description" id="description" rows="3"
-                    placeholder="Add custom text to all events"></textarea>
+                    placeholder="Added to daylight and night events"></textarea>
             </div>
 
             <input type="submit" name="generate_url" value="Generate Subscription URL">

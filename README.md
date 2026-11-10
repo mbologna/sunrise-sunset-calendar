@@ -8,11 +8,14 @@ An iCalendar feed of daily sunrise, sunset and twilight events for any location,
 
 ## Features
 
-- Civil, nautical and astronomical twilight as separate dawn and dusk events
-- Daylight and night events with day-length percentiles, day-to-day change and solstice comparisons
+- Morning and evening civil, nautical and astronomical twilight as separate events
+- Daylight and night events with length in the title, rank within the year, day-to-day change and solstice comparisons
+- Blue hour and golden hour times, and the noon sun's height
 - Moon phase and illumination on night events
-- Weekly daylight summaries on Sundays
-- Equinox and solstice events on their computed dates
+- Weekly daylight summaries spanning Sunday to Saturday
+- Equinoxes and solstices named by the local season, with the exact moment and facts for the location
+- A plain-language explanation of each period in its description
+- A calendar description with the location's daylight range, midnight sun, polar night and white nights
 - Correct times across daylight-saving changes, and continuous twilight during polar days and white nights
 - Token-protected feed URLs
 
@@ -61,7 +64,7 @@ Set these as environment variables or as constants in `config/config.php`. Envir
 | `lon` | yes | -180 to 180 |
 | `zone` | yes | IANA time zone, e.g. `Europe/Rome` |
 | `location` | no | Name shown in the calendar title |
-| `civil`, `nautical`, `astro` | no | `1` adds that twilight's dawn and dusk events |
+| `civil`, `nautical`, `astro` | no | `1` adds that twilight's morning and evening events |
 | `daynight` | no | `1` adds daylight, night and weekly summary events |
 | `rise_off`, `set_off` | no | Minutes (-1440 to 1440) to shift morning and evening events |
 | `desc` | no | Note appended to daylight and night events |
@@ -70,13 +73,22 @@ Twilight types not subscribed to as events are listed in the description of the 
 
 ## Event types
 
-- **Astronomical twilight**: sun 12–18° below the horizon
-- **Nautical twilight**: sun 6–12° below the horizon
-- **Civil twilight**: sun 0–6° below the horizon
-- **Daylight**: sunrise to sunset
-- **Night**: astronomical dusk to the next astronomical dawn
+Each event is a period, and its description opens with the instants that bound it, e.g. "From civil dawn 06:37 to sunrise 07:06". Twilights are periods; dawns and dusks are the instants when the sun crosses 18°, 12° or 6° below the horizon.
 
-When the sun never crosses a boundary, an event runs to or from solar noon or solar midnight instead. During polar night, civil twilight peaks at solar noon; under the midnight sun, daylight lasts 24 hours and no twilight or night events appear.
+| Event | From | To |
+|-------|------|----|
+| Morning Astronomical Twilight | astronomical dawn (sun 18° below) | nautical dawn (12° below) |
+| Morning Nautical Twilight | nautical dawn | civil dawn (6° below) |
+| Morning Civil Twilight | civil dawn | sunrise |
+| Daylight | sunrise | sunset |
+| Evening Civil Twilight | sunset | civil dusk (6° below) |
+| Evening Nautical Twilight | civil dusk | nautical dusk (12° below) |
+| Evening Astronomical Twilight | nautical dusk | astronomical dusk (18° below) |
+| Night | astronomical dusk | the next astronomical dawn |
+
+Sunrise and sunset are when the sun's top edge crosses the horizon, allowing for refraction. Weekly summaries are all-day events from Sunday to Saturday. Equinoxes and solstices are all-day events on their local date.
+
+When the sun never crosses a boundary, an event runs to or from solar noon or solar midnight instead, and its description says why. During polar night, civil twilight peaks at solar noon; under the midnight sun, daylight lasts 24 hours and no twilight or night events appear. Wherever the sun stays within 18° of the horizon all night (above about 48.6° latitude around the summer solstice), there are no night events.
 
 ## Development
 
@@ -113,7 +125,7 @@ Solar positions come from the NREL SPA (Reda & Andreas, 2008), specified to ±0.
 
 - sunrise against PHP's `date_sun_info()` every day for a year in Rome, New York and Sydney, within 2 minutes;
 - twilight times for Mapello, Italy, against published reference times, within 1–2 minutes;
-- equinoxes, solstices and moon phases (Meeus, *Astronomical Algorithms*) against published dates.
+- equinoxes, solstices and moon phases (Meeus, *Astronomical Algorithms*) against published dates, and moon illumination at each phase within 1%.
 
 ## License
 
