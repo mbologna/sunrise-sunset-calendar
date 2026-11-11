@@ -10,7 +10,8 @@ An iCalendar feed of daily sunrise, sunset and twilight events for any location,
 
 - Morning and evening civil, nautical and astronomical twilight as separate events
 - Daylight and night events with length in the title, rank within the year, day-to-day change and solstice comparisons
-- Blue hour and golden hour times, and the noon sun's height
+- Blue hour and golden hour times in time order, and the noon sun's height
+- Month-by-month graphs of day, night and twilight length over the year
 - Moon phase, illumination, and when the moon rises or sets during the night
 - Weekly daylight summaries spanning Sunday to Saturday, with sunrise and sunset drift
 - Equinoxes and solstices named by the local season, with the exact moment and facts for the location
@@ -73,7 +74,7 @@ Twilight types not subscribed to as events are listed in the description of the 
 
 ## Event types
 
-Each event is a period, and its description opens with the instants that bound it, e.g. "From civil dawn 06:37 to sunrise 07:06". Twilights are periods; dawns and dusks are the instants when the sun crosses 18°, 12° or 6° below the horizon.
+Each event is a period, titled with its name; the calendar shows when it starts and ends, so the description doesn't repeat that. It opens with the event's data, each figure set against the rest of the year: a rank, a month-by-month graph (`J▁ F▂ … [N▂] D▁`, the current month bracketed), and comparisons with yesterday and the solstices, as time and as a percentage. Civil twilight and daylight list the day's blue and golden hours in time order. An explanation of the period comes last.
 
 | Event | Title | From | To |
 |-------|-------|------|----|

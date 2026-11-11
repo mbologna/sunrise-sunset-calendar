@@ -259,27 +259,33 @@ function render_calendar(array $o): string
             $moon['rise_set'] = moon_rise_set($spans['night'][0], $spans['night'][1], $lat, $lon);
         }
 
+        $yesterdaySeconds = (int) round($prev['daylength_h'] * 3600);
         $c = [
             'ev' => $ev,
             'spans' => $spans,
             'enabled' => $enabled,
+            'year' => $yearInfo,
+            'day_index' => (int) $day->format('z'),
             'daylight' => [
                 'seconds' => $daylightSeconds,
                 'percentile' => $daylightPercentile,
                 'comparisons' => [
                     format_comparison(
-                        $daylightSeconds - (int) round($prev['daylength_h'] * 3600),
+                        $daylightSeconds - $yesterdaySeconds,
+                        $yesterdaySeconds,
                         $S['comparisons']['yesterday'],
                         $S
                     ),
                     format_comparison(
                         $daylightSeconds - $solstices[$year]['winter']['seconds'],
+                        $solstices[$year]['winter']['seconds'],
                         sprintf($S['comparisons']['winter_solstice'], $solstices[$year]['winter']['info']),
                         $S,
                         false
                     ),
                     format_comparison(
                         $daylightSeconds - $solstices[$year]['summer']['seconds'],
+                        $solstices[$year]['summer']['seconds'],
                         sprintf($S['comparisons']['summer_solstice'], $solstices[$year]['summer']['info']),
                         $S,
                         false
@@ -291,7 +297,7 @@ function render_calendar(array $o): string
                 'percentile' => night_percentile($yearInfo, (int) $day->format('z')),
                 'solar_midnight' => intdiv($ev['solar_noon'] + $next['solar_noon'], 2),
                 'comparison' => ($spans['night'] && $lastNight !== null)
-                    ? format_comparison($nightSeconds - $lastNight, $S['comparisons']['last_night'], $S)
+                    ? format_comparison($nightSeconds - $lastNight, $lastNight, $S['comparisons']['last_night'], $S)
                     : null,
                 'moon' => $moon,
             ],
@@ -360,7 +366,7 @@ function render_calendar(array $o): string
             $offset = $band['morning'] ? $o['rise_offset'] : $o['set_offset'];
 
             // Data first, then the rest of today's schedule, then the explanation
-            $desc = twilight_details($key, $span, $ev, $yearInfo, $S);
+            $desc = twilight_details($key, $span, $ev, $yearInfo, $c['day_index'], $S);
             $desc .= $band['morning'] ? build_dawn_supplemental($c, $S) : build_dusk_supplemental($c, $S);
             $desc .= "\n\n" . twilight_about($key, $span, $spans, $S);
             $desc .= $offsetNote($offset, $offset);
@@ -378,7 +384,9 @@ function render_calendar(array $o): string
         if ($enabled['daylight'] && $spans['daylight'] !== null) {
             [$start, $end] = $spans['daylight'];
 
-            $desc = rtrim(daylight_details($c, $S)) . build_twilight_schedule($c, $S)
+            $light = format_light_block($ev, $S);
+            $desc = rtrim(daylight_details($c, $S)) . ($light === '' ? '' : "\n\n" . $light)
+                . build_twilight_schedule($c, $S)
                 . "\n\n" . daylight_about($ev, $S)
                 . $offsetNote($o['rise_offset'], $o['set_offset']) . $customNote;
 

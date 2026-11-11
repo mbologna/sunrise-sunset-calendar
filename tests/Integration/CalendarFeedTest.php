@@ -163,8 +163,6 @@ class CalendarFeedTest extends TestCase
         [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
         [$dusk] = $this->eventsOfType($ics, 'evening-civil-twilight');
         $this->assertSame($dawn['DTEND'], $dusk['DTSTART']);
-        $this->assertStringStartsWith('From civil dawn ', $dawn['DESCRIPTION']);
-        $this->assertStringContainsString(' to solar noon ', $dawn['DESCRIPTION']);
         $this->assertStringContainsString(
             'Polar night: today the sun climbs from 6° below the horizon to 3° below at solar noon\\, its highest today.',
             $dawn['DESCRIPTION']
@@ -212,15 +210,13 @@ class CalendarFeedTest extends TestCase
         $this->assertSame([], $this->eventsOfType($ics, 'evening-astronomical-twilight'));
         $this->assertSame([], $this->eventsOfType($ics, 'night'));
 
-        $this->assertStringStartsWith('From civil dusk ', $dusk['DESCRIPTION']);
-        $this->assertStringContainsString(' to solar midnight ', $dusk['DESCRIPTION']);
         $this->assertStringContainsString('Sunset → Civil → [Nautical] → Solar midnight', $dusk['DESCRIPTION']);
         $this->assertStringContainsString(
             'Today the sun sinks from 6° below the horizon to 7° below at solar midnight\\, its lowest tonight.',
             $dusk['DESCRIPTION']
         );
         $this->assertStringNotContainsString('from 6° to 12° below', $dusk['DESCRIPTION']);
-        $this->assertStringStartsWith('From solar midnight ', $nextDawn['DESCRIPTION']);
+        $this->assertStringContainsString('Today the sun climbs from 7° below the horizon at solar midnight', $nextDawn['DESCRIPTION']);
         $this->assertStringContainsString('the sun never gets 18° below the horizon', str_replace("\r\n ", '', $ics));
     }
 
@@ -246,7 +242,6 @@ class CalendarFeedTest extends TestCase
         [$night] = $this->eventsOfType($this->feed(['window_days' => 0]), 'night');
         $minutes = (int) round((strtotime($night['DTEND']) - strtotime($night['DTSTART'])) / 60);
 
-        $this->assertStringContainsString('Length: ' . format_duration($minutes * 60) . '\,', $night['DESCRIPTION']);
         $this->assertStringContainsString(' Night · ' . format_duration($minutes * 60), $night['SUMMARY']);
     }
 
@@ -260,7 +255,7 @@ class CalendarFeedTest extends TestCase
 
         $this->assertStringContainsString('⚓ Nautical Twilight: ', $dawn['DESCRIPTION']);
         $this->assertStringContainsString('🌌 Astronomical Twilight: ', $dawn['DESCRIPTION']);
-        $this->assertStringContainsString('☀️ Daylight\\nFrom sunrise ', $dawn['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/☀️ Daylight: \d\d:\d\d–\d\d:\d\d \(\d+h \d\dm\)\\\\nSolar noon/', $dawn['DESCRIPTION']);
         $this->assertStringNotContainsString('🌅 Civil Twilight: ', $dawn['DESCRIPTION']);
         $this->assertSame([], $this->eventsOfType($ics, 'daylight'));
     }
@@ -311,14 +306,36 @@ class CalendarFeedTest extends TestCase
         $this->assertMatchesRegularExpression('/Sunrise \d\d:\d\d → \d\d:\d\d · Sunset \d\d:\d\d → \d\d:\d\d/', $summaries[0]['DESCRIPTION']);
     }
 
-    public function testTimedEventsNameTheirBoundaryInstants(): void
+    public function testDescriptionsDontRepeatTheEventTimesOrNameInstants(): void
     {
         $timed = array_filter($this->events($this->feed(['window_days' => 6])), fn($e) => str_contains($e['DTSTART'], 'T'));
 
         $this->assertNotEmpty($timed);
         foreach ($timed as $event) {
-            $this->assertMatchesRegularExpression('/^From [a-z ]+ \d\d:\d\d to [a-z ]+ \d\d:\d\d\\\\n/', $event['DESCRIPTION'], $event['UID']);
+            $this->assertStringNotContainsString('From ', $event['DESCRIPTION'], $event['UID']);
+            $this->assertDoesNotMatchRegularExpression('/\b(civil|nautical|astronomical) (dawn|dusk)\b/i', $event['DESCRIPTION'], $event['UID']);
         }
+    }
+
+    public function testLengthsShowTheYearMonthByMonth(): void
+    {
+        $ics = $this->feed(['today' => '2026-11-11', 'window_days' => 0]);
+        [$daylight] = $this->eventsOfType($ics, 'daylight');
+        [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
+
+        // Twelve months, the current one bracketed; daylight peaks in June in Rome
+        $this->assertMatchesRegularExpression('/Monthly average: J. F. M. A. M. J█ J. A. S. O. \[N.\] D./u', $daylight['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/Over the year: 9h 0\dm to 15h 1\dm/', $daylight['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/^Length: 29m · over the year: 2\dm to 3\dm\\\\nMonthly average: /', $dawn['DESCRIPTION']);
+    }
+
+    public function testComparisonsGiveAPercentage(): void
+    {
+        [$daylight] = $this->eventsOfType($this->feed(['today' => '2026-11-11', 'window_days' => 0]), 'daylight');
+
+        $this->assertMatchesRegularExpression('/\d+m \d\ds \(0\.\d%\) shorter than yesterday/', $daylight['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/51m \(9\.3%\) longer than the winter solstice \(Dec 21\)/', $daylight['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/5h 15m \(35%\) shorter than the summer solstice \(Jun 21\)/', $daylight['DESCRIPTION']);
     }
 
     public function testCalendarDescriptionHasLocationFacts(): void
@@ -384,7 +401,7 @@ class CalendarFeedTest extends TestCase
         ]), 'morning-civil-twilight');
         $text = $dawn['DESCRIPTION'];
 
-        $this->assertMatchesRegularExpression('/^From civil dawn [0-9:]+ to sunrise [0-9:]+\\\\nLength: \d+m \(2\dm–3\dm over the year\)/', $text);
+        $this->assertMatchesRegularExpression('/^Length: \d+m · over the year: 2\dm to 3\dm\\\\n/', $text);
         $this->assertLessThan(strpos($text, 'ℹ️ About'), strpos($text, '☀️ Today'));
     }
 
@@ -416,8 +433,13 @@ class CalendarFeedTest extends TestCase
 
         [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
         [$dusk] = $this->eventsOfType($ics, 'evening-civil-twilight');
-        $this->assertMatchesRegularExpression('/Blue hour: \d\d:\d\d–\d\d:\d\d · Golden hour from \d\d:\d\d/', $dawn['DESCRIPTION']);
-        $this->assertMatchesRegularExpression('/Golden hour until \d\d:\d\d · Blue hour: \d\d:\d\d–\d\d:\d\d/', $dusk['DESCRIPTION']);
+        // Each twilight lists its own blue and golden hour, in time order
+        $this->assertMatchesRegularExpression('/📷 Light for photos\\\\n(\d\d:\d\d)–(\d\d:\d\d) Blue hour\\\\n\2–\d\d:\d\d Golden hour(\\\\n\\\\n|$)/u', $dawn['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/📷 Light for photos\\\\n\d\d:\d\d–(\d\d:\d\d) Golden hour\\\\n\1–\d\d:\d\d Blue hour/u', $dusk['DESCRIPTION']);
+
+        // Daylight lists the whole day, morning first
+        [$daylight] = $this->eventsOfType($ics, 'daylight');
+        $this->assertMatchesRegularExpression('/📷 Light for photos(\\\\n\d\d:\d\d–\d\d:\d\d (Blue|Golden) hour){4}/u', $daylight['DESCRIPTION']);
     }
 
     public function testOffsetsAreExplained(): void
@@ -438,7 +460,6 @@ class CalendarFeedTest extends TestCase
         for ($i = 2; $i < count($nights); $i++) {
             $this->assertSame($nights[$i - 1]['DTEND'], $nights[$i]['DTSTART'], 'Nights join up without gaps');
         }
-        $this->assertStringContainsString(' to solar noon ', $nights[1]['DESCRIPTION']);
         $this->assertStringContainsString('all day tomorrow\, so this night lasts until solar noon.', $nights[1]['DESCRIPTION']);
         $this->assertStringStartsWith('Polar night: the sun stays more than 18° below the horizon all day', $nights[2]['DESCRIPTION']);
         $this->assertStringNotContainsString('this year\'s nights', $nights[2]['DESCRIPTION']);

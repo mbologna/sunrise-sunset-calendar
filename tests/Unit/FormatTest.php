@@ -45,17 +45,24 @@ class FormatTest extends BaseTest
 
     public function testComparisonLonger(): void
     {
-        $this->assertSame('2m 30s longer than yesterday', format_comparison(150, 'yesterday', get_strings()));
+        $this->assertSame('2m 30s (0.3%) longer than yesterday', format_comparison(150, 43200, 'yesterday', get_strings()));
     }
 
     public function testComparisonShorter(): void
     {
-        $this->assertSame('1m 45s shorter than last night', format_comparison(-105, 'last night', get_strings()));
+        $this->assertSame('1m 45s (0.2%) shorter than last night', format_comparison(-105, 43200, 'last night', get_strings()));
     }
 
     public function testComparisonSame(): void
     {
-        $this->assertSame('Same length as yesterday', format_comparison(0, 'yesterday', get_strings()));
+        $this->assertSame('Same length as yesterday', format_comparison(0, 43200, 'yesterday', get_strings()));
+    }
+
+    public function testComparisonPercentageRoundsAboveTenAndSkipsAZeroReferent(): void
+    {
+        $S = get_strings();
+        $this->assertSame('5h 15m (35%) shorter than the summer solstice', format_comparison(-18900, 54000, 'the summer solstice', $S, false));
+        $this->assertSame('3h 00m longer than the winter solstice', format_comparison(10800, 0, 'the winter solstice', $S, false));
     }
 
     public function testRankNamesTheExtremes(): void
