@@ -2,7 +2,7 @@ name: CI
 
 "on":
   push:
-    branches: ["**"]
+    branches: [main]
     tags: ["v*.*.*"]
   pull_request:
   workflow_dispatch:
@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   test:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@8f27b292381a0288ffea3cbfda2f325819bf7262 # main
+    uses: mbologna/.github/.github/workflows/php-ci.yml@92e06b193222ca7eaaa49380dc25e027d4b7987d # main
     with:
       php_version: "8.5"
       php_extensions: "mbstring, json"
@@ -33,7 +33,7 @@ jobs:
       test_command: vendor/bin/phpunit --testdox && composer analyse && composer lint
 
   lint:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@8f27b292381a0288ffea3cbfda2f325819bf7262 # main
+    uses: mbologna/.github/.github/workflows/php-ci.yml@92e06b193222ca7eaaa49380dc25e027d4b7987d # main
     with:
       php_version: "8.5"
       enable_test: false
@@ -46,9 +46,12 @@ jobs:
 
   docker:
     needs: [test, lint]
-    uses: mbologna/.github/.github/workflows/docker-ci.yml@8f27b292381a0288ffea3cbfda2f325819bf7262 # main
+    uses: mbologna/.github/.github/workflows/docker-ci.yml@92e06b193222ca7eaaa49380dc25e027d4b7987d # main
     with:
       image_name: sunrise-sunset-calendar
+      # push: the deploy job below runs the sha-* image of each
+      # main build, so main keeps publishing.
+      publish: push
       push_to_dockerhub: true
       enable_cosign: true
       enable_release_drafter: true
@@ -69,7 +72,7 @@ jobs:
       contents: write
       actions: write
     needs: [docker]
-    uses: mbologna/.github/.github/workflows/auto-release.yml@8f27b292381a0288ffea3cbfda2f325819bf7262 # main
+    uses: mbologna/.github/.github/workflows/auto-release.yml@92e06b193222ca7eaaa49380dc25e027d4b7987d # main
     with:
       strategy: conventional
       image: docker.io/mbologna/sunrise-sunset-calendar
@@ -82,7 +85,7 @@ jobs:
     # same pinned base image, so redeploying it only moved a deploy out of the
     # window.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: mbologna/.github/.github/workflows/gcp-deploy.yml@8f27b292381a0288ffea3cbfda2f325819bf7262 # main
+    uses: mbologna/.github/.github/workflows/gcp-deploy.yml@92e06b193222ca7eaaa49380dc25e027d4b7987d # main
     with:
       image_name: sunrise-sunset-calendar
       deploy_type: service
@@ -92,7 +95,7 @@ jobs:
 
   cache-cleanup:
     if: github.event_name == 'schedule'
-    uses: mbologna/.github/.github/workflows/cache-cleanup.yml@8f27b292381a0288ffea3cbfda2f325819bf7262 # main
+    uses: mbologna/.github/.github/workflows/cache-cleanup.yml@92e06b193222ca7eaaa49380dc25e027d4b7987d # main
     with:
       max_age_days: 7
     permissions:
