@@ -445,6 +445,21 @@ class CalendarFeedTest extends TestCase
         $this->assertStringContainsString("photographers' rules of thumb", $daylight['DESCRIPTION']);
     }
 
+    public function testBlueAndGoldenHourComeWithTheDaylightBlockWithoutADaylightEvent(): void
+    {
+        // A twilight-only calendar carries daylight in the morning twilight's Today block, photo light included
+        $ics = $this->feed([
+            'today' => '2026-11-15',
+            'window_days' => 0,
+            'enabled' => ['civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => false],
+        ]);
+        [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
+        [$dusk] = $this->eventsOfType($ics, 'evening-civil-twilight');
+
+        $this->assertMatchesRegularExpression('/☀️ Daylight: .+📷 Morning: blue hour .+?\\\\n📷 Evening: golden hour/u', $dawn['DESCRIPTION']);
+        $this->assertStringNotContainsStringIgnoringCase('golden hour', $dusk['DESCRIPTION'], 'Listed once, with the daylight');
+    }
+
     public function testOffsetsAreExplained(): void
     {
         [$daylight] = $this->eventsOfType($this->feed(['window_days' => 0, 'rise_offset' => -600, 'set_offset' => 900]), 'daylight');

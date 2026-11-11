@@ -73,7 +73,7 @@ Twilight types not subscribed to as events are listed in the description of the 
 
 ## Event types
 
-Each event is a period, titled with its name; the calendar shows when it starts and ends, so the description doesn't repeat that. It opens with what changed since yesterday, then where today sits in the year: a bar between the year's shortest and longest (`9h 08m ▕█░░░░░░░░░▏ 15h 14m`, linear, with both ends labelled), and how far today is from each, with their dates. Night gives the moonless part of the night, the window that matters for stargazing. Daylight also lists the day's blue and golden hours, morning and evening. An explanation of the period comes last.
+Each event is a period, titled with its name; the calendar shows when it starts and ends, so the description doesn't repeat that. It opens with what changed since yesterday, then where today sits in the year: a bar between the year's shortest and longest (`9h 08m ▕█░░░░░░░░░▏ 15h 14m`, linear, with both ends labelled), and how far today is from each, with their dates. Night gives the moonless part of the night, the window that matters for stargazing. Daylight also lists the day's blue and golden hours, morning and evening; without a Daylight event, they come with the daylight block in the morning twilight's notes. An explanation of the period comes last.
 
 | Event | Title | From | To |
 |-------|-------|------|----|

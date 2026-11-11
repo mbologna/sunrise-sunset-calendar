@@ -988,7 +988,9 @@ function build_supplemental(array $c, array $S, string $header, array $twilights
         $label = $S['schedule_labels'][$period] . ': ' . format_local($span[0]) . '–' . format_local($span[1])
             . ' (' . format_duration($span[1] - $span[0]) . ')';
         $details = $period === 'daylight' ? daylight_details($c, $S) : night_details($c, $S);
-        $info .= ($info === '' ? '' : "\n") . $label . "\n" . $details;
+        // Blue and golden hour belong to daylight, so they come along with its block
+        $light = $period === 'daylight' ? format_light_block($c['ev'], $S) : '';
+        $info .= ($info === '' ? '' : "\n") . $label . "\n" . $details . ($light === '' ? '' : "\n" . $light . "\n");
     }
 
     return $info === '' ? '' : "\n\n" . $S['headers'][$header] . "\n" . rtrim($info, "\n");
