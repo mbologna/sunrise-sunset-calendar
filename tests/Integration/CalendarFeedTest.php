@@ -428,19 +428,36 @@ class CalendarFeedTest extends TestCase
         $this->assertStringContainsString('🌘 Moon\\nWaxing Crescent', $sydney['DESCRIPTION']);
     }
 
-    public function testCivilTwilightListsBlueAndGoldenHour(): void
+    public function testBlueAndGoldenHourAppearOnlyOnDaylight(): void
     {
-        $ics = $this->feed(['window_days' => 0]);
+        $ics = $this->feed(['today' => '2026-11-15', 'window_days' => 0]);
 
+        foreach (['morning-civil-twilight', 'evening-civil-twilight'] as $type) {
+            [$twilight] = $this->eventsOfType($ics, $type);
+            $this->assertStringNotContainsStringIgnoringCase('golden hour', $twilight['DESCRIPTION'], $type);
+            $this->assertStringNotContainsStringIgnoringCase('blue hour', $twilight['DESCRIPTION'], $type);
+        }
+
+        // Morning and evening, each in time order
+        [$daylight] = $this->eventsOfType($ics, 'daylight');
+        $this->assertMatchesRegularExpression('/📷 Morning: blue hour \d\d:\d\d–(\d\d:\d\d)\\\\, golden hour \1–\d\d:\d\d/u', $daylight['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/📷 Evening: golden hour \d\d:\d\d–(\d\d:\d\d)\\\\, blue hour \1–\d\d:\d\d/u', $daylight['DESCRIPTION']);
+        $this->assertStringContainsString("photographers' rules of thumb", $daylight['DESCRIPTION']);
+    }
+
+    public function testBlueAndGoldenHourComeWithTheDaylightBlockWithoutADaylightEvent(): void
+    {
+        // A twilight-only calendar carries daylight in the morning twilight's Today block, photo light included
+        $ics = $this->feed([
+            'today' => '2026-11-15',
+            'window_days' => 0,
+            'enabled' => ['civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => false],
+        ]);
         [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
         [$dusk] = $this->eventsOfType($ics, 'evening-civil-twilight');
-        // Each twilight lists its own blue and golden hour, in time order
-        $this->assertMatchesRegularExpression('/📷 Light for photos\\\\n(\d\d:\d\d)–(\d\d:\d\d) Blue hour\\\\n\2–\d\d:\d\d Golden hour(\\\\n\\\\n|$)/u', $dawn['DESCRIPTION']);
-        $this->assertMatchesRegularExpression('/📷 Light for photos\\\\n\d\d:\d\d–(\d\d:\d\d) Golden hour\\\\n\1–\d\d:\d\d Blue hour/u', $dusk['DESCRIPTION']);
 
-        // Daylight lists the whole day, morning first
-        [$daylight] = $this->eventsOfType($ics, 'daylight');
-        $this->assertMatchesRegularExpression('/📷 Light for photos(\\\\n\d\d:\d\d–\d\d:\d\d (Blue|Golden) hour){4}/u', $daylight['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/☀️ Daylight: .+📷 Morning: blue hour .+?\\\\n📷 Evening: golden hour/u', $dawn['DESCRIPTION']);
+        $this->assertStringNotContainsStringIgnoringCase('golden hour', $dusk['DESCRIPTION'], 'Listed once, with the daylight');
     }
 
     public function testOffsetsAreExplained(): void

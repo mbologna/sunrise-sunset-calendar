@@ -144,14 +144,17 @@ return [
         ],
     ],
 
-    // Blue hour (sun 6° to 4° below) and golden hour (4° below to 6° above), in time order
+    // Blue hour (sun 6° to 4° below) and golden hour (4° below to 6° above), on the Daylight event
     'light' => [
-        'header' => '📷 Light for photos',
-        'blue' => 'Blue hour',
-        'golden' => 'Golden hour',
+        'morning' => '📷 Morning: %s',
+        'midday' => '📷 Around noon: %s',
+        'evening' => '📷 Evening: %s',
+        'item' => '%s %s', // name, time
+        'blue' => 'blue hour',
+        'golden' => 'golden hour',
         'until' => 'until %s',
         'from' => 'from %s',
-        'all_day' => 'All day:',
+        'all_day' => '📷 Golden hour all day: the sun stays between 4° below and 6° above the horizon',
     ],
 
     // Length comparisons: "2m 07s shorter than yesterday"
@@ -190,14 +193,14 @@ return [
             'text' => 'It is named for everyday ("civil") activity: there is enough light to be outdoors '
                 . 'without lamps under a clear sky. Colours return, only the brightest stars and planets '
                 . 'remain, and streetlights typically switch off.',
-            'good_for' => 'blue hour and the start of golden hour; early walks and runs.',
+            'good_for' => 'early walks and runs; seeing the first colours of the day.',
         ],
         'evening_civil' => [
             'angles' => "The sun sinks from sunset to 6° below the horizon (about three fingers at arm's length).",
             'text' => 'It is named for everyday ("civil") activity: until the sun is 6° down there is still '
                 . 'enough light to be outdoors without lamps. Colours fade, the brightest stars and planets '
                 . 'appear, and streetlights typically switch on.',
-            'good_for' => 'the end of golden hour, then blue hour; evening walks.',
+            'good_for' => 'evening walks; the first bright stars and planets.',
         ],
         'evening_nautical' => [
             'angles' => "The sun sinks from 6° to 12° below the horizon (about three fingers to just over one "
@@ -240,8 +243,9 @@ return [
         'to_midnight' => '%d° below at solar midnight, its lowest tonight',
         'polar_night' => 'Polar night: ',
         // What the photo-light times mean
-        'light' => 'Blue hour (sun 6° to 4° below) gives a deep, even blue sky; golden hour (4° below to 6° '
-            . 'above) gives warm, low light and long shadows.',
+        'light' => 'Blue hour (sun 6° to 4° below) and golden hour (4° below to 6° above) are photographers\' '
+            . 'rules of thumb, not fixed boundaries: a deep, even blue sky, then warm, low light with long '
+            . 'shadows, if the weather allows.',
         // Why the length in the "Length" line changes over the year
         'length_morning' => 'Its length changes over the year because the sun rises at a different angle: '
             . 'the more gently it rises, the longer twilight lasts.',
