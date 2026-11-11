@@ -607,8 +607,8 @@ function missing_boundaries(string $key, array $span): array
 }
 
 /**
- * The data lines of a twilight event: its length within the year's range, the
- * sun's path when it misses a boundary, and blue and golden hour.
+ * The data lines of a twilight event: its length within the year's range and the
+ * sun's path when it misses a boundary.
  *
  * The event's own start and end are not repeated: the calendar shows them.
  *
@@ -637,13 +637,7 @@ function twilight_details(string $key, array $span, array $ev, array $year, arra
         $lines[] = sprintf($L['all_night'], format_runs($band['all_night'], $S));
     }
 
-    $text = implode("\n", $lines);
-    if (str_ends_with($key, '_civil')) {
-        $light = format_light_block($ev, $S, $span[0], $span[1]);
-        $text .= $light === '' ? '' : "\n\n" . $light;
-    }
-
-    return $text;
+    return implode("\n", $lines);
 }
 /**
  * Today's blue hours (sun 6° to 4° below) and golden hours (4° below to 6°
@@ -684,31 +678,43 @@ function light_periods(array $ev): array
 }
 
 /**
- * The "Light for photos" block: blue and golden hours in time order, limited to
- * those overlapping [$from, $to] when given (a twilight shows its own).
+ * Blue and golden hour for the Daylight event, one line for the morning and one
+ * for the evening, each in time order: "📷 Morning: blue hour 06:29–06:41,
+ * golden hour 06:41–07:41". A period that spans solar noon (the sun never
+ * climbing past 6°) gets its own line.
  *
  * @param array $ev sun_events() for the day
  */
-function format_light_block(array $ev, array $S, ?int $from = null, ?int $to = null): string
+function format_light_block(array $ev, array $S): string
 {
     $L = $S['light'];
-    $lines = [];
+    $noon = $ev['solar_noon'];
+    $groups = ['morning' => [], 'midday' => [], 'evening' => []];
     foreach (light_periods($ev) as [$kind, $start, $end]) {
-        $overlaps = ($from === null || $end === null || $end > $from)
-            && ($to === null || $start === null || $start < $to);
-        if (!$overlaps) {
-            continue;
+        if ($start === null && $end === null) {
+            return $L['all_day'];
         }
-        $when = match (true) {
-            $start === null && $end === null => $L['all_day'],
+        $item = sprintf($L['item'], $L[$kind], match (true) {
             $start === null => sprintf($L['until'], format_local($end)),
             $end === null => sprintf($L['from'], format_local($start)),
             default => format_local($start) . '–' . format_local($end),
+        });
+        $group = match (true) {
+            $end !== null && $end <= $noon => 'morning',
+            $start !== null && $start >= $noon => 'evening',
+            default => 'midday',
         };
-        $lines[] = "{$when} {$L[$kind]}";
+        $groups[$group][] = $item;
     }
 
-    return $lines === [] ? '' : $L['header'] . "\n" . implode("\n", $lines);
+    $lines = [];
+    foreach ($groups as $group => $items) {
+        if ($items !== []) {
+            $lines[] = sprintf($L[$group], implode(', ', $items));
+        }
+    }
+
+    return implode("\n", $lines);
 }
 /**
  * Today's sequence with the current twilight bracketed: "Night → [Astronomical] → …".
@@ -796,14 +802,11 @@ function twilight_about(string $key, array $span, array $spans, array $S): strin
     // The usual angles are wrong on a day the data lines describe a different path
     $angles = ($deepMissing || $highMissing) ? '' : $about['angles'] . ' ';
 
-    // What is happening, then why its length and light vary, then what it is good for
-    $light = str_ends_with($key, '_civil') ? ' ' . $S['about_dynamic']['light'] : '';
-
+    // What is happening, then why its length varies, then what it is good for
     return sprintf($S['headers']['about'], $S['names'][$key]) . "\n"
         . format_sequence($key, $spans, $S) . "\n\n"
         . $angles . $about['text'] . "\n\n"
-        . $S['about_dynamic'][str_starts_with($key, 'morning') ? 'length_morning' : 'length_evening']
-        . $light . "\n\n"
+        . $S['about_dynamic'][str_starts_with($key, 'morning') ? 'length_morning' : 'length_evening'] . "\n\n"
         . sprintf($S['labels']['good_for'], $about['good_for']);
 }
 

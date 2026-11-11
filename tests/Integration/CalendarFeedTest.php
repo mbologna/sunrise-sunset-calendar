@@ -428,19 +428,21 @@ class CalendarFeedTest extends TestCase
         $this->assertStringContainsString('🌘 Moon\\nWaxing Crescent', $sydney['DESCRIPTION']);
     }
 
-    public function testCivilTwilightListsBlueAndGoldenHour(): void
+    public function testBlueAndGoldenHourAppearOnlyOnDaylight(): void
     {
-        $ics = $this->feed(['window_days' => 0]);
+        $ics = $this->feed(['today' => '2026-11-15', 'window_days' => 0]);
 
-        [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
-        [$dusk] = $this->eventsOfType($ics, 'evening-civil-twilight');
-        // Each twilight lists its own blue and golden hour, in time order
-        $this->assertMatchesRegularExpression('/📷 Light for photos\\\\n(\d\d:\d\d)–(\d\d:\d\d) Blue hour\\\\n\2–\d\d:\d\d Golden hour(\\\\n\\\\n|$)/u', $dawn['DESCRIPTION']);
-        $this->assertMatchesRegularExpression('/📷 Light for photos\\\\n\d\d:\d\d–(\d\d:\d\d) Golden hour\\\\n\1–\d\d:\d\d Blue hour/u', $dusk['DESCRIPTION']);
+        foreach (['morning-civil-twilight', 'evening-civil-twilight'] as $type) {
+            [$twilight] = $this->eventsOfType($ics, $type);
+            $this->assertStringNotContainsStringIgnoringCase('golden hour', $twilight['DESCRIPTION'], $type);
+            $this->assertStringNotContainsStringIgnoringCase('blue hour', $twilight['DESCRIPTION'], $type);
+        }
 
-        // Daylight lists the whole day, morning first
+        // Morning and evening, each in time order
         [$daylight] = $this->eventsOfType($ics, 'daylight');
-        $this->assertMatchesRegularExpression('/📷 Light for photos(\\\\n\d\d:\d\d–\d\d:\d\d (Blue|Golden) hour){4}/u', $daylight['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/📷 Morning: blue hour \d\d:\d\d–(\d\d:\d\d)\\\\, golden hour \1–\d\d:\d\d/u', $daylight['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/📷 Evening: golden hour \d\d:\d\d–(\d\d:\d\d)\\\\, blue hour \1–\d\d:\d\d/u', $daylight['DESCRIPTION']);
+        $this->assertStringContainsString("photographers' rules of thumb", $daylight['DESCRIPTION']);
     }
 
     public function testOffsetsAreExplained(): void
