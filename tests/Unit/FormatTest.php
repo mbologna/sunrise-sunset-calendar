@@ -58,18 +58,52 @@ class FormatTest extends BaseTest
         $this->assertSame('Same length as yesterday', format_comparison(0, 'yesterday', get_strings()));
     }
 
-    public function testRankNamesTheExtremes(): void
+    public function testClockShift(): void
     {
         $S = get_strings();
-        $this->assertSame('Longest day of the year', format_rank(100.0, 'daylight', $S));
-        $this->assertSame('Shortest night of the year', format_rank(0.0, 'night', $S));
+        $this->assertSame('1m 13s later', format_clock_shift(73, $S));
+        $this->assertSame('53s earlier', format_clock_shift(-53, $S));
+        $this->assertSame('unchanged', format_clock_shift(0, $S));
     }
 
-    public function testRankNeverRoundsToAnExtreme(): void
+    public function testRangeBarIsLinearBetweenLabelledEnds(): void
+    {
+        $this->assertSame('9h 00m ▕█████░░░░░▏ 15h 00m', format_range_bar(12 * 3600, 9 * 3600, 15 * 3600));
+        $this->assertSame('9h 00m ▕░░░░░░░░░░▏ 15h 00m', format_range_bar(9 * 3600, 9 * 3600, 15 * 3600));
+        $this->assertSame('9h 00m ▕██████████▏ 15h 00m', format_range_bar(15 * 3600, 9 * 3600, 15 * 3600));
+    }
+
+    public function testExtremesNameTheEndToday(): void
     {
         $S = get_strings();
-        $this->assertSame("Longer than 99% of this year's days", format_rank(99.7, 'daylight', $S));
-        $this->assertSame("Longer than 1% of this year's nights", format_rank(0.3, 'night', $S));
+        $shortest = [9 * 3600, mktime(12, 0, 0, 12, 21, 2026)];
+        $longest = [15 * 3600, mktime(12, 0, 0, 6, 21, 2026)];
+
+        $this->assertSame(
+            '1h 00m more than the shortest day (Dec 21), 5h 00m less than the longest (Jun 21)',
+            format_extremes('daylight', 10 * 3600, $shortest, $longest, $S)
+        );
+        $this->assertSame(
+            'The shortest day of the year: 6h 00m less than the longest (Jun 21)',
+            format_extremes('daylight', 9 * 3600 + 1, $shortest, $longest, $S)
+        );
+        // A day seconds from the shortest is not the shortest, and says by how much
+        $this->assertSame(
+            '30s more than the shortest day (Dec 21), 6h 00m less than the longest (Jun 21)',
+            format_extremes('daylight', 9 * 3600 + 30, $shortest, $longest, $S)
+        );
+    }
+
+    public function testMoonlessWindowsFollowRisesAndSets(): void
+    {
+        $night = [1000, 9000];
+        $this->assertSame([[1000, 9000]], moonless_windows(['up_at_start' => false, 'events' => []], ...$night));
+        $this->assertSame([], moonless_windows(['up_at_start' => true, 'events' => []], ...$night));
+        $this->assertSame([[3000, 9000]], moonless_windows(['up_at_start' => true, 'events' => [['set', 3000]]], ...$night));
+        $this->assertSame(
+            [[3000, 6000]],
+            moonless_windows(['up_at_start' => true, 'events' => [['set', 3000], ['rise', 6000]]], ...$night)
+        );
     }
 
     public function testDayRunsMergeAcrossNewYear(): void

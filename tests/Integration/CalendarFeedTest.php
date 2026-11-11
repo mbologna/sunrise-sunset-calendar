@@ -163,8 +163,6 @@ class CalendarFeedTest extends TestCase
         [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
         [$dusk] = $this->eventsOfType($ics, 'evening-civil-twilight');
         $this->assertSame($dawn['DTEND'], $dusk['DTSTART']);
-        $this->assertStringStartsWith('From civil dawn ', $dawn['DESCRIPTION']);
-        $this->assertStringContainsString(' to solar noon ', $dawn['DESCRIPTION']);
         $this->assertStringContainsString(
             'Polar night: today the sun climbs from 6° below the horizon to 3° below at solar noon\\, its highest today.',
             $dawn['DESCRIPTION']
@@ -212,24 +210,22 @@ class CalendarFeedTest extends TestCase
         $this->assertSame([], $this->eventsOfType($ics, 'evening-astronomical-twilight'));
         $this->assertSame([], $this->eventsOfType($ics, 'night'));
 
-        $this->assertStringStartsWith('From civil dusk ', $dusk['DESCRIPTION']);
-        $this->assertStringContainsString(' to solar midnight ', $dusk['DESCRIPTION']);
         $this->assertStringContainsString('Sunset → Civil → [Nautical] → Solar midnight', $dusk['DESCRIPTION']);
         $this->assertStringContainsString(
             'Today the sun sinks from 6° below the horizon to 7° below at solar midnight\\, its lowest tonight.',
             $dusk['DESCRIPTION']
         );
         $this->assertStringNotContainsString('from 6° to 12° below', $dusk['DESCRIPTION']);
-        $this->assertStringStartsWith('From solar midnight ', $nextDawn['DESCRIPTION']);
+        $this->assertStringContainsString('Today the sun climbs from 7° below the horizon at solar midnight', $nextDawn['DESCRIPTION']);
         $this->assertStringContainsString('the sun never gets 18° below the horizon', str_replace("\r\n ", '', $ics));
     }
 
-    public function testSouthernHemisphereWinterSolsticeIsInJune(): void
+    public function testSouthernHemisphereShortestDayIsInJune(): void
     {
         $ics = $this->feed(['lat' => -33.8688, 'lon' => 151.2093, 'timezone' => 'Australia/Sydney', 'window_days' => 0]);
 
         [$daylight] = $this->eventsOfType($ics, 'daylight');
-        $this->assertMatchesRegularExpression('/\\\\n[^\\\\]+ longer than the winter solstice \(Jun 21\)/', $daylight['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/more than the shortest day \(Jun 2\d\)\\\\, [^\\\\]+ less than the longest \(Dec 2\d\)/', $daylight['DESCRIPTION']);
     }
 
     public function testOffsetsShiftMorningAndEveningEvents(): void
@@ -246,7 +242,6 @@ class CalendarFeedTest extends TestCase
         [$night] = $this->eventsOfType($this->feed(['window_days' => 0]), 'night');
         $minutes = (int) round((strtotime($night['DTEND']) - strtotime($night['DTSTART'])) / 60);
 
-        $this->assertStringContainsString('Length: ' . format_duration($minutes * 60) . '\,', $night['DESCRIPTION']);
         $this->assertStringContainsString(' Night · ' . format_duration($minutes * 60), $night['SUMMARY']);
     }
 
@@ -260,7 +255,7 @@ class CalendarFeedTest extends TestCase
 
         $this->assertStringContainsString('⚓ Nautical Twilight: ', $dawn['DESCRIPTION']);
         $this->assertStringContainsString('🌌 Astronomical Twilight: ', $dawn['DESCRIPTION']);
-        $this->assertStringContainsString('☀️ Daylight\\nFrom sunrise ', $dawn['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/☀️ Daylight: \d\d:\d\d–\d\d:\d\d \(\d+h \d\dm\)\\\\n[^\\\\]+ than yesterday: sunrise/u', $dawn['DESCRIPTION']);
         $this->assertStringNotContainsString('🌅 Civil Twilight: ', $dawn['DESCRIPTION']);
         $this->assertSame([], $this->eventsOfType($ics, 'daylight'));
     }
@@ -311,14 +306,35 @@ class CalendarFeedTest extends TestCase
         $this->assertMatchesRegularExpression('/Sunrise \d\d:\d\d → \d\d:\d\d · Sunset \d\d:\d\d → \d\d:\d\d/', $summaries[0]['DESCRIPTION']);
     }
 
-    public function testTimedEventsNameTheirBoundaryInstants(): void
+    public function testDescriptionsDontRepeatTheEventTimesOrNameInstants(): void
     {
         $timed = array_filter($this->events($this->feed(['window_days' => 6])), fn($e) => str_contains($e['DTSTART'], 'T'));
 
         $this->assertNotEmpty($timed);
         foreach ($timed as $event) {
-            $this->assertMatchesRegularExpression('/^From [a-z ]+ \d\d:\d\d to [a-z ]+ \d\d:\d\d\\\\n/', $event['DESCRIPTION'], $event['UID']);
+            $this->assertStringNotContainsString('From ', $event['DESCRIPTION'], $event['UID']);
+            $this->assertDoesNotMatchRegularExpression('/\b(civil|nautical|astronomical) (dawn|dusk)\b/i', $event['DESCRIPTION'], $event['UID']);
         }
+    }
+
+    public function testDaylightShowsChangeAndPlaceInTheYear(): void
+    {
+        [$daylight] = $this->eventsOfType($this->feed(['today' => '2026-11-15', 'window_days' => 0]), 'daylight');
+        $text = $daylight['DESCRIPTION'];
+
+        // What changed since yesterday, including on the clock, and where the sun peaks
+        $this->assertMatchesRegularExpression('/^2m 0\ds shorter than yesterday: sunrise 1m \d\ds later\\\\, sunset \d+s earlier\\\\nSun highest at 11:54\\\\, 30° above the horizon/u', $text);
+        // Where today sits between the year's shortest and longest day, as a bar and in words
+        $this->assertStringContainsString('📅 Through the year\n9h 08m ▕█░░░░░░░░░▏ 15h 14m', $text);
+        $this->assertStringContainsString('42m more than the shortest day (Dec 21)\, 5h 24m less than the longest (Jun 21)', $text);
+        $this->assertStringNotContainsString('%', $text);
+    }
+
+    public function testTwilightLengthSitsInTheYearsRange(): void
+    {
+        [$dawn] = $this->eventsOfType($this->feed(['today' => '2026-11-15', 'window_days' => 0]), 'morning-civil-twilight');
+
+        $this->assertStringStartsWith('Length: 30m · over the year: 28m ▕███░░░░░░░▏ 34m', $dawn['DESCRIPTION']);
     }
 
     public function testCalendarDescriptionHasLocationFacts(): void
@@ -384,18 +400,20 @@ class CalendarFeedTest extends TestCase
         ]), 'morning-civil-twilight');
         $text = $dawn['DESCRIPTION'];
 
-        $this->assertMatchesRegularExpression('/^From civil dawn [0-9:]+ to sunrise [0-9:]+\\\\nLength: \d+m \(2\dm–3\dm over the year\)/', $text);
+        $this->assertMatchesRegularExpression('/^Length: \d+m · over the year: 2\dm ▕[█░]{10}▏ 3\dm\\\\n/u', $text);
         $this->assertLessThan(strpos($text, 'ℹ️ About'), strpos($text, '☀️ Today'));
     }
 
-    public function testNightSaysWhenTheMoonIsUp(): void
+    public function testNightGivesTheMoonlessWindow(): void
     {
         $night = fn(string $today) => $this->eventsOfType($this->feed(['today' => $today, 'window_days' => 0]), 'night')[0]['DESCRIPTION'];
 
-        $this->assertStringContainsString('Sets at 21:45: moonless sky from then on.', $night('2026-11-15'));
-        $this->assertStringContainsString('Full Moon\\, 100% illuminated.', $night('2026-11-24'));
-        $this->assertStringContainsString('Above the horizon all night.', $night('2026-11-24'));
-        $this->assertStringContainsString('Below the horizon all night: a moonless sky throughout.', $night('2026-11-10'));
+        // The moon sets at 21:45 (USNO) and the night ends at astronomical dawn
+        $this->assertMatchesRegularExpression('/Moonless sky: 21:45–05:2\d \(7h \d\dm\)/u', $night('2026-11-15'));
+        $this->assertStringContainsString('Full Moon\, 100% lit', $night('2026-11-24'));
+        $this->assertStringContainsString('Moonless sky: none\, the moon is up all night', $night('2026-11-24'));
+        $this->assertStringContainsString('Moonless sky: all night', $night('2026-11-10'));
+        $this->assertStringNotContainsString('While up', $night('2026-11-10'), 'No brightness note when the moon never rises');
     }
 
     public function testMoonEmojiIsMirroredSouthOfTheEquator(): void
@@ -416,8 +434,13 @@ class CalendarFeedTest extends TestCase
 
         [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
         [$dusk] = $this->eventsOfType($ics, 'evening-civil-twilight');
-        $this->assertMatchesRegularExpression('/Blue hour: \d\d:\d\d–\d\d:\d\d · Golden hour from \d\d:\d\d/', $dawn['DESCRIPTION']);
-        $this->assertMatchesRegularExpression('/Golden hour until \d\d:\d\d · Blue hour: \d\d:\d\d–\d\d:\d\d/', $dusk['DESCRIPTION']);
+        // Each twilight lists its own blue and golden hour, in time order
+        $this->assertMatchesRegularExpression('/📷 Light for photos\\\\n(\d\d:\d\d)–(\d\d:\d\d) Blue hour\\\\n\2–\d\d:\d\d Golden hour(\\\\n\\\\n|$)/u', $dawn['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/📷 Light for photos\\\\n\d\d:\d\d–(\d\d:\d\d) Golden hour\\\\n\1–\d\d:\d\d Blue hour/u', $dusk['DESCRIPTION']);
+
+        // Daylight lists the whole day, morning first
+        [$daylight] = $this->eventsOfType($ics, 'daylight');
+        $this->assertMatchesRegularExpression('/📷 Light for photos(\\\\n\d\d:\d\d–\d\d:\d\d (Blue|Golden) hour){4}/u', $daylight['DESCRIPTION']);
     }
 
     public function testOffsetsAreExplained(): void
@@ -438,22 +461,45 @@ class CalendarFeedTest extends TestCase
         for ($i = 2; $i < count($nights); $i++) {
             $this->assertSame($nights[$i - 1]['DTEND'], $nights[$i]['DTSTART'], 'Nights join up without gaps');
         }
-        $this->assertStringContainsString(' to solar noon ', $nights[1]['DESCRIPTION']);
         $this->assertStringContainsString('all day tomorrow\, so this night lasts until solar noon.', $nights[1]['DESCRIPTION']);
         $this->assertStringStartsWith('Polar night: the sun stays more than 18° below the horizon all day', $nights[2]['DESCRIPTION']);
         $this->assertStringNotContainsString('this year\'s nights', $nights[2]['DESCRIPTION']);
         $this->assertStringContainsString(' Night · 24h 00m', $nights[3]['SUMMARY']);
     }
 
-    public function testNightRankComesFromNightLengths(): void
+    public function testNightLengthSitsBetweenTheYearsShortestAndLongest(): void
     {
-        // Daylight is 0h through Tromsø's polar night, but nights still differ in length
-        $tromso = ['lat' => 69.65, 'lon' => 18.96, 'timezone' => 'Europe/Oslo', 'window_days' => 0];
+        [$solstice] = $this->eventsOfType($this->feed(['today' => '2026-12-21', 'window_days' => 0]), 'night');
+        [$november] = $this->eventsOfType($this->feed(['today' => '2026-11-15', 'window_days' => 0]), 'night');
 
-        [$december1] = $this->eventsOfType($this->feed($tromso + ['today' => '2026-12-01']), 'night');
-        [$solstice] = $this->eventsOfType($this->feed($tromso + ['today' => '2026-12-21']), 'night');
-        $this->assertStringNotContainsString('Longest night of the year', $december1['DESCRIPTION']);
-        $this->assertStringContainsString('Longest night of the year', $solstice['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/The longest night of the year: \d+h \d\dm more than the shortest \(Jun 2\d\)/', $solstice['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/more than the shortest night \(Jun 2\d\)\\\\, \d+m less than the longest \(Dec 2\d\)/', $november['DESCRIPTION']);
+    }
+
+    public function testYearExtremesFallOnTheSolstices(): void
+    {
+        // Rome, New York, Tokyo and Sydney, plus a leap year: shortest and longest day at the solstices
+        $places = [
+            [41.9028, 12.4964, 'Europe/Rome', 2026],
+            [40.7128, -74.006, 'America/New_York', 2026],
+            [35.6762, 139.6503, 'Asia/Tokyo', 2026],
+            [-33.8688, 151.2093, 'Australia/Sydney', 2026],
+            [41.9028, 12.4964, 'Europe/Rome', 2028],
+        ];
+        foreach ($places as [$lat, $lon, $zone, $y]) {
+            $previous = date_default_timezone_get();
+            date_default_timezone_set($zone);
+            try {
+                $year = year_summary($lat, $lon, $y, (new DateTimeImmutable("{$y}-01-15 12:00"))->getOffset() / 3600);
+                $short = date('M j', $year['daylight_min'][1]);
+                $long = date('M j', $year['daylight_max'][1]);
+            } finally {
+                date_default_timezone_set($previous);
+            }
+            [$winter, $summer] = $lat > 0 ? ['/^Dec 2[0-2]$/', '/^Jun 2[0-2]$/'] : ['/^Jun 2[0-2]$/', '/^Dec 2[0-2]$/'];
+            $this->assertMatchesRegularExpression($winter, $short, "{$zone} {$y} shortest day");
+            $this->assertMatchesRegularExpression($summer, $long, "{$zone} {$y} longest day");
+        }
     }
 
     public function testDefaultTimezoneIsRestored(): void

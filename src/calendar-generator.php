@@ -104,27 +104,6 @@ function solar_spans(array $ev, array $next): array
 }
 
 /**
- * Daylight on the year's winter and summer solstices, by hemisphere.
- *
- * @return array{winter: array{seconds: int, info: string}, summer: array{seconds: int, info: string}}
- */
-function solstice_daylight(int $year, float $lat, float $lon, DateTimeZone $tz): array
-{
-    $solstices = calculate_equinox_solstice($year);
-    [$winter, $summer] = $lat >= 0 ? ['december_solstice', 'june_solstice'] : ['june_solstice', 'december_solstice'];
-
-    $describe = function (int $timestamp) use ($lat, $lon, $tz): array {
-        $date = (new DateTimeImmutable("@{$timestamp}"))->setTimezone($tz);
-        return [
-            'seconds' => (int) round(sun_events($date, $lat, $lon)['daylength_h'] * 3600),
-            'info' => format_local($timestamp, 'date_short'),
-        ];
-    };
-
-    return ['winter' => $describe($solstices[$winter]), 'summer' => $describe($solstices[$summer])];
-}
-
-/**
  * Format an iCalendar duration, in hours when whole.
  */
 function ical_duration(int $seconds): string
@@ -236,8 +215,6 @@ function render_calendar(array $o): string
         }
     }
 
-    $solstices = [];
-
     for ($day = $first; $day <= $last; $day = $day->modify('+1 day')) {
         $year = (int) $day->format('Y');
         $dateStr = $day->format('Ymd');
@@ -246,16 +223,21 @@ function render_calendar(array $o): string
         $next = sun_events($day->modify('+1 day'), $lat, $lon);
         $spans = solar_spans($ev, $next);
         $yearInfo = year_summary($lat, $lon, $year, $ev['utc_offset']);
-        $solstices[$year] ??= solstice_daylight($year, $lat, $lon, $tz);
 
         $daylightSeconds = (int) round($ev['daylength_h'] * 3600);
-        $daylightPercentile = calculate_daylight_percentile($ev['daylength_h'], $lat, $lon, $year, $ev['utc_offset']);
+        // Clock time of day, so a sunrise that moves with a DST change reads as it does on the clock
+        $clock = fn(int $ts) => $ts
+            - (new DateTimeImmutable("@{$ts}"))->setTimezone($tz)->setTime(0, 0)->getTimestamp();
+        $clockShifts = ($ev['sunrise'] && $ev['sunset'] && $prev['sunrise'] && $prev['sunset'])
+            ? [$clock($ev['sunrise']) - $clock($prev['sunrise']), $clock($ev['sunset']) - $clock($prev['sunset'])]
+            : [null, null];
 
         $nightSeconds = $spans['night'] ? $spans['night'][1] - $spans['night'][0] : 0;
         $lastNightSpan = solar_spans($prev, $ev)['night'];
         $lastNight = $lastNightSpan ? $lastNightSpan[1] - $lastNightSpan[0] : null;
         $moon = get_accurate_moon_phase($ev['solar_noon'] + 43200) + ['lat' => $lat];
         if ($spans['night'] !== null) {
+            $moon['night'] = [$spans['night'][0], $spans['night'][1]];
             $moon['rise_set'] = moon_rise_set($spans['night'][0], $spans['night'][1], $lat, $lon);
         }
 
@@ -263,33 +245,15 @@ function render_calendar(array $o): string
             'ev' => $ev,
             'spans' => $spans,
             'enabled' => $enabled,
+            'year' => $yearInfo,
             'daylight' => [
                 'seconds' => $daylightSeconds,
-                'percentile' => $daylightPercentile,
-                'comparisons' => [
-                    format_comparison(
-                        $daylightSeconds - (int) round($prev['daylength_h'] * 3600),
-                        $S['comparisons']['yesterday'],
-                        $S
-                    ),
-                    format_comparison(
-                        $daylightSeconds - $solstices[$year]['winter']['seconds'],
-                        sprintf($S['comparisons']['winter_solstice'], $solstices[$year]['winter']['info']),
-                        $S,
-                        false
-                    ),
-                    format_comparison(
-                        $daylightSeconds - $solstices[$year]['summer']['seconds'],
-                        sprintf($S['comparisons']['summer_solstice'], $solstices[$year]['summer']['info']),
-                        $S,
-                        false
-                    ),
-                ],
+                'change' => $daylightSeconds - (int) round($prev['daylength_h'] * 3600),
+                'sunrise_shift' => $clockShifts[0],
+                'sunset_shift' => $clockShifts[1],
             ],
             'night' => [
                 'seconds' => $nightSeconds,
-                'percentile' => night_percentile($yearInfo, (int) $day->format('z')),
-                'solar_midnight' => intdiv($ev['solar_noon'] + $next['solar_noon'], 2),
                 'comparison' => ($spans['night'] && $lastNight !== null)
                     ? format_comparison($nightSeconds - $lastNight, $S['comparisons']['last_night'], $S)
                     : null,
@@ -332,7 +296,6 @@ function render_calendar(array $o): string
                     format_local($saturday['sunset'])
                 ) . "\n";
             }
-            $desc .= sprintf($S['labels']['average'], format_duration((int) round($week['avg_length']))) . "\n";
             $desc .= sprintf($S['labels']['week_moon'], implode('; ', $phases));
 
             $summary = sprintf($S['week_titles'][$week['trend']], format_duration((int) round($week['total_change'])));
@@ -378,7 +341,9 @@ function render_calendar(array $o): string
         if ($enabled['daylight'] && $spans['daylight'] !== null) {
             [$start, $end] = $spans['daylight'];
 
-            $desc = rtrim(daylight_details($c, $S)) . build_twilight_schedule($c, $S)
+            $light = format_light_block($ev, $S);
+            $desc = rtrim(daylight_details($c, $S)) . ($light === '' ? '' : "\n\n" . $light)
+                . build_twilight_schedule($c, $S)
                 . "\n\n" . daylight_about($ev, $S)
                 . $offsetNote($o['rise_offset'], $o['set_offset']) . $customNote;
 

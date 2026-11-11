@@ -17,29 +17,14 @@ class CacheTest extends BaseTest
         Cache::resetInstance();
     }
 
-    public function testDaylightLengthsCacheHit(): void
+    public function testYearProfileIsCachedPerUtcOffset(): void
     {
         $cache = Cache::getInstance();
 
-        // First call
-        $result1 = $cache->getDaylightLengths(40.0, 15.0, 2026, 1.0);
-        $this->assertIsArray($result1);
-
-        // Second call should return same array object (cached)
-        $result2 = $cache->getDaylightLengths(40.0, 15.0, 2026, 1.0);
-        $this->assertSame($result1, $result2);
-    }
-
-    public function testDaylightLengthsCacheMissOnDifferentUtcOffset(): void
-    {
-        $cache = Cache::getInstance();
-
-        // Two different UTC offsets should cache separately
-        $result1 = $cache->getDaylightLengths(40.0, 15.0, 2026, 0.0);
-        $result2 = $cache->getDaylightLengths(40.0, 15.0, 2026, 2.0);
-
-        // Results may be similar but should be different cache entries
-        $this->assertNotSame($result1, $result2);
+        $profile = $cache->getYearProfile(40.0, 15.0, 2026, 1.0);
+        $this->assertCount(365, $profile);
+        $this->assertSame($profile, $cache->getYearProfile(40.0, 15.0, 2026, 1.0));
+        $this->assertNotSame($profile, $cache->getYearProfile(40.0, 15.0, 2026, 2.0));
     }
 
     public function testSolarCalcCacheHit(): void

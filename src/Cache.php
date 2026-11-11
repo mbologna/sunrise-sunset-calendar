@@ -19,9 +19,6 @@ class Cache
     /** @var array|null Strings configuration */
     private ?array $strings = null;
 
-    /** @var array<string, array<float>> Percentile cache keyed by lat:lon:year */
-    private array $percentileCache = [];
-
     /** @var array<string, array<array>> Per-day solar data keyed by lat:lon:year:offset */
     private array $yearProfileCache = [];
 
@@ -66,28 +63,6 @@ class Cache
     }
 
     /**
-     * Get cached daylight lengths for a location/year.
-     *
-     * @param float $lat Latitude
-     * @param float $lon Longitude
-     * @param int $year Year
-     * @param float $utcOffset UTC offset in hours
-     * @return array<float> Sorted array of daylight lengths in hours
-     */
-    public function getDaylightLengths(float $lat, float $lon, int $year, float $utcOffset): array
-    {
-        $cacheKey = sprintf('%.4f:%.4f:%d:%.2f', $lat, $lon, $year, $utcOffset);
-
-        if (!isset($this->percentileCache[$cacheKey])) {
-            $daylightLengths = array_column($this->getYearProfile($lat, $lon, $year, $utcOffset), 'daylength_h');
-            sort($daylightLengths);
-            $this->percentileCache[$cacheKey] = $daylightLengths;
-        }
-
-        return $this->percentileCache[$cacheKey];
-    }
-
-    /**
      * Get the solar calculations for every day of a year, in calendar order.
      *
      * One fixed UTC offset applies to the whole year, so day fractions compare
@@ -129,7 +104,7 @@ class Cache
      * @param float $lat Latitude
      * @param float $lon Longitude
      * @param float $utcOffset UTC offset
-     * @return array{avg_length: float, start_length: float, end_length: float, total_change: float, trend: string}
+     * @return array{start_length: float, end_length: float, total_change: float, trend: string}
      *     Lengths in seconds; trend is 'increasing', 'decreasing' or 'stable'
      */
     public function getWeekSummary(int $weekStart, float $lat, float $lon, float $utcOffset): array
@@ -162,7 +137,6 @@ class Cache
         };
 
         $summary = [
-            'avg_length' => array_sum($lengths) / count($lengths),
             'start_length' => $lengths[0],
             'end_length' => end($lengths),
             'total_change' => $totalChange,

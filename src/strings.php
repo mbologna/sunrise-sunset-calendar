@@ -4,10 +4,10 @@
  * Strings Configuration File
  * All user-facing text for the Sun & Twilight Calendar.
  *
- * Every event is a period: its title names the period, and its description
- * names the instants that start and end it ("From civil dawn 06:37 to sunrise
- * 07:06"). Twilights are periods; dawns and dusks are the instants when the sun
- * crosses 6°, 12° or 18° below the horizon.
+ * Every event is a period, titled with its name (Civil Twilight, Daylight,
+ * Night). Descriptions don't repeat what the calendar already shows (the start
+ * and end times), and explain each name through the period itself rather than
+ * through the instants that bound it.
  *
  * Edit this file to customize event text without touching the main code.
  */
@@ -74,20 +74,11 @@ return [
         'night' => 'night',
     ],
 
-    // Instants that start or end a period
+    // The sun's path sentence on days a twilight misses a boundary ("climbs … to sunrise")
     'instants' => [
-        'astronomical_dawn' => 'astronomical dawn',
-        'nautical_dawn' => 'nautical dawn',
-        'civil_dawn' => 'civil dawn',
         'sunrise' => 'sunrise',
         'sunset' => 'sunset',
-        'civil_dusk' => 'civil dusk',
-        'nautical_dusk' => 'nautical dusk',
-        'astronomical_dusk' => 'astronomical dusk',
-        'solar_noon' => 'solar noon',
-        'solar_midnight' => 'solar midnight',
     ],
-    'span_line' => 'From %s %s to %s %s', // start instant, time, end instant, time
 
     // Today's sequence of twilights; the current one is bracketed
     'sequence' => [
@@ -107,7 +98,7 @@ return [
     // Section headers
     'headers' => [
         'about' => 'ℹ️ About %s',
-        'comparisons' => '📊 Comparisons',
+        'year' => '📅 Through the year',
         'moon' => '%s Moon', // %s = moon phase emoji
         'today' => '☀️ Today',
         'tonight' => '🌙 Tonight',
@@ -117,16 +108,14 @@ return [
     // Data lines
     'labels' => [
         'length' => 'Length: %s',
-        'length_range' => 'Length: %s (%s–%s over the year)', // today, shortest, longest
-        'length_share' => 'Length: %s, %d%% of 24 hours',
-        'all_night' => 'Over the year it also lasts all night, from %s.',
-        'solar_noon' => 'Solar noon: %s · Sun at noon: %d°',
-        'solar_noon_midnight_sun' => 'Solar noon: %s · Sun at noon: %d°, at solar midnight: %d°',
-        'solar_midnight' => 'Solar midnight: %s',
+        'length_range' => 'Length: %s · over the year: %s', // today, range bar
+        'clock' => ': sunrise %s, sunset %s', // appended to the change since yesterday
+        'sun_peak' => 'Sun highest at %s, %d° above the horizon',
+        'sun_peak_midnight_sun' => 'Sun highest at %s, %d° up; lowest at %s, still %d° up',
         'midnight_sun' => 'Midnight sun: the sun does not set today.',
         'night_all_day' => 'Polar night: the sun stays more than 18° below the horizon all day, so night lasts '
             . 'around the clock.',
-        'average' => 'Average: %s',
+        'all_night' => 'Over the year it also lasts all night, from %s.',
         'week_daylight' => 'Daylight: %s on Sunday → %s on Saturday',
         'week_sun' => 'Sunrise %s → %s · Sunset %s → %s', // Sunday → Saturday
         'week_moon' => 'Moon: %s',
@@ -134,34 +123,44 @@ return [
         'good_for' => 'Good for: %s',
     ],
 
-    // Blue hour (sun 6° to 4° below) and golden hour (4° below to 6° above)
+    // How far sunrise or sunset moved on the clock since yesterday
+    'clock' => [
+        'later' => '%s later',
+        'earlier' => '%s earlier',
+        'same' => 'unchanged',
+    ],
+
+    // Today between the year's shortest and longest day or night (lengths, dates)
+    'year' => [
+        'daylight' => [
+            'between' => '%s more than the shortest day (%s), %s less than the longest (%s)',
+            'is_shortest' => 'The shortest day of the year: %s less than the longest (%s)',
+            'is_longest' => 'The longest day of the year: %s more than the shortest (%s)',
+        ],
+        'night' => [
+            'between' => '%s more than the shortest night (%s), %s less than the longest (%s)',
+            'is_shortest' => 'The shortest night of the year: %s less than the longest (%s)',
+            'is_longest' => 'The longest night of the year: %s more than the shortest (%s)',
+        ],
+    ],
+
+    // Blue hour (sun 6° to 4° below) and golden hour (4° below to 6° above), in time order
     'light' => [
-        'blue_hour' => 'Blue hour: %s–%s',
-        'golden_from' => 'Golden hour from %s',
-        'golden_until' => 'Golden hour until %s',
-        'golden_daylight' => 'Golden hour: until %s · from %s',
-        'golden_all_day' => 'Golden hour all day: the sun never climbs above 6°.',
+        'header' => '📷 Light for photos',
+        'blue' => 'Blue hour',
+        'golden' => 'Golden hour',
+        'until' => 'until %s',
+        'from' => 'from %s',
+        'all_day' => 'All day:',
     ],
 
-    // Day and night length rank within the year
-    'rank' => [
-        'daylight' => "Longer than %d%% of this year's days",
-        'night' => "Longer than %d%% of this year's nights",
-        'daylight_longest' => 'Longest day of the year',
-        'daylight_shortest' => 'Shortest day of the year',
-        'night_longest' => 'Longest night of the year',
-        'night_shortest' => 'Shortest night of the year',
-    ],
-
-    // Length comparisons: "2m 05s shorter than yesterday"
+    // Length comparisons: "2m 07s shorter than yesterday"
     'comparisons' => [
         'longer' => '%s longer than %s',
         'shorter' => '%s shorter than %s',
         'same' => 'Same length as %s',
         'yesterday' => 'yesterday',
         'last_night' => 'last night',
-        'winter_solstice' => 'the winter solstice (%s)',
-        'summer_solstice' => 'the summer solstice (%s)',
     ],
 
     // What each period is, in plain language. 'angles' describes the sun's path on a
@@ -171,59 +170,56 @@ return [
         'morning_astronomical' => [
             'angles' => "The sun climbs from 18° to 12° below the horizon (nearly two fists to just over one, "
                 . "at arm's length).",
-            'text' => 'Astronomical dawn, when the sun climbs past 18° below, is named for astronomers: the '
-                . 'faintest galaxies and nebulae need the sun at least that far down. To the eye the sky still '
-                . 'looks like night, especially under light pollution; under a dark sky a faint glow grows '
-                . 'where the sun will rise, and the faintest stars fade first.',
+            'text' => 'It is named for astronomers: the faintest galaxies and nebulae need the sun at least 18° '
+                . 'down, so they begin to fade as this twilight starts. To the eye the sky still looks like '
+                . 'night, especially under light pollution; under a dark sky a faint glow grows where the sun '
+                . 'will rise, and the faintest stars fade first.',
             'good_for' => 'the last dark-sky observing; planets and bright stars are still easy to see.',
         ],
         'morning_nautical' => [
             'angles' => "The sun climbs from 12° to 6° below the horizon (just over one fist to about three "
                 . "fingers, at arm's length).",
-            'text' => 'Nautical dawn, when the sun climbs past 12° below, is named for navigation at sea: the '
-                . 'horizon becomes visible while bright stars are still out, so sailors could measure star '
-                . 'altitudes with a sextant. On land, trees and buildings show as silhouettes against a deep '
-                . 'blue sky, but most tasks still need a light.',
+            'text' => 'It is named for navigation at sea: the horizon becomes visible while bright stars are '
+                . 'still out, so sailors could measure star altitudes with a sextant. On land, trees and '
+                . 'buildings show as silhouettes against a deep blue sky, but most tasks still need a light.',
             'good_for' => 'bright stars and planets against a blue sky; silhouette photos.',
         ],
         'morning_civil' => [
             'angles' => "The sun climbs from 6° below the horizon (about three fingers at arm's length) to "
                 . 'sunrise.',
-            'text' => 'Civil dawn, when the sun climbs past 6° below, is when there is enough light for everyday '
-                . '("civil") activity: under a clear sky you can be outdoors without lamps. Colours return, '
-                . 'only the brightest stars and planets remain, and streetlights typically switch off.',
+            'text' => 'It is named for everyday ("civil") activity: there is enough light to be outdoors '
+                . 'without lamps under a clear sky. Colours return, only the brightest stars and planets '
+                . 'remain, and streetlights typically switch off.',
             'good_for' => 'blue hour and the start of golden hour; early walks and runs.',
         ],
         'evening_civil' => [
             'angles' => "The sun sinks from sunset to 6° below the horizon (about three fingers at arm's length).",
-            'text' => 'Civil dusk, when the sun sinks past 6° below, is the last moment with enough light for '
-                . 'everyday ("civil") activity without lamps. Colours fade, the brightest stars and planets '
+            'text' => 'It is named for everyday ("civil") activity: until the sun is 6° down there is still '
+                . 'enough light to be outdoors without lamps. Colours fade, the brightest stars and planets '
                 . 'appear, and streetlights typically switch on.',
             'good_for' => 'the end of golden hour, then blue hour; evening walks.',
         ],
         'evening_nautical' => [
             'angles' => "The sun sinks from 6° to 12° below the horizon (about three fingers to just over one "
                 . "fist, at arm's length).",
-            'text' => 'Nautical dusk, when the sun sinks past 12° below, is named for navigation at sea: until '
-                . 'then the horizon is still visible while bright stars are out, so sailors could take star '
-                . 'sights with a sextant. Most tasks now need a light. Satellites, including the International '
-                . 'Space Station, are often visible: they are still sunlit high overhead.',
+            'text' => 'It is named for navigation at sea: the horizon is still visible while bright stars are '
+                . 'out, so sailors could take star sights with a sextant. Most tasks now need a light. '
+                . 'Satellites, including the International Space Station, are often visible: they are still '
+                . 'sunlit high overhead.',
             'good_for' => 'bright stars and planets; spotting satellites.',
         ],
         'evening_astronomical' => [
             'angles' => "The sun sinks from 12° to 18° below the horizon (just over one fist to nearly two, at "
                 . "arm's length).",
             'text' => 'The last sunlight fades from the sky low where the sun set. Most people already see full '
-                . 'night, but the sky is not at its darkest until astronomical dusk, when the sun sinks past '
-                . '18° below: from then on the faintest galaxies and nebulae can be observed.',
+                . 'night, but the sky is not at its darkest until this twilight ends with the sun 18° down. '
+                . 'It is named for astronomers, who need that darkness for the faintest galaxies and nebulae.',
             'good_for' => 'setting up a telescope; under a dark, moonless sky the Milky Way emerges once the sun '
                 . 'is 18° down.',
         ],
         'daylight' => [
             'text' => 'Daylight runs from sunrise to sunset, while any part of the sun is above the horizon. '
                 . 'Times assume a flat, open horizon; hills and buildings change what you see.',
-            'noon' => 'The sun is highest at solar noon, today %d° above the horizon.',
-            'golden' => 'Golden hour (sun 4° below to 6° above) brings low, warm light and long shadows.',
         ],
         'night' => [
             'text' => 'This is astronomical night: the sun is more than 18° below the horizon, so no sunlight '
@@ -243,11 +239,14 @@ return [
         'to_noon' => '%d° below at solar noon, its highest today',
         'to_midnight' => '%d° below at solar midnight, its lowest tonight',
         'polar_night' => 'Polar night: ',
+        // What the photo-light times mean
+        'light' => 'Blue hour (sun 6° to 4° below) gives a deep, even blue sky; golden hour (4° below to 6° '
+            . 'above) gives warm, low light and long shadows.',
         // Why the length in the "Length" line changes over the year
-        'length_morning' => 'Its length changes over the year: the more gently the sun rises, the longer '
-            . 'twilight lasts.',
-        'length_evening' => 'Its length changes over the year: the more gently the sun sets, the longer '
-            . 'twilight lasts.',
+        'length_morning' => 'Its length changes over the year because the sun rises at a different angle: '
+            . 'the more gently it rises, the longer twilight lasts.',
+        'length_evening' => 'Its length changes over the year because the sun sets at a different angle: '
+            . 'the more gently it sets, the longer twilight lasts.',
     ],
 
     // When the sun stays more than 18° below the horizon all day, solar noon bounds the night
@@ -289,26 +288,20 @@ return [
 
     // Moon
     'moon' => [
-        'current' => '%s, %d%% illuminated.', // phase name, illumination
-        // How much the moon brightens the sky, by illumination (under 25%, up to 75%, above)
+        'current' => '%s, %d%% lit', // phase name, illumination
+        'moonless' => 'Moonless sky: %s', // time windows
+        'moonless_all' => 'Moonless sky: all night',
+        'moonless_none' => 'Moonless sky: none, the moon is up all night',
+        // How much the moon brightens the sky while up, by illumination (under 25%, up to 75%, above)
         'impact' => [
-            'dark' => 'Too thin to brighten the sky much: among the darkest nights of the month.',
-            'partial' => 'While it is up, its light washes out the faintest objects.',
-            'bright' => 'While it is up, faint objects are washed out; a good night to look at the moon itself.',
+            'dark' => 'Too thin to brighten the sky much, even while up.',
+            'partial' => 'While up, its light washes out the faintest stars and galaxies.',
+            'bright' => 'While up, it washes out all but the brighter stars: a good night to look at the moon itself.',
         ],
-        // When the moon is above the horizon during the night
-        'up_none' => 'Below the horizon all night: a moonless sky throughout.',
-        'up_all' => 'Above the horizon all night.',
-        'rises' => 'Rises at %s: moonless sky until then.',
-        'sets' => 'Sets at %s: moonless sky from then on.',
-        'sets_rises' => 'Sets at %s and rises at %s: moonless sky in between.',
-        'rises_sets' => 'Up from %s to %s: moonless sky before and after.',
-        'rise_at' => 'rises at %s',
-        'set_at' => 'sets at %s',
-        'previous' => 'Previous: %s %s, %s', // emoji, phase name, date
-        'next' => 'Next: %s %s, %s',
+        'next' => 'Next: %s %s, %s', // emoji, phase name, date
         'phase_at' => '%s %s, %s', // emoji, phase name, date (weekly summary)
     ],
+
 
     // Equinoxes and solstices, named by the season they start at the feed's location
     'seasons' => [
@@ -423,12 +416,12 @@ return [
         'event_types_help' => '💡 Each adds a morning and an evening event. The times of types you leave out '
             . 'are still listed in the notes of the others.',
         'types' => [
-            'civil' => '🌅 Civil twilight: civil dawn → sunrise, sunset → civil dusk',
-            'nautical' => '⚓ Nautical twilight: nautical dawn → civil dawn, civil dusk → nautical dusk',
-            'astro' => '🌌 Astronomical twilight: astronomical dawn → nautical dawn, nautical dusk → '
-                . 'astronomical dusk',
-            'daynight' => '☀️🌙 Daylight & night: sunrise → sunset, astronomical dusk → astronomical dawn (with '
-                . 'day length, the moon and a weekly summary)',
+            'civil' => '🌅 Civil twilight: the sun between 6° below the horizon and sunrise, and between '
+                . 'sunset and 6° below',
+            'nautical' => '⚓ Nautical twilight: the sun 6° to 12° below the horizon, morning and evening',
+            'astro' => '🌌 Astronomical twilight: the sun 12° to 18° below the horizon, morning and evening',
+            'daynight' => '☀️🌙 Daylight & night: sunrise to sunset, and night with the sun more than 18° below '
+                . '(with day length, the moon and a weekly summary)',
         ],
         'rise_offset' => 'Morning offset (minutes)',
         'set_offset' => 'Evening offset (minutes)',
