@@ -51,37 +51,6 @@ function format_ical_description(string $text): string
     return ical_text_property('DESCRIPTION', $text);
 }
 
-/**
- * Calculate daylight percentile with caching.
- *
- * @param float $targetDaylightHours Target daylight hours to compare
- * @param float $lat Latitude
- * @param float $lon Longitude
- * @param int $year Year for calculation
- * @param float $utcOffset UTC offset in hours
- * @return float Percentile (0-100)
- */
-function calculate_daylight_percentile(
-    float $targetDaylightHours,
-    float $lat,
-    float $lon,
-    int $year,
-    float $utcOffset
-): float {
-    $daylightLengths = Cache::getInstance()->getDaylightLengths($lat, $lon, $year, $utcOffset);
-
-    // When today is the longest day of the year, return exactly 100%.
-    // Without this, the solstice would score 364/365 = 99.7% because no day
-    // is strictly shorter than itself.
-    if ($targetDaylightHours >= max($daylightLengths)) {
-        return 100.0;
-    }
-
-    $countBelow = count(array_filter($daylightLengths, fn($length) => $length < $targetDaylightHours));
-
-    return round(($countBelow / count($daylightLengths)) * 100, 1);
-}
-
 
 /**
  * Get emoji for moon phase, as the moon looks from the observer's hemisphere.
@@ -122,119 +91,84 @@ function format_local(int $timestamp, string $format = 'time'): string
 }
 
 /**
- * Generate a visual bar for a percentile.
+ * Where a length sits in the year's range, as a labelled bar with the shortest
+ * on the left and the longest on the right: "9h 08m ▕██░░░░░░░░▏ 15h 14m".
  *
- * @param float $percentile Percentile value (0-100)
- * @param int $width Width of the bar in characters (default 10)
- * @return string Bar like ████████░░
+ * The bar is linear between the two ends, so it reads like a ruler, unlike a
+ * rank among days. Each end is labelled because the bar does not start at zero.
  */
-function format_percentile_bar(float $percentile, int $width = 10): string
+function format_range_bar(int $seconds, int $shortest, int $longest, int $width = 10): string
 {
-    $filled = (int) round(($percentile / 100) * $width);
+    $span = $longest - $shortest;
+    $filled = $span > 0 ? (int) round(($seconds - $shortest) / $span * $width) : intdiv($width, 2);
+    $filled = max(0, min($width, $filled));
 
-    return str_repeat('█', $filled) . str_repeat('░', $width - $filled);
+    return format_duration($shortest) . ' ▕' . str_repeat('█', $filled) . str_repeat('░', $width - $filled)
+        . '▏ ' . format_duration($longest);
 }
 
 /**
- * Describe where a day or night ranks among this year's: "Longer than 18% of this year's days".
+ * Today against the year's shortest and longest day (or night), in words.
  *
  * @param string $kind 'daylight' or 'night'
+ * @param array{0: int, 1: int} $shortest Length in seconds and its day's timestamp
+ * @param array{0: int, 1: int} $longest Length in seconds and its day's timestamp
  */
-function format_rank(float $percentile, string $kind, array $S): string
+function format_extremes(string $kind, int $seconds, array $shortest, array $longest, array $S): string
 {
-    if ($percentile >= 100) {
-        return $S['rank']["{$kind}_longest"];
+    $Y = $S['year'][$kind];
+    $date = fn(int $ts) => format_local($ts, 'date_short');
+    // Seconds matter only for a gap under a minute (the days around a solstice, the equator)
+    $gap = fn(int $diff) => format_duration($diff, $diff < 60);
+    // Only the extreme day itself, allowing for rounding: near the equator the whole year spans minutes
+    if ($seconds - $shortest[0] <= 2) {
+        return sprintf($Y['is_shortest'], $gap($longest[0] - $seconds), $date($longest[1]));
     }
-    if ($percentile <= 0) {
-        return $S['rank']["{$kind}_shortest"];
-    }
-
-    // Never round a non-extreme day up to 100% or down to 0%
-    return sprintf($S['rank'][$kind], max(1, min(99, (int) round($percentile))));
-}
-
-/**
- * Compare two lengths in words: "2m 40s (0.5%) shorter than yesterday".
- *
- * The percentage is of the length compared with, so it reads as "this much
- * shorter or longer"; it is left out when that length is zero (polar night).
- *
- * @param int $diffSeconds This length minus the other
- * @param int $referentSeconds The other length
- * @param string $referent What it is compared with, e.g. "yesterday"
- * @param bool $withSeconds Keep seconds (day-to-day changes) or round to the minute
- */
-function format_comparison(
-    int $diffSeconds,
-    int $referentSeconds,
-    string $referent,
-    array $S,
-    bool $withSeconds = true
-): string {
-    $C = $S['comparisons'];
-    if ($diffSeconds === 0) {
-        return sprintf($C['same'], $referent);
-    }
-
-    $percent = '';
-    if ($referentSeconds > 0) {
-        $share = abs($diffSeconds) / $referentSeconds * 100;
-        $percent = sprintf($C['percent'], $share < 10 ? number_format($share, 1) : (string) round($share));
+    if ($longest[0] - $seconds <= 2) {
+        return sprintf($Y['is_longest'], $gap($seconds - $shortest[0]), $date($shortest[1]));
     }
 
     return sprintf(
-        $C[$diffSeconds > 0 ? 'longer' : 'shorter'],
-        format_duration($diffSeconds, $withSeconds),
-        $percent,
+        $Y['between'],
+        $gap($seconds - $shortest[0]),
+        $date($shortest[1]),
+        $gap($longest[0] - $seconds),
+        $date($longest[1])
+    );
+}
+/**
+ * Compare two lengths in words: "2m 07s shorter than yesterday".
+ *
+ * @param int $diffSeconds This length minus the other
+ * @param string $referent What it is compared with, e.g. "yesterday"
+ */
+function format_comparison(int $diffSeconds, string $referent, array $S): string
+{
+    if ($diffSeconds === 0) {
+        return sprintf($S['comparisons']['same'], $referent);
+    }
+
+    return sprintf(
+        $S['comparisons'][$diffSeconds > 0 ? 'longer' : 'shorter'],
+        format_duration($diffSeconds, true),
         $referent
     );
 }
 
 /**
- * Month-by-month bars of a length over the year, the current month bracketed:
- * "J▁ F▂ M▄ … [N▂] D▁". Each letter sits next to its bar, so they line up in
- * any font. Bars scale from the shortest monthly average to the longest.
+ * How far an event moved on the clock since the day before: "1m 18s later".
  *
- * @param array<int, ?int> $byDay Length in seconds by day of the year (missing or null: none that day)
- * @param array<array> $days Year profile records, for their dates
- * @param int $todayIndex Day of the year (0-based) to bracket the month of
+ * @param int $shiftSeconds Today's time minus yesterday's, a whole day removed
  */
-function format_year_graph(array $byDay, array $days, int $todayIndex, array $S): string
+function format_clock_shift(int $shiftSeconds, array $S): string
 {
-    $G = $S['graph'];
-    $levels = mb_str_split($G['levels']);
-    $sums = array_fill(1, 12, 0);
-    $counts = array_fill(1, 12, 0);
-    foreach ($days as $i => $d) {
-        if (($byDay[$i] ?? null) !== null) {
-            $month = (int) date('n', $d['timestamp']);
-            $sums[$month] += $byDay[$i];
-            $counts[$month]++;
-        }
-    }
-    $averages = [];
-    foreach ($sums as $month => $sum) {
-        $averages[$month] = $counts[$month] > 0 ? $sum / $counts[$month] : null;
-    }
-    $present = array_filter($averages, fn($a) => $a !== null);
-    $low = $present === [] ? 0 : min($present);
-    $high = $present === [] ? 0 : max($present);
-    $current = (int) date('n', $days[$todayIndex]['timestamp']);
-
-    $cells = [];
-    foreach ($averages as $month => $average) {
-        $bar = match (true) {
-            $average === null => $G['none'],
-            $high - $low < 1 => $levels[intdiv(count($levels), 2)],
-            default => $levels[(int) round(($average - $low) / ($high - $low) * (count($levels) - 1))],
-        };
-        $cell = $G['months'][$month - 1] . $bar;
-        $cells[] = $month === $current ? "[{$cell}]" : $cell;
+    $C = $S['clock'];
+    if (abs($shiftSeconds) < 1) {
+        return $C['same'];
     }
 
-    return sprintf($G['line'], implode(' ', $cells));
+    return sprintf($C[$shiftSeconds > 0 ? 'later' : 'earlier'], format_duration($shiftSeconds, true));
 }
-
 /**
  * Format one twilight line for the Today/Tonight schedule.
  *
@@ -251,68 +185,74 @@ function format_schedule_span(string $label, array $span, string $note): string
 }
 
 /**
- * When the moon is up during the night: "Sets at 21:45: moonless sky from then on."
+ * The moon during the night: its phase, when the sky is moonless, how much it
+ * brightens the sky while up, and the next principal phase.
  *
- * @param array{up_at_start: bool, events: array<array{0: string, 1: int}>} $riseSet From moon_rise_set()
- */
-function format_moon_rise_set(array $riseSet, array $S): string
-{
-    $M = $S['moon'];
-    $events = $riseSet['events'];
-    $time = fn(int $i) => format_local($events[$i][1]);
-    $kinds = implode(',', array_column($events, 0));
-
-    return match ($kinds) {
-        '' => $riseSet['up_at_start'] ? $M['up_all'] : $M['up_none'],
-        'rise' => sprintf($M['rises'], $time(0)),
-        'set' => sprintf($M['sets'], $time(0)),
-        'set,rise' => sprintf($M['sets_rises'], $time(0), $time(1)),
-        'rise,set' => sprintf($M['rises_sets'], $time(0), $time(1)),
-        default => ucfirst(implode('; ', array_map(
-            fn($e) => sprintf($M[$e[0] === 'rise' ? 'rise_at' : 'set_at'], format_local($e[1])),
-            $events
-        ))) . '.',
-    };
-}
-
-/**
- * Format the moon section: phase, how much it brightens the sky, when it is up
- * during the night (when 'rise_set' is given), previous and next principal phase.
+ * The moonless window is what matters for stargazing; it needs 'rise_set'
+ * (moon_rise_set() over the night) and 'night' ([start, end]) in $moon.
  *
- * @param array $moon Result of get_accurate_moon_phase(), optionally with 'rise_set' from moon_rise_set()
- *     and the observer's 'lat' for the emojis
+ * @param array $moon Result of get_accurate_moon_phase(), plus 'rise_set', 'night' and the observer's 'lat'
  */
 function format_moon_section(array $moon, array $S): string
 {
     $M = $S['moon'];
-    $lit = (int) round($moon['illumination']);
-    $riseSet = $moon['rise_set'] ?? null;
-    $belowAllNight = $riseSet !== null && !$riseSet['up_at_start'] && $riseSet['events'] === [];
-    $current = sprintf($M['current'], moon_phase_name($moon['phase_name']), $lit);
-    if (!$belowAllNight) {
-        $current .= ' ' . $M['impact'][$lit < 25 ? 'dark' : ($lit <= 75 ? 'partial' : 'bright')];
-    }
-
     $lat = $moon['lat'] ?? 0.0;
-    $section = sprintf($S['headers']['moon'], get_moon_phase_emoji($moon['phase_name'], $lat)) . "\n" . $current . "\n";
-    if ($riseSet !== null) {
-        $section .= format_moon_rise_set($riseSet, $S) . "\n";
-    }
+    $lit = (int) round($moon['illumination']);
+    $emoji = get_moon_phase_emoji($moon['phase_name'], $lat);
 
-    foreach (['previous' => 'prev_phase', 'next' => 'next_phase'] as $label => $key) {
-        if ($moon[$key]) {
-            $section .= sprintf(
-                $S['moon'][$label],
-                get_moon_phase_emoji($moon[$key]['name'], $lat),
-                moon_phase_name($moon[$key]['name']),
-                format_local($moon[$key]['timestamp'], 'datetime')
-            ) . "\n";
+    $lines = [sprintf($M['current'], moon_phase_name($moon['phase_name']), $lit)];
+    if (isset($moon['rise_set'], $moon['night'])) {
+        $windows = moonless_windows($moon['rise_set'], $moon['night'][0], $moon['night'][1]);
+        $whole = $moon['night'][1] - $moon['night'][0];
+        $lines[] = match (true) {
+            $windows === [] => $M['moonless_none'],
+            count($windows) === 1 && $windows[0][1] - $windows[0][0] >= $whole => $M['moonless_all'],
+            default => sprintf($M['moonless'], implode(', ', array_map(
+                fn($w) => format_local($w[0]) . '–' . format_local($w[1]) . ' (' . format_duration($w[1] - $w[0]) . ')',
+                $windows
+            ))),
+        };
+        $upAtAll = $windows === [] || count($windows) > 1 || $windows[0][1] - $windows[0][0] < $whole;
+        if ($upAtAll) {
+            $lines[] = $M['impact'][$lit < 25 ? 'dark' : ($lit <= 75 ? 'partial' : 'bright')];
         }
     }
+    if ($moon['next_phase']) {
+        $lines[] = sprintf(
+            $M['next'],
+            get_moon_phase_emoji($moon['next_phase']['name'], $lat),
+            moon_phase_name($moon['next_phase']['name']),
+            format_local($moon['next_phase']['timestamp'], 'datetime')
+        );
+    }
 
-    return $section;
+    return sprintf($S['headers']['moon'], $emoji) . "\n" . implode("\n", $lines) . "\n";
 }
 
+/**
+ * The parts of [$from, $to] when the moon is below the horizon.
+ *
+ * @param array{up_at_start: bool, events: array<array{0: string, 1: int}>} $riseSet From moon_rise_set()
+ * @return array<array{0: int, 1: int}>
+ */
+function moonless_windows(array $riseSet, int $from, int $to): array
+{
+    $windows = [];
+    $downSince = $riseSet['up_at_start'] ? null : $from;
+    foreach ($riseSet['events'] as [$kind, $at]) {
+        if ($kind === 'set') {
+            $downSince = $at;
+        } elseif ($downSince !== null) {
+            $windows[] = [$downSince, $at];
+            $downSince = null;
+        }
+    }
+    if ($downSince !== null) {
+        $windows[] = [$downSince, $to];
+    }
+
+    return $windows;
+}
 // ============================================================================
 // YEAR PROFILE
 // ============================================================================
@@ -391,7 +331,7 @@ function twilight_profile_fields(): array
  *     midnight_sun: array, polar_night: array, white_nights: array,
  *     bands: array<string, ?array{min: array{0: int, 1: int}, max: array{0: int, 1: int}, all_night: array}>,
  *     extremes: ?array{earliest_sunrise: int, latest_sunrise: int, earliest_sunset: int, latest_sunset: int},
- *     nights: array<?int>, daylight_by_day: array<int>
+ *     nights: array<?int>
  * } Lengths in hours (daylight) or seconds (bands), each paired with its day's timestamp
  */
 function year_summary(float $lat, float $lon, int $year, float $utcOffset): array
@@ -446,7 +386,6 @@ function year_summary(float $lat, float $lon, int $year, float $utcOffset): arra
             'min' => [min($lengthsByDay), $timestamps[array_search(min($lengthsByDay), $lengthsByDay, true)]],
             'max' => [max($lengthsByDay), $timestamps[array_search(max($lengthsByDay), $lengthsByDay, true)]],
             'all_night' => day_runs($allNight, $timestamps),
-            'by_day' => $lengthsByDay,
         ];
     }
 
@@ -489,29 +428,7 @@ function year_summary(float $lat, float $lon, int $year, float $utcOffset): arra
         'bands' => $bands,
         'extremes' => $extremes,
         'nights' => $nights,
-        'daylight_by_day' => array_map(fn($h) => (int) round($h * 3600), $lengths),
     ];
-}
-
-/**
- * Where a night ranks among this year's nights, as a percentile of their lengths.
- *
- * @param array $year year_summary() for the night's year
- * @param int $dayIndex Day of the year (0-based) the night starts on
- * @return float 100 for the longest night, 0 for the shortest
- */
-function night_percentile(array $year, int $dayIndex): float
-{
-    $lengths = array_values(array_filter($year['nights'], fn($n) => $n !== null));
-    $length = $year['nights'][$dayIndex] ?? null;
-    if ($length === null || $lengths === []) {
-        return 0.0;
-    }
-    if ($length >= max($lengths)) {
-        return 100.0;
-    }
-
-    return round(count(array_filter($lengths, fn($n) => $n < $length)) / count($lengths) * 100, 1);
 }
 
 /**
@@ -690,30 +607,28 @@ function missing_boundaries(string $key, array $span): array
 }
 
 /**
- * The data lines of a twilight event: its length against the rest of the year,
- * the sun's path when it misses a boundary, and blue and golden hour.
+ * The data lines of a twilight event: its length within the year's range, the
+ * sun's path when it misses a boundary, and blue and golden hour.
  *
  * The event's own start and end are not repeated: the calendar shows them.
  *
  * @param array $span From solar_spans()
  * @param array $ev sun_events() for the day
  * @param array $year year_summary() for the day's year
- * @param int $dayIndex Day of the year (0-based)
  */
-function twilight_details(string $key, array $span, array $ev, array $year, int $dayIndex, array $S): string
+function twilight_details(string $key, array $span, array $ev, array $year, array $S): string
 {
     $L = $S['labels'];
     $length = format_duration($span[1] - $span[0]);
     $band = $year['bands'][$key];
 
-    if ($band === null) {
-        $lines = [sprintf($L['length'], $length)];
-    } else {
-        $lines = [
-            sprintf($L['length_range'], $length, format_duration($band['min'][0]), format_duration($band['max'][0])),
-            format_year_graph($band['by_day'], $year['days'], $dayIndex, $S),
-        ];
-    }
+    $lines = [$band === null
+        ? sprintf($L['length'], $length)
+        : sprintf(
+            $L['length_range'],
+            $length,
+            format_range_bar($span[1] - $span[0], $band['min'][0], $band['max'][0])
+        )];
     $path = twilight_path($key, $span, $ev, $S);
     if ($path !== null) {
         $lines[] = $path;
@@ -881,21 +796,22 @@ function twilight_about(string $key, array $span, array $spans, array $S): strin
     // The usual angles are wrong on a day the data lines describe a different path
     $angles = ($deepMissing || $highMissing) ? '' : $about['angles'] . ' ';
 
+    // What is happening, then why its length and light vary, then what it is good for
     $light = str_ends_with($key, '_civil') ? ' ' . $S['about_dynamic']['light'] : '';
 
     return sprintf($S['headers']['about'], $S['names'][$key]) . "\n"
         . format_sequence($key, $spans, $S) . "\n\n"
-        . $angles . $about['text'] . ' '
+        . $angles . $about['text'] . "\n\n"
         . $S['about_dynamic'][str_starts_with($key, 'morning') ? 'length_morning' : 'length_evening']
         . $light . "\n\n"
         . sprintf($S['labels']['good_for'], $about['good_for']);
 }
 
 /**
- * Daylight facts, shared by the Daylight event and the Today schedule: where the
- * sun peaks, how today ranks and compares, and the year's shape.
+ * Daylight facts, shared by the Daylight event and the Today schedule: how the
+ * day is changing, where the sun peaks, and where the day sits in the year.
  *
- * @param array $c Day context: ev, daylight stats, year, day_index
+ * @param array $c Day context: ev, daylight stats, year
  */
 function daylight_details(array $c, array $S): string
 {
@@ -905,38 +821,45 @@ function daylight_details(array $c, array $S): string
     $L = $S['labels'];
 
     $lines = $ev['polar'] === 'day' ? [$L['midnight_sun']] : [];
+    $trend = format_comparison($d['change'], $S['comparisons']['yesterday'], $S);
+    if ($d['sunrise_shift'] !== null) {
+        $trend .= sprintf(
+            $L['clock'],
+            format_clock_shift($d['sunrise_shift'], $S),
+            format_clock_shift($d['sunset_shift'], $S)
+        );
+    }
+    $lines[] = $trend;
     $lines[] = $ev['polar'] === 'day'
         ? sprintf(
-            $L['solar_noon_midnight_sun'],
+            $L['sun_peak_midnight_sun'],
             format_local($ev['solar_noon']),
             round($ev['noon_elevation']),
+            format_local($ev['solar_noon'] + 43200),
             round($ev['midnight_elevation'])
         )
-        : sprintf($L['solar_noon'], format_local($ev['solar_noon']), round($ev['noon_elevation']));
-    // Midnight-sun days all tie at 24 hours: no rank to give
-    if ($ev['polar'] !== 'day') {
-        $lines[] = format_percentile_bar($d['percentile']) . ' ' . format_rank($d['percentile'], 'daylight', $S);
-    }
-    $lines[] = sprintf(
-        $L['year_range'],
-        format_duration((int) round($year['daylight_min'][0] * 3600)),
-        format_duration((int) round($year['daylight_max'][0] * 3600))
-    );
-    $lines[] = format_year_graph($year['daylight_by_day'], $year['days'], $c['day_index'], $S);
+        : sprintf($L['sun_peak'], format_local($ev['solar_noon']), round($ev['noon_elevation']));
 
-    return implode("\n", $lines) . "\n\n"
-        . $S['headers']['comparisons'] . "\n" . implode("\n", $d['comparisons']) . "\n";
+    $shortest = [(int) round($year['daylight_min'][0] * 3600), $year['daylight_min'][1]];
+    $longest = [(int) round($year['daylight_max'][0] * 3600), $year['daylight_max'][1]];
+    $through = [format_range_bar($d['seconds'], $shortest[0], $longest[0])];
+    // With polar day or night the extremes last weeks, so a single date would mislead
+    if (!$year['polar']) {
+        $through[] = format_extremes('daylight', $d['seconds'], $shortest, $longest, $S);
+    }
+
+    return implode("\n", $lines) . "\n\n" . $S['headers']['year'] . "\n" . implode("\n", $through) . "\n";
 }
+
 /**
  * Night facts with the moon, shared by the Night event and the Tonight schedule.
  *
- * @param array $c Day context: spans, night stats, year, day_index
+ * @param array $c Day context: spans, night stats, year
  */
 function night_details(array $c, array $S): string
 {
     $span = $c['spans']['night'];
     $n = $c['night'];
-    $year = $c['year'];
     $L = $S['labels'];
 
     // Deep polar night: solar noon stands in for the start or end of the night
@@ -948,22 +871,29 @@ function night_details(array $c, array $S): string
     } elseif ($noonStart || $noonEnd) {
         $lines[] = $S['no_crossing'][$noonStart ? 'night_from_noon' : 'night_to_noon'];
     }
-    $lines[] = sprintf($L['solar_midnight'], format_local($n['solar_midnight']));
-    // Round-the-clock nights differ only by seconds of solar-noon drift: no rank or change to give
-    if (!($noonStart && $noonEnd)) {
-        $lines[] = format_percentile_bar($n['percentile']) . ' ' . format_rank($n['percentile'], 'night', $S);
-        if ($n['comparison'] !== null) {
-            $lines[] = $n['comparison'];
-        }
-    }
-    $nights = array_filter($year['nights'], fn($length) => $length !== null);
-    if ($nights !== []) {
-        $lines[] = sprintf($L['year_range'], format_duration(min($nights)), format_duration(max($nights)));
-        $lines[] = format_year_graph($year['nights'], $year['days'], $c['day_index'], $S);
+    // Round-the-clock nights differ only by seconds of solar-noon drift: no change to give
+    if (!($noonStart && $noonEnd) && $n['comparison'] !== null) {
+        $lines[] = $n['comparison'];
     }
 
-    return implode("\n", $lines) . "\n\n" . format_moon_section($n['moon'], $S);
+    $text = ($lines === [] ? '' : implode("\n", $lines) . "\n\n") . format_moon_section($n['moon'], $S);
+
+    $nights = array_filter($c['year']['nights'], fn($length) => $length !== null);
+    if ($nights !== [] && !($noonStart && $noonEnd)) {
+        $days = array_column($c['year']['days'], 'timestamp');
+        $shortest = [min($nights), $days[array_search(min($nights), $nights, true)]];
+        $longest = [max($nights), $days[array_search(max($nights), $nights, true)]];
+        $text .= "\n" . $S['headers']['year'] . "\n" . format_range_bar($n['seconds'], $shortest[0], $longest[0]);
+        // Polar or white-night years have no single shortest or longest night worth dating
+        if (!$c['year']['polar'] && $c['year']['white_nights'] === []) {
+            $text .= "\n" . format_extremes('night', $n['seconds'], $shortest, $longest, $S);
+        }
+        $text .= "\n";
+    }
+
+    return $text;
 }
+
 /**
  * The "About" section of the Daylight event.
  */
@@ -971,9 +901,6 @@ function daylight_about(array $ev, array $S): string
 {
     $about = $S['about']['daylight'];
     $text = $about['text'];
-    if ($ev['noon_elevation'] > 0) {
-        $text .= ' ' . sprintf($about['noon'], round($ev['noon_elevation']));
-    }
     if (light_periods($ev) !== []) {
         $text .= ' ' . $S['about_dynamic']['light'];
     }
