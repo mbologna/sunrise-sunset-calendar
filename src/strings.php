@@ -44,13 +44,14 @@ return [
 
     // Event titles
     'summaries' => [
-        // Morning or evening shows from the time of day; the description names the instants
-        'morning_astronomical' => '🌌 Astronomical Twilight',
-        'morning_nautical' => '⚓ Nautical Twilight',
-        'morning_civil' => '🌅 Civil Twilight',
-        'evening_civil' => '🌇 Civil Twilight',
-        'evening_nautical' => '⚓ Nautical Twilight',
-        'evening_astronomical' => '🌌 Astronomical Twilight',
+        // Morning or evening is in the title because titles are often seen without their time
+        // slot (agenda lists, notifications, search), and the emojis alone can't tell them apart
+        'morning_astronomical' => '🌌 Morning Astronomical Twilight',
+        'morning_nautical' => '⚓ Morning Nautical Twilight',
+        'morning_civil' => '🌅 Morning Civil Twilight',
+        'evening_civil' => '🌇 Evening Civil Twilight',
+        'evening_nautical' => '⚓ Evening Nautical Twilight',
+        'evening_astronomical' => '🌌 Evening Astronomical Twilight',
         'daylight' => '☀️ Daylight · %s', // %s = length
         'night' => '%s Night · %s', // %s = moon phase emoji, length
     ],
