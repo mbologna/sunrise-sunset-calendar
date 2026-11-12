@@ -78,13 +78,13 @@ Each event is a period, titled with its name; the calendar shows when it starts 
 
 | Event | Title | From | To |
 |-------|-------|------|----|
-| Morning astronomical twilight | 🌌 Astronomical Twilight | astronomical dawn (sun 18° below) | nautical dawn (12° below) |
-| Morning nautical twilight | ⚓ Nautical Twilight | nautical dawn | civil dawn (6° below) |
-| Morning civil twilight | 🌅 Civil Twilight | civil dawn | sunrise |
+| Morning astronomical twilight | 🌌 Morning Astronomical Twilight | astronomical dawn (sun 18° below) | nautical dawn (12° below) |
+| Morning nautical twilight | ⚓ Morning Nautical Twilight | nautical dawn | civil dawn (6° below) |
+| Morning civil twilight | 🌅 Morning Civil Twilight | civil dawn | sunrise |
 | Daylight | ☀️ Daylight · *length* | sunrise | sunset |
-| Evening civil twilight | 🌇 Civil Twilight | sunset | civil dusk (6° below) |
-| Evening nautical twilight | ⚓ Nautical Twilight | civil dusk | nautical dusk (12° below) |
-| Evening astronomical twilight | 🌌 Astronomical Twilight | nautical dusk | astronomical dusk (18° below) |
+| Evening civil twilight | 🌇 Evening Civil Twilight | sunset | civil dusk (6° below) |
+| Evening nautical twilight | ⚓ Evening Nautical Twilight | civil dusk | nautical dusk (12° below) |
+| Evening astronomical twilight | 🌌 Evening Astronomical Twilight | nautical dusk | astronomical dusk (18° below) |
 | Night | *moon phase* Night · *length* | astronomical dusk | the next astronomical dawn |
 
 Sunrise and sunset are when the sun's top edge crosses the horizon, allowing for refraction. Weekly summaries are all-day events from Sunday to Saturday. Equinoxes, solstices and the other days when something changes are all-day events on their local date, so they show in every calendar view, whatever event types the feed includes. An event only states facts about its own day; a fact about another day gets an event on that day.

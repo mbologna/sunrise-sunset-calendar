@@ -252,11 +252,11 @@ class CalendarFeedTest extends TestCase
         ]);
         [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
 
-        $this->assertStringContainsString('⚓ Nautical Twilight: ', $dawn['DESCRIPTION']);
-        $this->assertStringContainsString('🌌 Astronomical Twilight: ', $dawn['DESCRIPTION']);
+        $this->assertStringContainsString('⚓ Morning Nautical Twilight: ', $dawn['DESCRIPTION']);
+        $this->assertStringContainsString('🌌 Morning Astronomical Twilight: ', $dawn['DESCRIPTION']);
         // The day's length change stays with the daylight; how sunrise moved goes on the twilight ending at it
         $this->assertMatchesRegularExpression('/☀️ Daylight: \d\d:\d\d–\d\d:\d\d \(\d+h \d\dm\)\\\\n[^\\\\]+ than yesterday\\\\nSun highest/u', $dawn['DESCRIPTION']);
-        $this->assertStringNotContainsString('🌅 Civil Twilight: ', $dawn['DESCRIPTION']);
+        $this->assertStringNotContainsString('🌅 Morning Civil Twilight: ', $dawn['DESCRIPTION']);
         $this->assertSame([], $this->eventsOfType($ics, 'daylight'));
     }
     public function testDaylightOnlyCalendarStillListsEveryTwilight(): void
@@ -269,14 +269,14 @@ class CalendarFeedTest extends TestCase
         [$night] = $this->eventsOfType($ics, 'night');
 
         // This evening's twilights follow Daylight, which ends at sunset
-        $this->assertMatchesRegularExpression('/🌆 This evening\\\\n🌇 Civil Twilight: [^\\\\]+\\\\n[^\\\\]+\\\\n⚓ Nautical Twilight: [^\\\\]+\\\\n[^\\\\]+\\\\n🌌 Astronomical Twilight: /u', $daylight['DESCRIPTION']);
-        $this->assertStringNotContainsString('🌅 Civil Twilight: ', $daylight['DESCRIPTION'], 'Morning twilights are over before Daylight starts');
+        $this->assertMatchesRegularExpression('/🌆 This evening\\\\n🌇 Evening Civil Twilight: [^\\\\]+\\\\n[^\\\\]+\\\\n⚓ Evening Nautical Twilight: [^\\\\]+\\\\n[^\\\\]+\\\\n🌌 Evening Astronomical Twilight: /u', $daylight['DESCRIPTION']);
+        $this->assertStringNotContainsString('🌅 Morning Civil Twilight: ', $daylight['DESCRIPTION'], 'Morning twilights are over before Daylight starts');
 
         // Tomorrow morning's twilights follow the Night, which ends where they start
-        $this->assertSame(1, preg_match('/🌄 Tomorrow morning\\\\n🌌 Astronomical Twilight: (\d\d:\d\d)/u', $night['DESCRIPTION'], $morning));
+        $this->assertSame(1, preg_match('/🌄 Tomorrow morning\\\\n🌌 Morning Astronomical Twilight: (\d\d:\d\d)/u', $night['DESCRIPTION'], $morning));
         $ends = (new DateTimeImmutable($night['DTEND']))->setTimezone(new DateTimeZone('Europe/Rome'))->format('H:i');
         $this->assertSame($ends, $morning[1]);
-        $this->assertStringNotContainsString('🌇 Civil Twilight: ', $night['DESCRIPTION']);
+        $this->assertStringNotContainsString('🌇 Evening Civil Twilight: ', $night['DESCRIPTION']);
 
         // With civil twilight subscribed, its events carry the rest instead
         [$daylight] = $this->eventsOfType($this->feed(['window_days' => 0, 'enabled' => ['civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => true]]), 'daylight');
@@ -291,7 +291,7 @@ class CalendarFeedTest extends TestCase
         [$night] = $this->eventsOfType($ics, 'night');
 
         // No Daylight event: the Night carries the day's evening twilights, then tomorrow morning's
-        $this->assertMatchesRegularExpression('/🌆 Earlier today\\\\n🌇 Civil Twilight: .+🌄 Tomorrow morning\\\\n.+🌅 Civil Twilight: /u', $night['DESCRIPTION']);
+        $this->assertMatchesRegularExpression('/🌆 Earlier today\\\\n🌇 Evening Civil Twilight: .+🌄 Tomorrow morning\\\\n.+🌅 Morning Civil Twilight: /u', $night['DESCRIPTION']);
     }
     public function testWeekSummaryOnSundaysOnly(): void
     {
