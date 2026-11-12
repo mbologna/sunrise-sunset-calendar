@@ -115,7 +115,6 @@ return [
         'midnight_sun' => 'Midnight sun: the sun does not set today.',
         'night_all_day' => 'Polar night: the sun stays more than 18° below the horizon all day, so night lasts '
             . 'around the clock.',
-        'all_night' => 'Over the year it also lasts all night, from %s.',
         'week_daylight' => 'Daylight: %s on Sunday → %s on Saturday',
         'week_sun' => 'Sunrise %s → %s · Sunset %s → %s', // Sunday → Saturday
         'week_moon' => 'Moon: %s',
@@ -302,7 +301,7 @@ return [
             'partial' => 'While up, its light washes out the faintest stars and galaxies.',
             'bright' => 'While up, it washes out all but the brighter stars: a good night to look at the moon itself.',
         ],
-        'next' => 'Next: %s %s, %s', // emoji, phase name, date
+        'exact' => '%s at %s', // phase name, time: on the night a principal phase happens
         'phase_at' => '%s %s, %s', // emoji, phase name, date (weekly summary)
     ],
 
@@ -328,13 +327,11 @@ return [
             'september_equinox' => 'The sun is directly over the equator, heading south.',
             'december_solstice' => 'The sun is directly over the Tropic of Capricorn, its farthest point south.',
         ],
-        'begins' => '%1$s begins here by the astronomical calendar; by the weather (meteorological) calendar '
-            . 'it began on %2$s.', // season, date
+        'begins' => 'Astronomical %s begins.', // season, lowercase
         'east_west' => 'The sun rises almost due east and sets almost due west.',
         'daylight' => 'Daylight here: %s.',
         'near_12' => 'A few minutes over 12 hours, so day and night are not quite equal today: sunrise and '
             . "sunset count the sun's top edge, and the air bends its light over the horizon.",
-        'equilux' => 'Day and night are closest to equal on %s, when daylight crosses 12 hours.',
         'longest_day' => 'The longest day of the year: %s of daylight.',
         'shortest_day' => 'The shortest day of the year: %s of daylight.',
         'noon_highest' => 'The noon sun is at its highest of the year: %d° above the horizon.',
@@ -342,11 +339,91 @@ return [
         'noon_tropics' => 'Noon sun: %d°. In the tropics the sun is highest on two other days of the year, '
             . 'when it passes straight overhead.',
         'noon_below' => 'The sun stays %d° below the horizon even at noon.',
-        'midnight_sun' => 'Midnight sun here from %s.',
-        'polar_night' => 'Polar night here from %s.',
-        'summer_extremes' => 'Earliest sunrise of the year: around %s; latest sunset: around %s.',
-        'winter_extremes' => 'Earliest sunset of the year: around %s; latest sunrise: around %s.',
-        'not_on_solstice' => 'Neither falls on the solstice itself.',
+    ],
+
+    // All-day events for days when something changes, each told on its own day
+    'day_facts' => [
+        'sunrise_latest' => [
+            'title' => '🌅 Sunrises start getting earlier',
+            'lead' => 'Sunrise at %s is the latest it gets for months: from tomorrow, sunrises slowly get earlier.',
+        ],
+        'sunrise_earliest' => [
+            'title' => '🌅 Sunrises start getting later',
+            'lead' => 'Sunrise at %s is the earliest it gets for months: from tomorrow, sunrises slowly get later.',
+        ],
+        'sunset_earliest' => [
+            'title' => '🌇 Sunsets start getting later',
+            'lead' => 'Sunset at %s is the earliest it gets for months: from tomorrow, sunsets slowly get later.',
+        ],
+        'sunset_latest' => [
+            'title' => '🌇 Sunsets start getting earlier',
+            'lead' => 'Sunset at %s is the latest it gets for months: from tomorrow, sunsets slowly get earlier.',
+        ],
+        'stable' => 'It moves by less than a minute over about %d days around today, so the change is slow at first.',
+        // What the day length is doing meanwhile, when it moves against the clock times (turning point, trend)
+        'trend' => [
+            'sunset_earliest' => 'The days still get shorter for a while: sunrises are getting later faster '
+                . 'than sunsets.',
+            'sunrise_earliest' => 'The days still get longer for a while: sunsets are getting later faster '
+                . 'than sunrises.',
+            'sunrise_latest' => 'The days are already getting longer: sunsets are getting later faster than sunrises.',
+            'sunset_latest' => 'The days are already getting shorter: sunrises are getting later faster than sunsets.',
+        ],
+        'why' => 'Sunrise and sunset don\'t turn around together with the day length: the moment the sun is highest '
+            . 'drifts by up to about a quarter of an hour over the year, which shifts both.',
+        'twelve_hours_rising' => [
+            'title' => '⚖️ 12 hours of daylight',
+            'lead' => 'Daylight is %s today, the closest it gets to 12 hours, and the days are getting longer. '
+                . 'This happens before the spring equinox, not on it: sunrise and sunset count the sun\'s top edge, '
+                . 'and the air bends its light over the horizon, which adds a few minutes of daylight.',
+        ],
+        'twelve_hours_falling' => [
+            'title' => '⚖️ 12 hours of daylight',
+            'lead' => 'Daylight is %s today, the closest it gets to 12 hours, and the days are getting shorter. '
+                . 'This happens after the autumn equinox, not on it: sunrise and sunset count the sun\'s top edge, '
+                . 'and the air bends its light over the horizon, which adds a few minutes of daylight.',
+        ],
+        'midnight_sun_begins' => [
+            'title' => '☀️ Midnight sun begins',
+            'lead' => 'The sun stays above the horizon around the clock, for about %d days.',
+        ],
+        'midnight_sun_ends' => [
+            'title' => '🌇 The sun sets again',
+            'lead' => 'The first sunset after about %d days of midnight sun.',
+        ],
+        'polar_night_begins' => [
+            'title' => '🌑 Polar night begins',
+            'lead' => 'The sun stays below the horizon all day, for about %d days.',
+        ],
+        'polar_night_ends' => [
+            'title' => '🌅 The sun rises again',
+            'lead' => 'The first sunrise after about %d days of polar night.',
+        ],
+        'white_nights_begins' => [
+            'title' => '🌌 Nights stop getting fully dark',
+            'lead' => 'From tonight the sun doesn\'t get 18° below the horizon even at midnight, so the sky never '
+                . 'gets fully dark and there are no Night events, for about %d nights.',
+        ],
+        'white_nights_ends' => [
+            'title' => '🌌 Fully dark nights return',
+            'lead' => 'Tonight the sun gets 18° below the horizon again, for the first time in about %d nights: '
+                . 'astronomical night, and the Night events, are back.',
+        ],
+        'meteorological' => [
+            'title' => '🌡️ Meteorological %s begins', // season, lowercase
+            'lead' => 'Meteorologists count %1$s as %2$s: whole months that follow the year\'s temperature cycle '
+                . 'and keep seasonal statistics comparable. Astronomical %1$s, set by the sun, begins at the %3$s.',
+            // Northern-hemisphere season starting on the 1st of each month (south: the opposite season)
+            'seasons' => [3 => 'spring', 6 => 'summer', 9 => 'autumn', 12 => 'winter'],
+            'opposite' => ['spring' => 'autumn', 'summer' => 'winter', 'autumn' => 'spring', 'winter' => 'summer'],
+            'months' => [
+                3 => 'March, April and May',
+                6 => 'June, July and August',
+                9 => 'September, October and November',
+                12 => 'December, January and February',
+            ],
+            'marks' => ['spring' => 'equinox', 'summer' => 'solstice', 'autumn' => 'equinox', 'winter' => 'solstice'],
+        ],
     ],
 
     // Facts about the location, in the calendar description

@@ -204,6 +204,7 @@ function render_calendar(array $o): string
         . "X-WR-TIMEZONE:{$o['timezone']}\r\n"
         . "X-PUBLISHED-TTL:{$refresh}\r\nREFRESH-INTERVAL;VALUE=DURATION:{$refresh}\r\n";
 
+    $dayFacts = [];
     $first = $today->modify("-{$o['past_days']} days");
     $last = $today->modify("+{$o['window_days']} days");
 
@@ -300,6 +301,21 @@ function render_calendar(array $o): string
 
             $summary = sprintf($S['week_titles'][$week['trend']], format_duration((int) round($week['total_change'])));
             $out .= ical_event("week-{$dateStr}-{$uidSuffix}", $allDay($day, 7), $summary, $desc, $dtstamp);
+        }
+
+        // Days when something changes (sunrise and sunset turning points, 12 hours of daylight,
+        // polar transitions, meteorological seasons): all day, so they show without opening anything
+        $dayFacts[$year] ??= year_day_facts($yearInfo);
+        foreach ($dayFacts[$year][$day->format('Y-m-d')] ?? [] as $fact) {
+            [$title, $text] = day_fact_text($fact, $ev, $yearInfo, $S);
+            $slug = str_replace('_', '-', $fact['kind']);
+            $out .= ical_event("{$slug}-{$dateStr}-{$uidSuffix}", $allDay($day), $title, $text, $dtstamp);
+        }
+        $meteorological = meteorological_fact($day, $lat, $S);
+        if ($meteorological !== null) {
+            [$season, $title, $text] = $meteorological;
+            $uid = "meteorological-{$season}-{$dateStr}-{$uidSuffix}";
+            $out .= ical_event($uid, $allDay($day), $title, $text, $dtstamp);
         }
 
         // Equinoxes and solstices: all day on the local date, exact moment in the description
