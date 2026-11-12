@@ -217,13 +217,12 @@ function format_moon_section(array $moon, array $S): string
             $lines[] = $M['impact'][$lit < 25 ? 'dark' : ($lit <= 75 ? 'partial' : 'bright')];
         }
     }
-    if ($moon['next_phase']) {
-        $lines[] = sprintf(
-            $M['next'],
-            get_moon_phase_emoji($moon['next_phase']['name'], $lat),
-            moon_phase_name($moon['next_phase']['name']),
-            format_local($moon['next_phase']['timestamp'], 'datetime')
-        );
+    // A principal phase (new, quarter, full) that happens during the night, to the minute
+    if (isset($moon['night'])) {
+        foreach (moon_phases_between($moon['night'][0], $moon['night'][1]) as $phase) {
+            $exact = sprintf($M['exact'], moon_phase_name($phase['name']), format_local($phase['timestamp']));
+            $lines[0] .= " · {$exact}";
+        }
     }
 
     return sprintf($S['headers']['moon'], $emoji) . "\n" . implode("\n", $lines) . "\n";
@@ -329,8 +328,7 @@ function twilight_profile_fields(): array
  *     days: array<array>, polar: bool,
  *     daylight_min: array{0: float, 1: int}, daylight_max: array{0: float, 1: int},
  *     midnight_sun: array, polar_night: array, white_nights: array,
- *     bands: array<string, ?array{min: array{0: int, 1: int}, max: array{0: int, 1: int}, all_night: array}>,
- *     extremes: ?array{earliest_sunrise: int, latest_sunrise: int, earliest_sunset: int, latest_sunset: int},
+ *     bands: array<string, ?array{min: array{0: int, 1: int}, max: array{0: int, 1: int}}>,
  *     nights: array<?int>
  * } Lengths in hours (daylight) or seconds (bands), each paired with its day's timestamp
  */
@@ -381,11 +379,9 @@ function year_summary(float $lat, float $lon, int $year, float $utcOffset): arra
                 : ($d[$deep] ?? $noon + 0.5) - ($d[$shallow] ?? $noon);
             $lengthsByDay[$i] = (int) round($span * 86400);
         }
-        $allNight = array_map(fn($d) => $d[$deep] === null && $d[$shallow] !== null, $days);
         $bands[$band] = $lengthsByDay === [] ? null : [
             'min' => [min($lengthsByDay), $timestamps[array_search(min($lengthsByDay), $lengthsByDay, true)]],
             'max' => [max($lengthsByDay), $timestamps[array_search(max($lengthsByDay), $lengthsByDay, true)]],
-            'all_night' => day_runs($allNight, $timestamps),
         ];
     }
 
@@ -405,17 +401,6 @@ function year_summary(float $lat, float $lon, int $year, float $utcOffset): arra
     }
 
     $polar = in_array(true, $polarDay, true) || in_array(true, $polarNight, true);
-    $extremes = null;
-    if (!$polar) {
-        $sunrises = array_column($days, 'sunrise_frac');
-        $sunsets = array_column($days, 'sunset_frac');
-        $extremes = [
-            'earliest_sunrise' => $pick($sunrises, 'min')[1],
-            'latest_sunrise' => $pick($sunrises, 'max')[1],
-            'earliest_sunset' => $pick($sunsets, 'min')[1],
-            'latest_sunset' => $pick($sunsets, 'max')[1],
-        ];
-    }
 
     return $memo[$key] = [
         'days' => $days,
@@ -426,8 +411,149 @@ function year_summary(float $lat, float $lon, int $year, float $utcOffset): arra
         'polar_night' => day_runs($polarNight, $timestamps),
         'white_nights' => day_runs($whiteNights, $timestamps),
         'bands' => $bands,
-        'extremes' => $extremes,
         'nights' => $nights,
+    ];
+}
+
+/**
+ * Days worth an event of their own because something changes that day, found
+ * in one year's profile.
+ *
+ * - Sunrise and sunset turning points: the day sunrises or sunsets stop getting
+ *   earlier and start getting later, or the reverse. Found as the extreme of a
+ *   ±20-day window, so it is a real turn, not daily noise.
+ * - The days daylight crosses 12 hours, near each equinox.
+ * - The first day and the day after the last day of midnight sun, polar night
+ *   and nights without astronomical darkness.
+ *
+ * @param array $year year_summary()
+ * @return array<string, array<array{kind: string, index: int, stable?: int, days?: int}>>
+ *     Keyed by local date (Y-m-d); index is the day of the year in the profile
+ */
+function year_day_facts(array $year): array
+{
+    $days = $year['days'];
+    $n = count($days);
+    $facts = [];
+    $add = function (int $index, array $fact) use (&$facts, $days): void {
+        $facts[date('Y-m-d', $days[$index]['timestamp'])][] = ['index' => $index] + $fact;
+    };
+
+    foreach (['sunrise' => 'sunrise_frac', 'sunset' => 'sunset_frac'] as $event => $field) {
+        $values = array_column($days, $field);
+        for ($i = 0; $i < $n; $i++) {
+            $window = [];
+            for ($k = -20; $k <= 20; $k++) {
+                $window[$k] = $values[($i + $k + $n) % $n];
+            }
+            if (in_array(null, $window, true)) {
+                continue;
+            }
+            $before = array_slice($window, 0, 20);
+            $after = array_slice($window, 21);
+            $isMin = $values[$i] < min($before) && $values[$i] <= min($after);
+            $isMax = $values[$i] > max($before) && $values[$i] >= max($after);
+            if (!$isMin && !$isMax) {
+                continue;
+            }
+            // How many days around the turn stay within a minute of it
+            $stable = 1;
+            foreach ([1, -1] as $direction) {
+                for ($distance = 1; $distance < 60; $distance++) {
+                    $other = $values[($i + $direction * $distance + $n) % $n];
+                    if ($other === null || abs($other - $values[$i]) * 86400 > 60) {
+                        break;
+                    }
+                    $stable++;
+                }
+            }
+            $add($i, ['kind' => $event . ($isMin ? '_earliest' : '_latest'), 'stable' => $stable]);
+        }
+    }
+
+    $hours = array_column($days, 'daylength_h');
+    for ($i = 0; $i < $n - 1; $i++) {
+        if (($hours[$i] - 12) * ($hours[$i + 1] - 12) <= 0 && $hours[$i] !== $hours[$i + 1]) {
+            $closer = abs($hours[$i] - 12) <= abs($hours[$i + 1] - 12) ? $i : $i + 1;
+            $kind = $hours[$i + 1] > $hours[$i] ? 'twelve_hours_rising' : 'twelve_hours_falling';
+            $add($closer, ['kind' => $kind]);
+        }
+    }
+
+    $timestamps = array_column($days, 'timestamp');
+    foreach (['midnight_sun', 'polar_night', 'white_nights'] as $period) {
+        foreach ($year[$period] as [$start, $end]) {
+            $first = (int) array_search($start, $timestamps, true);
+            $last = (int) array_search($end, $timestamps, true);
+            $length = ($last - $first + $n) % $n + 1;
+            if ($length >= $n) {
+                continue;
+            }
+            // A Night event belongs to its evening, so the first night without full darkness
+            // is the evening before the first morning without astronomical dawn
+            $begins = $period === 'white_nights' ? ($first - 1 + $n) % $n : $first;
+            $add($begins, ['kind' => "{$period}_begins", 'days' => $length]);
+            $add(($last + 1) % $n, ['kind' => "{$period}_ends", 'days' => $length]);
+        }
+    }
+
+    return $facts;
+}
+
+/**
+ * Title and description of a day fact from year_day_facts().
+ *
+ * @param array{kind: string, index: int, stable?: int, days?: int} $fact
+ * @param array $ev sun_events() for the fact's day
+ * @param array $year year_summary() for its year
+ * @return array{0: string, 1: string} Title, description
+ */
+function day_fact_text(array $fact, array $ev, array $year, array $S): array
+{
+    $F = $S['day_facts'];
+    $kind = $fact['kind'];
+
+    if (preg_match('/^(sunrise|sunset)_(earliest|latest)$/', $kind, $m)) {
+        $lines = [sprintf($F[$kind]['lead'], format_local($ev[$m[1]])), sprintf($F['stable'], $fact['stable'])];
+        // Say what the day length does meanwhile when it moves against the clock time: at a
+        // sunset turn the days shrink only through later sunrises, at a sunrise turn they grow
+        // only through later sunsets
+        $hours = array_column($year['days'], 'daylength_h');
+        $lengthening = $hours[($fact['index'] + 1) % count($hours)] > $hours[$fact['index']];
+        if ($m[1] === 'sunset' ? !$lengthening : $lengthening) {
+            $lines[] = $F['trend'][$kind];
+        }
+        $lines[] = $F['why'];
+
+        return [$F[$kind]['title'], implode("\n", $lines)];
+    }
+
+    $value = str_starts_with($kind, 'twelve_hours')
+        ? format_duration((int) round($ev['daylength_h'] * 3600))
+        : $fact['days'];
+
+    return [$F[$kind]['title'], sprintf($F[$kind]['lead'], $value)];
+}
+
+/**
+ * The start of a meteorological season, on the 1st of March, June, September and
+ * December, outside the tropics only (where the four seasons by temperature apply).
+ *
+ * @return array{0: string, 1: string, 2: string}|null Season, title, description
+ */
+function meteorological_fact(DateTimeImmutable $day, float $lat, array $S): ?array
+{
+    $M = $S['day_facts']['meteorological'];
+    $month = (int) $day->format('n');
+    if ($day->format('j') !== '1' || !isset($M['seasons'][$month]) || abs($lat) < 23.44) {
+        return null;
+    }
+    $season = $lat >= 0 ? $M['seasons'][$month] : $M['opposite'][$M['seasons'][$month]];
+
+    return [
+        $season,
+        sprintf($M['title'], $season),
+        sprintf($M['lead'], $season, $M['months'][$month], $M['marks'][$season]),
     ];
 }
 
@@ -487,7 +613,8 @@ function get_special_astronomical_events(int $year, float $lat): array
 }
 
 /**
- * Describe an equinox or solstice for the feed's location.
+ * Describe an equinox or solstice for the feed's location, with facts about that
+ * day only: facts about other days go on their own days (year_day_facts()).
  *
  * Each sentence is included only when the computed data makes it true here.
  *
@@ -498,19 +625,12 @@ function get_special_astronomical_events(int $year, float $lat): array
 function season_description(array $event, array $ev, array $year, float $lat, array $S): string
 {
     $T = $S['season_text'];
-    $date = fn(int $ts) => format_local($ts, 'date_short');
-    $sameDay = fn(int $a, int $b) => date('Y-m-d', $a) === date('Y-m-d', $b);
     $seconds = (int) round($ev['daylength_h'] * 3600);
-    $month = (int) date('n', $event['date']);
 
     $lines = [
         sprintf($T['moment'], $T['moment_names'][$event['key']], format_local($event['date'])),
         $T['sun'][$event['key']],
-        sprintf(
-            $T['begins'],
-            $S['seasons'][$event['season']]['season'],
-            $date(mktime(12, 0, 0, $month, 1, (int) date('Y', $event['date'])))
-        ),
+        sprintf($T['begins'], strtolower($S['seasons'][$event['season']]['season'])),
     ];
 
     if (str_ends_with($event['season'], 'equinox')) {
@@ -523,43 +643,20 @@ function season_description(array $event, array $ev, array $year, float $lat, ar
         }
         $lines[] = $line;
 
-        // Nearest day to the equinox where daylight crosses 12 hours
-        $hours = array_column($year['days'], 'daylength_h');
-        $at = (int) date('z', $event['date']);
-        $best = null;
-        for ($i = max(0, $at - 20); $i < min(count($hours) - 1, $at + 20); $i++) {
-            if (($hours[$i] - 12) * ($hours[$i + 1] - 12) <= 0) {
-                $closer = abs($hours[$i] - 12) <= abs($hours[$i + 1] - 12) ? $i : $i + 1;
-                if ($best === null || abs($closer - $at) < abs($best - $at)) {
-                    $best = $closer;
-                }
-            }
-        }
-        if ($best !== null) {
-            $lines[] = sprintf($T['equilux'], $date($year['days'][$best]['timestamp']));
-        }
-
         return implode("\n", $lines);
     }
 
-    $summer = $event['season'] === 'summer_solstice';
     $noon = (int) round($ev['noon_elevation']);
     // The year's extreme must be today's length and fall near the solstice: near the
     // equator day length varies by seconds and peaks on unrelated dates
     $isExtreme = fn(array $extreme) => abs($ev['daylength_h'] - $extreme[0]) * 3600 < 30
         && abs($extreme[1] - $event['date']) <= 3 * 86400;
-    if ($summer) {
+    if ($event['season'] === 'summer_solstice') {
         if ($ev['polar'] !== 'day' && $isExtreme($year['daylight_max'])) {
             $lines[] = sprintf($T['longest_day'], format_duration($seconds));
         }
         // Outside the tropics the noon sun peaks at the solstice; inside, it passes overhead twice a year
         $lines[] = sprintf(abs($lat) >= abs($ev['declination']) ? $T['noon_highest'] : $T['noon_tropics'], $noon);
-        if ($year['midnight_sun'] !== []) {
-            $lines[] = sprintf($T['midnight_sun'], format_runs($year['midnight_sun'], $S));
-        }
-        $extremes = $year['extremes']
-            ? [$year['extremes']['earliest_sunrise'], $year['extremes']['latest_sunset']]
-            : null;
     } else {
         if ($ev['polar'] !== 'night' && $isExtreme($year['daylight_min'])) {
             $lines[] = sprintf($T['shortest_day'], format_duration($seconds));
@@ -569,25 +666,10 @@ function season_description(array $event, array $ev, array $year, float $lat, ar
         } elseif ($ev['noon_elevation'] > 0) {
             $lines[] = sprintf($T['noon_lowest'], $noon);
         }
-        if ($year['polar_night'] !== []) {
-            $lines[] = sprintf($T['polar_night'], format_runs($year['polar_night'], $S));
-        }
-        $extremes = $year['extremes']
-            ? [$year['extremes']['earliest_sunset'], $year['extremes']['latest_sunrise']]
-            : null;
-    }
-
-    if ($extremes !== null) {
-        $line = sprintf($T[$summer ? 'summer_extremes' : 'winter_extremes'], $date($extremes[0]), $date($extremes[1]));
-        if (!$sameDay($extremes[0], $event['date']) && !$sameDay($extremes[1], $event['date'])) {
-            $line .= ' ' . $T['not_on_solstice'];
-        }
-        $lines[] = $line;
     }
 
     return implode("\n", $lines);
 }
-
 // ============================================================================
 // EVENT DESCRIPTIONS
 // ============================================================================
@@ -632,9 +714,6 @@ function twilight_details(string $key, array $span, array $ev, array $year, arra
     $path = twilight_path($key, $span, $ev, $S);
     if ($path !== null) {
         $lines[] = $path;
-    }
-    if ($band !== null && $band['all_night'] !== []) {
-        $lines[] = sprintf($L['all_night'], format_runs($band['all_night'], $S));
     }
 
     return implode("\n", $lines);

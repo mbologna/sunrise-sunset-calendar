@@ -14,6 +14,7 @@ An iCalendar feed of daily sunrise, sunset and twilight events for any location,
 - The moon on night events: phase, illumination, and the moonless part of the night
 - Weekly daylight summaries spanning Sunday to Saturday, with sunrise and sunset drift
 - Equinoxes and solstices named by the local season, with the exact moment and facts for the location
+- All-day events on the days something changes, each told on its own day: sunrises or sunsets turning earlier or later, 12 hours of daylight, the start of each meteorological season (outside the tropics), and the start and end of midnight sun, polar night and fully dark nights
 - A plain-language explanation of each period in its description
 - A calendar description with the location's daylight range, midnight sun, polar night and white nights
 - Correct times across daylight-saving changes, and continuous twilight during polar days and white nights
@@ -86,7 +87,7 @@ Each event is a period, titled with its name; the calendar shows when it starts 
 | Evening astronomical twilight | 🌌 Astronomical Twilight | nautical dusk | astronomical dusk (18° below) |
 | Night | *moon phase* Night · *length* | astronomical dusk | the next astronomical dawn |
 
-Sunrise and sunset are when the sun's top edge crosses the horizon, allowing for refraction. Weekly summaries are all-day events from Sunday to Saturday. Equinoxes and solstices are all-day events on their local date.
+Sunrise and sunset are when the sun's top edge crosses the horizon, allowing for refraction. Weekly summaries are all-day events from Sunday to Saturday. Equinoxes, solstices and the other days when something changes are all-day events on their local date, so they show in every calendar view, whatever event types the feed includes. An event only states facts about its own day; a fact about another day gets an event on that day.
 
 When the sun never crosses a boundary, an event runs to or from solar noon or solar midnight instead, and its description says why. During polar night, civil twilight peaks at solar noon; under the midnight sun, daylight lasts 24 hours and no twilight or night events appear. Wherever the sun stays within 18° of the horizon all night (above about 48.6° latitude around the summer solstice), there are no night events. Above about 84.6° latitude the noon sun can stay more than 18° below the horizon in winter; night then runs from solar noon to solar noon, around the clock.
 

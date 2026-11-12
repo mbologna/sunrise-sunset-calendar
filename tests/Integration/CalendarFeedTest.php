@@ -177,7 +177,6 @@ class CalendarFeedTest extends TestCase
 
         [$solstice] = $this->eventsOfType($ics, 'winter-solstice');
         $this->assertStringContainsString('The sun stays 3° below the horizon even at noon.', $solstice['DESCRIPTION']);
-        $this->assertStringContainsString('Polar night here from Nov 28 to Jan 14.', $solstice['DESCRIPTION']);
     }
 
     public function testMidnightSunHasAllDayDaylightAndNoTwilight(): void
@@ -356,7 +355,7 @@ class CalendarFeedTest extends TestCase
         [$equinox] = $this->eventsOfType($ics, 'autumn-equinox');
         $this->assertSame('🍂 Autumn Equinox', $equinox['SUMMARY']);
         $this->assertStringStartsWith('The March equinox is at 07:24.', $equinox['DESCRIPTION']);
-        $this->assertStringContainsString('Autumn begins here by the astronomical calendar', $equinox['DESCRIPTION']);
+        $this->assertStringContainsString('Astronomical autumn begins.', $equinox['DESCRIPTION']);
     }
 
     public function testSeasonUidsDependOnLocation(): void
@@ -389,7 +388,62 @@ class CalendarFeedTest extends TestCase
 
         $this->assertStringContainsString('The shortest day of the year: 9h 08m of daylight.', $solstice['DESCRIPTION']);
         $this->assertStringContainsString('The noon sun is at its lowest of the year: 25°', $solstice['DESCRIPTION']);
-        $this->assertStringContainsString('Neither falls on the solstice itself.', $solstice['DESCRIPTION']);
+        // Facts about other days go on those days, not here
+        $this->assertDoesNotMatchRegularExpression('/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d/', $solstice['DESCRIPTION']);
+    }
+
+    public function testSunriseAndSunsetTurningPointsGetTheirOwnDays(): void
+    {
+        // Bergamo: sunsets turn later on Dec 10, sunrises turn earlier on Jan 2
+        $ics = $this->feed(['lat' => 45.6894, 'lon' => 9.5694, 'today' => '2026-11-30', 'window_days' => 40, 'enabled' => [
+            'civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => false,
+        ]]);
+
+        [$sunset] = $this->eventsOfType($ics, 'sunset-earliest');
+        $this->assertSame('20261210', $sunset['DTSTART'], 'All day, on its own date');
+        $this->assertSame('🌇 Sunsets start getting later', $sunset['SUMMARY']);
+        $this->assertMatchesRegularExpression('/^Sunset at 16:3\d is the earliest it gets for months/', $sunset['DESCRIPTION']);
+        $this->assertStringContainsString('The days still get shorter for a while', $sunset['DESCRIPTION']);
+
+        [$sunrise] = $this->eventsOfType($ics, 'sunrise-latest');
+        $this->assertSame('20270102', $sunrise['DTSTART']);
+        $this->assertStringContainsString('The days are already getting longer', $sunrise['DESCRIPTION']);
+
+        [$winter] = $this->eventsOfType($ics, 'meteorological-winter');
+        $this->assertSame('20261201', $winter['DTSTART']);
+        $this->assertSame('🌡️ Meteorological winter begins', $winter['SUMMARY']);
+    }
+
+    public function testTwelveHoursOfDaylightNearTheEquinoxes(): void
+    {
+        $ics = $this->feed(['today' => '2027-03-01', 'window_days' => 220, 'enabled' => [
+            'civil' => false, 'nautical' => false, 'astro' => false, 'daylight' => false,
+        ]]);
+
+        [$spring] = $this->eventsOfType($ics, 'twelve-hours-rising');
+        [$autumn] = $this->eventsOfType($ics, 'twelve-hours-falling');
+        $this->assertMatchesRegularExpression('/^202703(1\d)$/', $spring['DTSTART'], 'Before the Mar 20 equinox');
+        $this->assertMatchesRegularExpression('/^202709(2[4-9])$/', $autumn['DTSTART'], 'After the Sep 23 equinox');
+        $this->assertMatchesRegularExpression('/^Daylight is 1[12]h \d\dm today\\\\, the closest it gets to 12 hours/', $spring['DESCRIPTION']);
+        $this->assertStringContainsString('before the spring equinox\, not on it', $spring['DESCRIPTION']);
+    }
+
+    public function testPolarTransitionsGetTheirOwnDays(): void
+    {
+        $ics = $this->feed(['lat' => 69.65, 'lon' => 18.96, 'timezone' => 'Europe/Oslo', 'today' => '2026-11-25', 'window_days' => 60]);
+
+        [$begins] = $this->eventsOfType($ics, 'polar-night-begins');
+        [$ends] = $this->eventsOfType($ics, 'polar-night-ends');
+        $this->assertSame('20261128', $begins['DTSTART']);
+        $this->assertSame('20270116', $ends['DTSTART'], 'The first day the sun rises: 11:15 on Jan 16, 2027');
+        $this->assertMatchesRegularExpression('/^The first sunrise after about 4\d days of polar night\.$/', $ends['DESCRIPTION']);
+    }
+
+    public function testNoMeteorologicalSeasonsInTheTropics(): void
+    {
+        $ics = $this->feed(['lat' => -0.1807, 'lon' => -78.4678, 'timezone' => 'America/Guayaquil', 'today' => '2026-11-30', 'window_days' => 3]);
+
+        $this->assertSame([], array_filter($this->events($ics), fn($e) => str_starts_with($e['UID'], 'meteorological-')));
     }
 
     public function testTwilightDataComesBeforeTheExplanation(): void
@@ -410,7 +464,9 @@ class CalendarFeedTest extends TestCase
 
         // The moon sets at 21:45 (USNO) and the night ends at astronomical dawn
         $this->assertMatchesRegularExpression('/Moonless sky: 21:45–05:2\d \(7h \d\dm\)/u', $night('2026-11-15'));
-        $this->assertStringContainsString('Full Moon\, 100% lit', $night('2026-11-24'));
+        // The Dec 24 full moon at 02:28 falls in the night of Dec 23
+        $this->assertStringContainsString('· Full Moon at 02:28', $night('2026-12-23'));
+        $this->assertStringNotContainsString('Next:', $night('2026-11-15'));
         $this->assertStringContainsString('Moonless sky: none\, the moon is up all night', $night('2026-11-24'));
         $this->assertStringContainsString('Moonless sky: all night', $night('2026-11-10'));
         $this->assertStringNotContainsString('While up', $night('2026-11-10'), 'No brightness note when the moon never rises');
