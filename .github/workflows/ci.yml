@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   test:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@5797c3f0e987ee045b00d0a1640dfcdce3c45ce0 # main
+    uses: mbologna/.github/.github/workflows/php-ci.yml@ee5bcf8cd73154eaccd48e386919f73d2dd832e2 # main
     with:
       php_version: "8.5"
       php_extensions: "mbstring, json"
@@ -29,7 +29,7 @@ jobs:
       test_command: vendor/bin/phpunit --testdox && composer analyse && composer lint
 
   lint:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@5797c3f0e987ee045b00d0a1640dfcdce3c45ce0 # main
+    uses: mbologna/.github/.github/workflows/php-ci.yml@ee5bcf8cd73154eaccd48e386919f73d2dd832e2 # main
     with:
       php_version: "8.5"
       enable_test: false
@@ -52,7 +52,7 @@ jobs:
       attestations: write
       security-events: write
       actions: write
-    uses: mbologna/.github/.github/workflows/docker-ci.yml@5797c3f0e987ee045b00d0a1640dfcdce3c45ce0 # main
+    uses: mbologna/.github/.github/workflows/docker-ci.yml@ee5bcf8cd73154eaccd48e386919f73d2dd832e2 # main
     with:
       image_name: sunrise-sunset-calendar
       # push: the Cloud Run deploy runs the sha-* image of each
