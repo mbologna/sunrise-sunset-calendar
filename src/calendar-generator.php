@@ -242,11 +242,24 @@ function render_calendar(array $o): string
             $moon['rise_set'] = moon_rise_set($spans['night'][0], $spans['night'][1], $lat, $lon);
         }
 
+        // The twilight nearest to daylight (the last one before sunrise) and to night (the
+        // last one before it) carry those periods' blocks when they aren't events of their own
+        $subscribed = fn(string $key) => $enabled[twilight_bands()[$key]['flag']] && $spans[$key] !== null;
+        $noTwilightEvents = !($enabled['civil'] || $enabled['nautical'] || $enabled['astro']);
+        $nearest = fn(array $keys) => array_values(array_filter($keys, $subscribed))[0] ?? null;
         $c = [
             'ev' => $ev,
             'spans' => $spans,
             'enabled' => $enabled,
             'year' => $yearInfo,
+            'carriers' => [
+                'morning' => $nearest(['morning_civil', 'morning_nautical', 'morning_astronomical']),
+                'evening' => $nearest(['evening_astronomical', 'evening_nautical', 'evening_civil']),
+            ],
+            // Tomorrow morning's twilights go on tonight's Night when no twilight is an event
+            'spans_tomorrow' => $enabled['daylight'] && $noTwilightEvents
+                ? solar_spans($next, sun_events($day->modify('+2 days'), $lat, $lon))
+                : null,
             'daylight' => [
                 'seconds' => $daylightSeconds,
                 'change' => $daylightSeconds - (int) round($prev['daylength_h'] * 3600),
@@ -338,9 +351,31 @@ function render_calendar(array $o): string
             $span = $spans[$key];
             $offset = $band['morning'] ? $o['rise_offset'] : $o['set_offset'];
 
+            // Without a Daylight event, the civil twilight that ends at sunrise or starts at
+            // sunset says how that moved, and the evening one carries the evening light
+            $clock = null;
+            $light = '';
+            if (!$enabled['daylight'] && $key === 'morning_civil' && $c['daylight']['sunrise_shift'] !== null) {
+                $clock = sprintf(
+                    $S['labels']['sunrise_shift'],
+                    format_local($ev['sunrise']),
+                    format_clock_shift($c['daylight']['sunrise_shift'], $S, true)
+                );
+            }
+            if (!$enabled['daylight'] && $key === 'evening_civil') {
+                if ($c['daylight']['sunset_shift'] !== null) {
+                    $clock = sprintf(
+                        $S['labels']['sunset_shift'],
+                        format_local($ev['sunset']),
+                        format_clock_shift($c['daylight']['sunset_shift'], $S, true)
+                    );
+                }
+                $light = format_light_block($ev, $S, ['evening']);
+            }
+
             // Data first, then the rest of today's schedule, then the explanation
-            $desc = twilight_details($key, $span, $ev, $yearInfo, $S);
-            $desc .= $band['morning'] ? build_dawn_supplemental($c, $S) : build_dusk_supplemental($c, $S);
+            $desc = twilight_details($key, $span, $ev, $yearInfo, $S, $clock) . ($light === '' ? '' : "\n\n" . $light);
+            $desc .= $band['morning'] ? build_dawn_supplemental($c, $S, $key) : build_dusk_supplemental($c, $S, $key);
             $desc .= "\n\n" . twilight_about($key, $span, $spans, $S);
             $desc .= $offsetNote($offset, $offset);
 
@@ -358,8 +393,10 @@ function render_calendar(array $o): string
             [$start, $end] = $spans['daylight'];
 
             $light = format_light_block($ev, $S);
+            // This evening's twilights follow Daylight; tomorrow morning's too when no Night comes between
             $desc = rtrim(daylight_details($c, $S)) . ($light === '' ? '' : "\n\n" . $light)
-                . build_twilight_schedule($c, $S)
+                . build_twilight_schedule($c, $S, 'this_evening')
+                . ($spans['night'] === null ? build_twilight_schedule($c, $S, 'tomorrow_morning') : '')
                 . "\n\n" . daylight_about($ev, $S)
                 . $offsetNote($o['rise_offset'], $o['set_offset']) . $customNote;
 
@@ -376,8 +413,12 @@ function render_calendar(array $o): string
         if ($enabled['daylight'] && $spans['night'] !== null) {
             [$start, $end] = $spans['night'];
 
-            // With no Daylight event today, the night carries the twilight times instead
-            $schedule = $spans['daylight'] === null ? build_twilight_schedule($c, $S) : '';
+            // Tomorrow morning's twilights follow the night; this evening's go here only when
+            // there is no Daylight event today to carry them (polar night)
+            $earlier = $spans['daylight'] === null
+                ? build_twilight_schedule($c, $S, 'this_evening', 'earlier_today')
+                : '';
+            $schedule = $earlier . build_twilight_schedule($c, $S, 'tomorrow_morning');
             $desc = rtrim(night_details($c, $S)) . $schedule . "\n\n" . night_about($S)
                 . $offsetNote($o['set_offset'], $o['rise_offset']) . $customNote;
 

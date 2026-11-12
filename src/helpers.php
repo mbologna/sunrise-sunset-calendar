@@ -159,15 +159,17 @@ function format_comparison(int $diffSeconds, string $referent, array $S): string
  * How far an event moved on the clock since the day before: "1m 18s later".
  *
  * @param int $shiftSeconds Today's time minus yesterday's, a whole day removed
+ * @param bool $alone Standing on its own line: "1m 18s later than yesterday"
  */
-function format_clock_shift(int $shiftSeconds, array $S): string
+function format_clock_shift(int $shiftSeconds, array $S, bool $alone = false): string
 {
     $C = $S['clock'];
+    $suffix = $alone ? '_alone' : '';
     if (abs($shiftSeconds) < 1) {
-        return $C['same'];
+        return $C["same{$suffix}"];
     }
 
-    return sprintf($C[$shiftSeconds > 0 ? 'later' : 'earlier'], format_duration($shiftSeconds, true));
+    return sprintf($C[($shiftSeconds > 0 ? 'later' : 'earlier') . $suffix], format_duration($shiftSeconds, true));
 }
 /**
  * Format one twilight line for the Today/Tonight schedule.
@@ -697,8 +699,10 @@ function missing_boundaries(string $key, array $span): array
  * @param array $span From solar_spans()
  * @param array $ev sun_events() for the day
  * @param array $year year_summary() for the day's year
+ * @param string|null $clock How sunrise or sunset moved since yesterday, for the civil
+ *     twilight that ends at sunrise or starts at sunset when there is no Daylight event
  */
-function twilight_details(string $key, array $span, array $ev, array $year, array $S): string
+function twilight_details(string $key, array $span, array $ev, array $year, array $S, ?string $clock = null): string
 {
     $L = $S['labels'];
     $length = format_duration($span[1] - $span[0]);
@@ -714,6 +718,9 @@ function twilight_details(string $key, array $span, array $ev, array $year, arra
     $path = twilight_path($key, $span, $ev, $S);
     if ($path !== null) {
         $lines[] = $path;
+    }
+    if ($clock !== null) {
+        $lines[] = $clock;
     }
 
     return implode("\n", $lines);
@@ -763,8 +770,9 @@ function light_periods(array $ev): array
  * climbing past 6°) gets its own line.
  *
  * @param array $ev sun_events() for the day
+ * @param array<string>|null $only Groups to include ('morning', 'midday', 'evening'); all when null
  */
-function format_light_block(array $ev, array $S): string
+function format_light_block(array $ev, array $S, ?array $only = null): string
 {
     $L = $S['light'];
     $noon = $ev['solar_noon'];
@@ -788,7 +796,7 @@ function format_light_block(array $ev, array $S): string
 
     $lines = [];
     foreach ($groups as $group => $items) {
-        if ($items !== []) {
+        if ($items !== [] && ($only === null || in_array($group, $only, true))) {
             $lines[] = sprintf($L[$group], implode(', ', $items));
         }
     }
@@ -894,8 +902,10 @@ function twilight_about(string $key, array $span, array $spans, array $S): strin
  * day is changing, where the sun peaks, and where the day sits in the year.
  *
  * @param array $c Day context: ev, daylight stats, year
+ * @param bool $withClock Include how far sunrise and sunset moved; left out when the
+ *     civil twilights that end at sunrise and start at sunset carry them instead
  */
-function daylight_details(array $c, array $S): string
+function daylight_details(array $c, array $S, bool $withClock = true): string
 {
     $ev = $c['ev'];
     $d = $c['daylight'];
@@ -904,7 +914,7 @@ function daylight_details(array $c, array $S): string
 
     $lines = $ev['polar'] === 'day' ? [$L['midnight_sun']] : [];
     $trend = format_comparison($d['change'], $S['comparisons']['yesterday'], $S);
-    if ($d['sunrise_shift'] !== null) {
+    if ($withClock && $d['sunrise_shift'] !== null) {
         $trend .= sprintf(
             $L['clock'],
             format_clock_shift($d['sunrise_shift'], $S),
@@ -1001,58 +1011,68 @@ function night_about(array $S): string
  * Build the Today schedule: morning periods not subscribed to as events, so a
  * minimal calendar still carries them.
  *
- * @param array $c Day context: ev, spans, enabled, daylight stats
+ * @param array $c Day context: ev, spans, enabled, daylight stats, carriers
+ * @param string $key The morning twilight this goes on
  */
-function build_dawn_supplemental(array $c, array $S): string
+function build_dawn_supplemental(array $c, array $S, string $key): string
 {
     $twilights = ['morning_astronomical', 'morning_nautical', 'morning_civil'];
 
-    return build_supplemental($c, $S, 'today', $twilights, 'daylight');
+    return build_supplemental($c, $S, 'today', $twilights, 'daylight', $c['carriers']['morning'] === $key);
 }
-
 /**
  * Build the Tonight schedule (evening counterpart of build_dawn_supplemental()).
  *
- * @param array $c Day context: spans, enabled, night stats
+ * @param array $c Day context: spans, enabled, night stats, carriers
+ * @param string $key The evening twilight this goes on
  */
-function build_dusk_supplemental(array $c, array $S): string
+function build_dusk_supplemental(array $c, array $S, string $key): string
 {
     $twilights = ['evening_civil', 'evening_nautical', 'evening_astronomical'];
 
-    return build_supplemental($c, $S, 'tonight', $twilights, 'night');
+    return build_supplemental($c, $S, 'tonight', $twilights, 'night', $c['carriers']['evening'] === $key);
 }
-
 /**
- * All of today's twilights, for a calendar subscribed to no twilight events, so
- * Daylight (or Night, when the sun does not rise) still carries every time.
+ * Twilights for a calendar subscribed to no twilight events, on the event right
+ * before them: this evening's on Daylight (or, without daylight, on that day's
+ * Night), tomorrow morning's on tonight's Night (or on Daylight when there is no
+ * Night, as in white nights).
  *
- * @param array $c Day context: spans, enabled
+ * @param array $c Day context: spans, enabled, and spans_tomorrow for the morning
+ * @param string $part 'this_evening' or 'tomorrow_morning'
+ * @param string|null $header Header key, when not the part's own
  */
-function build_twilight_schedule(array $c, array $S): string
+function build_twilight_schedule(array $c, array $S, string $part, ?string $header = null): string
 {
     if ($c['enabled']['civil'] || $c['enabled']['nautical'] || $c['enabled']['astro']) {
         return '';
     }
-    $keys = [
-        'morning_astronomical', 'morning_nautical', 'morning_civil',
-        'evening_civil', 'evening_nautical', 'evening_astronomical',
-    ];
+    [$spans, $keys] = $part === 'this_evening'
+        ? [$c['spans'], ['evening_civil', 'evening_nautical', 'evening_astronomical']]
+        : [$c['spans_tomorrow'] ?? [], ['morning_astronomical', 'morning_nautical', 'morning_civil']];
     $info = '';
     foreach ($keys as $key) {
-        if ($c['spans'][$key] !== null) {
-            $info .= format_schedule_span($S['summaries'][$key], $c['spans'][$key], $S['supplemental'][$key]);
+        if (($spans[$key] ?? null) !== null) {
+            $info .= format_schedule_span($S['summaries'][$key], $spans[$key], $S['supplemental'][$key]);
         }
     }
 
-    return $info === '' ? '' : "\n\n" . $S['headers']['twilight'] . "\n" . rtrim($info, "\n");
+    return $info === '' ? '' : "\n\n" . $S['headers'][$header ?? $part] . "\n" . rtrim($info, "\n");
 }
-
 /**
  * @param array<string> $twilights Twilight keys in chronological order
  * @param string $period 'daylight' or 'night', listed after the twilights
+ * @param bool $withPeriod Whether this event carries the period's block: only the
+ *     twilight nearest to it does, so it appears once
  */
-function build_supplemental(array $c, array $S, string $header, array $twilights, string $period): string
-{
+function build_supplemental(
+    array $c,
+    array $S,
+    string $header,
+    array $twilights,
+    string $period,
+    bool $withPeriod
+): string {
     $bands = twilight_bands();
     $info = '';
     foreach ($twilights as $key) {
@@ -1061,14 +1081,18 @@ function build_supplemental(array $c, array $S, string $header, array $twilights
         }
     }
 
-    if (!$c['enabled']['daylight'] && $c['spans'][$period] !== null) {
+    if ($withPeriod && !$c['enabled']['daylight'] && $c['spans'][$period] !== null) {
         // Not this event's own period, so its times are worth listing here
         $span = $c['spans'][$period];
         $label = $S['schedule_labels'][$period] . ': ' . format_local($span[0]) . '–' . format_local($span[1])
             . ' (' . format_duration($span[1] - $span[0]) . ')';
-        $details = $period === 'daylight' ? daylight_details($c, $S) : night_details($c, $S);
-        // Blue and golden hour belong to daylight, so they come along with its block
-        $light = $period === 'daylight' ? format_light_block($c['ev'], $S) : '';
+        // With civil twilight subscribed, its morning and evening events say how sunrise
+        // and sunset moved, and the evening one carries the evening light
+        $civil = $c['enabled']['civil'];
+        $details = $period === 'daylight' ? daylight_details($c, $S, !$civil) : night_details($c, $S);
+        $light = $period === 'daylight'
+            ? format_light_block($c['ev'], $S, $civil ? ['morning', 'midday'] : null)
+            : '';
         $info .= ($info === '' ? '' : "\n") . $label . "\n" . $details . ($light === '' ? '' : "\n" . $light . "\n");
     }
 
