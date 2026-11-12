@@ -102,7 +102,10 @@ return [
         'moon' => '%s Moon', // %s = moon phase emoji
         'today' => '☀️ Today',
         'tonight' => '🌙 Tonight',
-        'twilight' => '🌗 Twilight today',
+        // Twilights on a calendar without twilight events, on the event right before them
+        'this_evening' => '🌆 This evening',
+        'earlier_today' => '🌆 Earlier today', // the evening twilights on a Night event (no Daylight that day)
+        'tomorrow_morning' => '🌄 Tomorrow morning',
     ],
 
     // Data lines
@@ -110,6 +113,9 @@ return [
         'length' => 'Length: %s',
         'length_range' => 'Length: %s · over the year: %s', // today, range bar
         'clock' => ': sunrise %s, sunset %s', // appended to the change since yesterday
+        // On the civil twilight that ends at sunrise or starts at sunset, when there is no Daylight event
+        'sunrise_shift' => 'Sunrise at %s, %s',
+        'sunset_shift' => 'Sunset at %s, %s',
         'sun_peak' => 'Sun highest at %s, %d° above the horizon',
         'sun_peak_midnight_sun' => 'Sun highest at %s, %d° up; lowest at %s, still %d° up',
         'midnight_sun' => 'Midnight sun: the sun does not set today.',
@@ -127,6 +133,10 @@ return [
         'later' => '%s later',
         'earlier' => '%s earlier',
         'same' => 'unchanged',
+        // Standing alone, in the sunrise_shift and sunset_shift lines
+        'later_alone' => '%s later than yesterday',
+        'earlier_alone' => '%s earlier than yesterday',
+        'same_alone' => 'the same time as yesterday',
     ],
 
     // Today between the year's shortest and longest day or night (lengths, dates)
