@@ -99,20 +99,33 @@ return [
     // Section headers
     'headers' => [
         'about' => 'ℹ️ About %s',
-        'year' => '📅 Through the year',
         'moon' => '%s Moon', // %s = moon phase emoji
-        'today' => '☀️ Today',
-        'tonight' => '🌙 Tonight',
+        // Schedules (times only, in time order) carry 🕒; details sections carry their period's emoji
+        'today' => '🕒 Today', // on the morning twilight carrying the daylight
+        'tonight' => '🕒 This evening', // on the evening twilights
         // Twilights on a calendar without twilight events, on the event right before them
-        'this_evening' => '🌆 This evening',
-        'earlier_today' => '🌆 Earlier today', // the evening twilights on a Night event (no Daylight that day)
-        'tomorrow_morning' => '🌄 Tomorrow morning',
+        'this_evening' => '🕒 This evening',
+        'earlier_today' => '🕒 Earlier today', // the evening twilights on a Night event (no Daylight that day)
+        'tomorrow_morning' => '🕒 Tomorrow morning',
+        // Details of a period that isn't an event of its own, after the schedule
+        'daylight_details' => '☀️ Daylight',
+        'night_details' => '🌙 Night',
+    ],
+
+    // Schedule entries: "06:49–07:01 📷 Blue hour (12m)", then an optional indented note
+    'schedule' => [
+        'entry' => '%s %s', // time range, label
+        'length' => ' (%s)',
+        'until' => 'until %s',
+        'from' => 'from %s',
+        'all_day' => 'All day',
     ],
 
     // Data lines
     'labels' => [
         'length' => 'Length: %s',
         'length_range' => 'Length: %s · over the year: %s', // today, range bar
+        'over_year' => 'Over the year: %s', // range bar
         'clock' => ': sunrise %s, sunset %s', // appended to the change since yesterday
         // On the civil twilight that ends at sunrise or starts at sunset, when there is no Daylight event
         'sunrise_shift' => 'Sunrise at %s, %s',
@@ -165,6 +178,9 @@ return [
         'until' => 'until %s',
         'from' => 'from %s',
         'all_day' => '📷 Golden hour all day: the sun stays between 4° below and 6° above the horizon',
+        // As schedule entries, on calendars without a Daylight event
+        'blue_entry' => '📷 Blue hour',
+        'golden_entry' => '📷 Golden hour',
     ],
 
     // Length comparisons: "2m 07s shorter than yesterday"

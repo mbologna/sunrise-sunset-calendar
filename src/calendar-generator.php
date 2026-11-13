@@ -352,9 +352,8 @@ function render_calendar(array $o): string
             $offset = $band['morning'] ? $o['rise_offset'] : $o['set_offset'];
 
             // Without a Daylight event, the civil twilight that ends at sunrise or starts at
-            // sunset says how that moved, and the evening one carries the evening light
+            // sunset says how that moved (the evening light comes in its schedule)
             $clock = null;
-            $light = '';
             if (!$enabled['daylight'] && $key === 'morning_civil' && $c['daylight']['sunrise_shift'] !== null) {
                 $clock = sprintf(
                     $S['labels']['sunrise_shift'],
@@ -362,19 +361,16 @@ function render_calendar(array $o): string
                     format_clock_shift($c['daylight']['sunrise_shift'], $S, true)
                 );
             }
-            if (!$enabled['daylight'] && $key === 'evening_civil') {
-                if ($c['daylight']['sunset_shift'] !== null) {
-                    $clock = sprintf(
-                        $S['labels']['sunset_shift'],
-                        format_local($ev['sunset']),
-                        format_clock_shift($c['daylight']['sunset_shift'], $S, true)
-                    );
-                }
-                $light = format_light_block($ev, $S, ['evening']);
+            if (!$enabled['daylight'] && $key === 'evening_civil' && $c['daylight']['sunset_shift'] !== null) {
+                $clock = sprintf(
+                    $S['labels']['sunset_shift'],
+                    format_local($ev['sunset']),
+                    format_clock_shift($c['daylight']['sunset_shift'], $S, true)
+                );
             }
 
             // Data first, then the rest of today's schedule, then the explanation
-            $desc = twilight_details($key, $span, $ev, $yearInfo, $S, $clock) . ($light === '' ? '' : "\n\n" . $light);
+            $desc = twilight_details($key, $span, $ev, $yearInfo, $S, $clock);
             $desc .= $band['morning'] ? build_dawn_supplemental($c, $S, $key) : build_dusk_supplemental($c, $S, $key);
             $desc .= "\n\n" . twilight_about($key, $span, $spans, $S);
             $desc .= $offsetNote($offset, $offset);

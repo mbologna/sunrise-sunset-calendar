@@ -65,6 +65,14 @@ class CalendarFeedTest extends TestCase
         return array_values(array_filter($this->events($ics), fn($e) => str_starts_with($e['UID'], $prefix . '-')));
     }
 
+    /**
+     * An event's description as plain text, with the iCalendar escapes undone.
+     */
+    private function text(array $event): string
+    {
+        return str_replace(['\n', '\,', '\;', '\\\\'], ["\n", ',', ';', '\\'], $event['DESCRIPTION']);
+    }
+
     public function testFeedIsWellFormed(): void
     {
         $ics = $this->feed(['location' => 'Città di Roma, Lazio; Italia']);
@@ -250,50 +258,49 @@ class CalendarFeedTest extends TestCase
             'window_days' => 0,
             'enabled' => ['civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => false],
         ]);
-        [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
+        $dawn = $this->text($this->eventsOfType($ics, 'morning-civil-twilight')[0]);
 
-        $this->assertStringContainsString('⚓ Morning Nautical Twilight: ', $dawn['DESCRIPTION']);
-        $this->assertStringContainsString('🌌 Morning Astronomical Twilight: ', $dawn['DESCRIPTION']);
-        // The day's length change stays with the daylight; how sunrise moved goes on the twilight ending at it
-        $this->assertMatchesRegularExpression('/☀️ Daylight: \d\d:\d\d–\d\d:\d\d \(\d+h \d\dm\)\\\\n[^\\\\]+ than yesterday\\\\nSun highest/u', $dawn['DESCRIPTION']);
-        $this->assertStringNotContainsString('🌅 Morning Civil Twilight: ', $dawn['DESCRIPTION']);
+        // Time first, in order, the daylight as the last entry
+        $this->assertMatchesRegularExpression('/^\d\d:\d\d–\d\d:\d\d 🌌 Morning Astronomical Twilight \(\d+m\)$/mu', $dawn);
+        $this->assertMatchesRegularExpression('/^\d\d:\d\d–\d\d:\d\d ⚓ Morning Nautical Twilight \(\d+m\)$/mu', $dawn);
+        $this->assertMatchesRegularExpression('/^\d\d:\d\d–\d\d:\d\d ☀️ Daylight \(\d+h \d\dm\)\n\n☀️ Daylight\n\d+m \d\ds shorter than yesterday\nSun highest/mu', $dawn);
+        $this->assertStringNotContainsString('🌅 Morning Civil Twilight (', $dawn, 'The event itself is not in its schedule');
         $this->assertSame([], $this->eventsOfType($ics, 'daylight'));
-    }
-    public function testDaylightOnlyCalendarStillListsEveryTwilight(): void
+    }    public function testDaylightOnlyCalendarStillListsEveryTwilight(): void
     {
         $ics = $this->feed([
             'window_days' => 1,
             'enabled' => ['civil' => false, 'nautical' => false, 'astro' => false, 'daylight' => true],
         ]);
-        [$daylight] = $this->eventsOfType($ics, 'daylight');
-        [$night] = $this->eventsOfType($ics, 'night');
+        [$daylightEvent] = $this->eventsOfType($ics, 'daylight');
+        [$nightEvent] = $this->eventsOfType($ics, 'night');
+        $daylight = $this->text($daylightEvent);
+        $night = $this->text($nightEvent);
 
         // This evening's twilights follow Daylight, which ends at sunset
-        $this->assertMatchesRegularExpression('/🌆 This evening\\\\n🌇 Evening Civil Twilight: [^\\\\]+\\\\n[^\\\\]+\\\\n⚓ Evening Nautical Twilight: [^\\\\]+\\\\n[^\\\\]+\\\\n🌌 Evening Astronomical Twilight: /u', $daylight['DESCRIPTION']);
-        $this->assertStringNotContainsString('🌅 Morning Civil Twilight: ', $daylight['DESCRIPTION'], 'Morning twilights are over before Daylight starts');
+        $this->assertMatchesRegularExpression('/🕒 This evening\n\S+ 🌇 Evening Civil Twilight .+\n.+\n\S+ ⚓ Evening Nautical Twilight .+\n.+\n\S+ 🌌 Evening Astronomical Twilight /u', $daylight);
+        $this->assertStringNotContainsString('Morning Civil Twilight', $daylight, 'Morning twilights are over before Daylight starts');
 
         // Tomorrow morning's twilights follow the Night, which ends where they start
-        $this->assertSame(1, preg_match('/🌄 Tomorrow morning\\\\n🌌 Morning Astronomical Twilight: (\d\d:\d\d)/u', $night['DESCRIPTION'], $morning));
-        $ends = (new DateTimeImmutable($night['DTEND']))->setTimezone(new DateTimeZone('Europe/Rome'))->format('H:i');
+        $this->assertSame(1, preg_match('/🕒 Tomorrow morning\n(\d\d:\d\d)–\d\d:\d\d 🌌 Morning Astronomical Twilight/u', $night, $morning));
+        $ends = (new DateTimeImmutable($nightEvent['DTEND']))->setTimezone(new DateTimeZone('Europe/Rome'))->format('H:i');
         $this->assertSame($ends, $morning[1]);
-        $this->assertStringNotContainsString('🌇 Evening Civil Twilight: ', $night['DESCRIPTION']);
+        $this->assertStringNotContainsString('Evening Civil Twilight', $night);
 
         // With civil twilight subscribed, its events carry the rest instead
-        [$daylight] = $this->eventsOfType($this->feed(['window_days' => 0, 'enabled' => ['civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => true]]), 'daylight');
-        $this->assertStringNotContainsString('🌆 This evening', $daylight['DESCRIPTION']);
-    }
-    public function testPolarNightCarriesTwilightsOnTheNight(): void
+        [$daylightEvent] = $this->eventsOfType($this->feed(['window_days' => 0, 'enabled' => ['civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => true]]), 'daylight');
+        $this->assertStringNotContainsString('🕒 This evening', $this->text($daylightEvent));
+    }    public function testPolarNightCarriesTwilightsOnTheNight(): void
     {
         $ics = $this->feed([
             'lat' => 69.65, 'lon' => 18.96, 'timezone' => 'Europe/Oslo', 'today' => '2026-12-21', 'window_days' => 0,
             'enabled' => ['civil' => false, 'nautical' => false, 'astro' => false, 'daylight' => true],
         ]);
-        [$night] = $this->eventsOfType($ics, 'night');
+        $night = $this->text($this->eventsOfType($ics, 'night')[0]);
 
         // No Daylight event: the Night carries the day's evening twilights, then tomorrow morning's
-        $this->assertMatchesRegularExpression('/🌆 Earlier today\\\\n🌇 Evening Civil Twilight: .+🌄 Tomorrow morning\\\\n.+🌅 Morning Civil Twilight: /u', $night['DESCRIPTION']);
-    }
-    public function testWeekSummaryOnSundaysOnly(): void
+        $this->assertMatchesRegularExpression('/🕒 Earlier today\n\S+ 🌇 Evening Civil Twilight .+🕒 Tomorrow morning\n.+ 🌅 Morning Civil Twilight /us', $night);
+    }    public function testWeekSummaryOnSundaysOnly(): void
     {
         $summaries = $this->eventsOfType($this->feed(['window_days' => 13]), 'week');
 
@@ -320,17 +327,13 @@ class CalendarFeedTest extends TestCase
 
     public function testDaylightShowsChangeAndPlaceInTheYear(): void
     {
-        [$daylight] = $this->eventsOfType($this->feed(['today' => '2026-11-15', 'window_days' => 0]), 'daylight');
-        $text = $daylight['DESCRIPTION'];
+        $text = $this->text($this->eventsOfType($this->feed(['today' => '2026-11-15', 'window_days' => 0]), 'daylight')[0]);
 
-        // What changed since yesterday, including on the clock, and where the sun peaks
-        $this->assertMatchesRegularExpression('/^2m 0\ds shorter than yesterday: sunrise 1m \d\ds later\\\\, sunset \d+s earlier\\\\nSun highest at 11:54\\\\, 30° above the horizon/u', $text);
-        // Where today sits between the year's shortest and longest day, as a bar and in words
-        $this->assertStringContainsString('📅 Through the year\n9h 08m ▕█░░░░░░░░░▏ 15h 14m', $text);
-        $this->assertStringContainsString('42m more than the shortest day (Dec 21)\, 5h 24m less than the longest (Jun 21)', $text);
+        // What changed since yesterday, including on the clock, where the sun peaks, and the year
+        $this->assertMatchesRegularExpression('/^2m 0\ds shorter than yesterday: sunrise 1m \d\ds later, sunset \d+s earlier\nSun highest at 11:54, 30° above the horizon\nOver the year: 9h 08m ▕█░░░░░░░░░▏ 15h 14m\n42m more than the shortest day \(Dec 21\), 5h 24m less than the longest \(Jun 21\)\n/u', $text);
+        $this->assertStringNotContainsString('📅', $text);
         $this->assertStringNotContainsString('%', $text);
     }
-
     public function testTwilightLengthSitsInTheYearsRange(): void
     {
         [$dawn] = $this->eventsOfType($this->feed(['today' => '2026-11-15', 'window_days' => 0]), 'morning-civil-twilight');
@@ -505,44 +508,52 @@ class CalendarFeedTest extends TestCase
 
     public function testBlueAndGoldenHourComeWithTheDaylightBlockWithoutADaylightEvent(): void
     {
-        $ics = $this->feed([
-            'today' => '2026-11-15',
-            'window_days' => 0,
-            'enabled' => ['civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => false],
-        ]);
-        [$dawn] = $this->eventsOfType($ics, 'morning-civil-twilight');
-        [$dusk] = $this->eventsOfType($ics, 'evening-civil-twilight');
+        $civilOnly = ['civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => false];
+        $ics = $this->feed(['today' => '2026-11-15', 'window_days' => 0, 'enabled' => $civilOnly]);
+        $dawn = $this->text($this->eventsOfType($ics, 'morning-civil-twilight')[0]);
+        $dusk = $this->text($this->eventsOfType($ics, 'evening-civil-twilight')[0]);
 
-        // Morning light with the daylight block in the morning, evening light on the evening twilight
-        $this->assertMatchesRegularExpression('/☀️ Daylight: .+📷 Morning: blue hour /u', $dawn['DESCRIPTION']);
-        $this->assertStringNotContainsString('📷 Evening', $dawn['DESCRIPTION']);
-        $this->assertMatchesRegularExpression('/^Length: [^\\\\]+\\\\nSunset at \d\d:\d\d\\\\, [^\\\\]+ than yesterday\\\\n\\\\n📷 Evening: golden hour .+🌙 Tonight/u', $dusk['DESCRIPTION']);
-        $this->assertMatchesRegularExpression('/^Length: [^\\\\]+\\\\nSunrise at \d\d:\d\d\\\\, [^\\\\]+ than yesterday/u', $dawn['DESCRIPTION']);
+        // Morning light in the morning schedule, between the twilights and the daylight
+        $this->assertMatchesRegularExpression('/⚓ Morning Nautical Twilight .+\n.+\n\d\d:\d\d–(\d\d:\d\d) 📷 Blue hour \(\d+m\)\n\1–\d\d:\d\d 📷 Golden hour \(.+\)\n\d\d:\d\d–\d\d:\d\d ☀️ Daylight /u', $dawn);
+        $this->assertStringNotContainsString('📷 Golden hour', substr($dawn, (int) strpos($dawn, '☀️ Daylight (')), 'Only the morning');
+        $this->assertMatchesRegularExpression('/^Length: .+\nSunrise at \d\d:\d\d, .+ than yesterday\n/u', $dawn);
 
-        // Without evening civil twilight, the evening light stays with the daylight block: nautical starts after it
-        [$nauticalDawn] = $this->eventsOfType($this->feed([
-            'today' => '2026-11-15',
-            'window_days' => 0,
-            'enabled' => ['civil' => false, 'nautical' => true, 'astro' => false, 'daylight' => false],
-        ]), 'morning-nautical-twilight');
-        $this->assertMatchesRegularExpression('/📷 Morning: .+\\\\n📷 Evening: /u', $nauticalDawn['DESCRIPTION']);
-        $this->assertStringContainsString(': sunrise ', $nauticalDawn['DESCRIPTION'], 'Clock changes stay in the daylight line without civil events');
+        // Evening light opens the evening schedule, before nautical twilight
+        $this->assertMatchesRegularExpression('/^Length: .+\nSunset at \d\d:\d\d, .+ than yesterday\n\n🕒 This evening\n\d\d:\d\d–(\d\d:\d\d) 📷 Golden hour \(.+\)\n\1–(\d\d:\d\d) 📷 Blue hour \(\d+m\)\n\2–\d\d:\d\d ⚓ Evening Nautical Twilight/u', $dusk);
+
+        // Without evening civil twilight, the evening light stays in the morning schedule: nautical starts after it
+        $nautical = ['civil' => false, 'nautical' => true, 'astro' => false, 'daylight' => false];
+        $nauticalDawn = $this->text($this->eventsOfType($this->feed(['today' => '2026-11-15', 'window_days' => 0, 'enabled' => $nautical]), 'morning-nautical-twilight')[0]);
+        $this->assertMatchesRegularExpression('/📷 Golden hour .+\n.+ ☀️ Daylight .+\n.+📷 Golden hour .+\n.+📷 Blue hour /us', $nauticalDawn);
+        $this->assertStringContainsString(': sunrise ', $nauticalDawn, 'Clock changes stay in the daylight line without civil events');
     }
 
+    public function testSchedulesAreInTimeOrderWithoutNestedSections(): void
+    {
+        $ics = $this->feed(['window_days' => 0, 'enabled' => ['civil' => true, 'nautical' => false, 'astro' => false, 'daylight' => false]]);
+        foreach (['morning-civil-twilight', 'evening-civil-twilight'] as $type) {
+            $text = $this->text($this->eventsOfType($ics, $type)[0]);
+            preg_match_all('/^(\d\d:\d\d)–\d\d:\d\d /m', $text, $starts);
+            $sorted = $starts[1];
+            sort($sorted);
+            $this->assertSame($sorted, $starts[1], "{$type}: schedule in time order");
+            // Each section starts after a blank line: a heading never follows a schedule line directly
+            $this->assertDoesNotMatchRegularExpression('/^\d\d:\d\d–.+\n(☀️|🌙|🌒|🕒) /mu', $text, "{$type}: no nested sections");
+        }
+    }
     public function testDaylightAndNightBlocksAppearOnceOnTheNearestTwilight(): void
     {
         $ics = $this->feed(['window_days' => 0, 'enabled' => ['civil' => true, 'nautical' => true, 'astro' => true, 'daylight' => false]]);
-        $count = fn(string $type, string $needle) => substr_count($this->eventsOfType($ics, $type)[0]['DESCRIPTION'], $needle);
+        $count = fn(string $type, string $needle) => substr_count($this->text($this->eventsOfType($ics, $type)[0]), $needle);
 
         // Daylight on the last twilight before sunrise, Night on the last one before night
-        $this->assertSame(1, $count('morning-civil-twilight', '☀️ Daylight: '));
-        $this->assertSame(0, $count('morning-nautical-twilight', '☀️ Daylight: '));
-        $this->assertSame(0, $count('morning-astronomical-twilight', '☀️ Daylight: '));
-        $this->assertSame(1, $count('evening-astronomical-twilight', '🌙 Night: '));
-        $this->assertSame(0, $count('evening-nautical-twilight', '🌙 Night: '));
-        $this->assertSame(0, $count('evening-civil-twilight', '🌙 Night: '));
-    }
-    public function testOffsetsAreExplained(): void
+        $this->assertSame(1, $count('morning-civil-twilight', "\n☀️ Daylight\n"));
+        $this->assertSame(0, $count('morning-nautical-twilight', '☀️ Daylight'));
+        $this->assertSame(0, $count('morning-astronomical-twilight', '☀️ Daylight'));
+        $this->assertSame(1, $count('evening-astronomical-twilight', "\n🌙 Night\n"));
+        $this->assertSame(0, $count('evening-nautical-twilight', '🌙 Night'));
+        $this->assertSame(0, $count('evening-civil-twilight', '🌙 Night'));
+    }    public function testOffsetsAreExplained(): void
     {
         [$daylight] = $this->eventsOfType($this->feed(['window_days' => 0, 'rise_offset' => -600, 'set_offset' => 900]), 'daylight');
 
