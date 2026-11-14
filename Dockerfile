@@ -13,6 +13,7 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_PYTHON=/usr/local/bin/python3 UV_PYTHON_
     UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_NO_CACHE=1
 WORKDIR /tmp/build
 COPY pyproject.toml uv.lock README.md LICENSE ./
+COPY LICENSES/ ./LICENSES/
 RUN uv sync --locked --no-dev --no-editable --no-install-project
 COPY src/ ./src/
 RUN uv sync --locked --no-dev --no-editable

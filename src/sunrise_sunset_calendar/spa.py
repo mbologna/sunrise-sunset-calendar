@@ -1,6 +1,6 @@
 """Solar position and sunrise, transit and sunset: the NREL Solar Position Algorithm.
 
-A faithful port of abbadon1334/sun-position-spa-php 2.0.0 (MIT, Francesco
+A faithful port of abbadon1334/sun-position-spa-php 2.0.0 (Francesco
 Danti), the implementation the PHP calendar used, of Reda & Andreas, "Solar
 Position Algorithm for Solar Radiation Applications", NREL/TP-560-34302
 (2008). It is ported operation by operation rather than replaced by another
@@ -10,8 +10,18 @@ times to the second. Only the quantities the calendar reads are computed:
 the geocentric right ascension, declination and sidereal time, and the
 rise/transit/set day fractions built from them.
 
-Copyright (c) 2017 Francesco Danti, MIT licence (the formulas and tables).
+Copyright (c) 2017 Francesco Danti (the original PHP implementation).
+
+Licence: the upstream project declares MIT in its source headers and
+composer.json, but the LICENSE file it ships is the GNU GPL version 3. To
+satisfy either reading, this file, as a derivative of that code, is
+distributed under the GNU General Public License version 3
+(LICENSES/GPL-3.0-only.txt), keeping the upstream MIT notice above. The rest of
+this repository stays under the MIT licence (LICENSE); the application and its
+image, which include this file, are therefore distributed under the GPL's terms.
 """
+
+# SPDX-License-Identifier: GPL-3.0-only
 
 from __future__ import annotations
 
