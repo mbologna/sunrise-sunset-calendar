@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/mbologna/sunrise-sunset-calendar/actions/workflows/ci.yml/badge.svg)](https://github.com/mbologna/sunrise-sunset-calendar/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.15-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT%20%2B%20GPL--3.0-green.svg)](#license)
 
 An iCalendar feed of daily sunrise, sunset and twilight events for any location, computed with the NREL Solar Position Algorithm. Subscribe to it from Google Calendar, Apple Calendar or Outlook.
 
@@ -141,4 +141,6 @@ Solar positions come from the NREL SPA (Reda & Andreas, 2008), specified to ±0.
 
 ## License
 
-MIT. See [LICENSE](LICENSE). `spa.py` is a port of sun-position-spa-php by Francesco Danti, which its package metadata and source headers license under MIT.
+The code is MIT ([LICENSE](LICENSE)), except `src/sunrise_sunset_calendar/spa.py`, which is GPL-3.0 ([LICENSES/GPL-3.0-only.txt](LICENSES/GPL-3.0-only.txt)).
+
+`spa.py` is a port of [sun-position-spa-php](https://github.com/abbadon1334/sun-position-spa-php) by Francesco Danti. That project declares MIT in its source headers and package metadata, but the LICENSE file it ships is the GNU GPL version 3. To satisfy either reading, `spa.py` is distributed under the GPL version 3 with the upstream MIT notice kept. Because the application and its container image include `spa.py`, they are distributed under the GPL's terms as a whole; the MIT-licensed files can still be reused on their own under MIT.

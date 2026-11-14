@@ -3,8 +3,8 @@ name = "sunrise-sunset-calendar"
 version = "0.0.0"
 description = "iCalendar feed of sunrise, sunset, twilight and the moon for any location, computed with the NREL Solar Position Algorithm"
 readme = "README.md"
-license = "MIT"
-license-files = ["LICENSE"]
+license = "MIT AND GPL-3.0-only"
+license-files = ["LICENSE", "LICENSES/GPL-3.0-only.txt"]
 requires-python = ">=3.15"
 dependencies = [
     # Pinned to the tz database release the PHP version shipped (2026e), so
