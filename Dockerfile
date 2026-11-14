@@ -1,84 +1,37 @@
-FROM php:8.5-apache@sha256:08af36df144462d84c7f16190557eec06cb9f656882685610b712a15eec54d46 AS base
+FROM python:3.15.2-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS build
 
-# ---------------------------------------------------------------------------
-# Build stage: install production dependencies; Composer stays out of the final image
-# ---------------------------------------------------------------------------
-FROM base AS vendor
-
-# unzip is required by Composer to extract package archives
-RUN apt-get update && apt-get install -y --no-install-recommends unzip \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=composer:2@sha256:ca11f643d7791ebdd90a34fc20caf11380d434007ae539a9ea75cd9212e13dca /usr/bin/composer /usr/bin/composer
-
-WORKDIR /app
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-autoloader --no-interaction
+# uv from PyPI, hash-checked (requirements-uv.txt says why). Used in this
+# stage only: the runtime stage gets the finished virtualenv.
+COPY requirements-uv.txt /tmp/
+RUN pip install --no-cache-dir --root-user-action=ignore --require-hashes -r /tmp/requirements-uv.txt
+# Install exactly what uv.lock pins, checking its hashes; --locked fails the
+# build if uv.lock no longer matches pyproject.toml. Dependencies first, so
+# their layer survives a code change; then the app itself, as a regular
+# (non-editable) package. Bytecode is compiled here because the runtime image
+# sets PYTHONDONTWRITEBYTECODE.
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_PYTHON=/usr/local/bin/python3 UV_PYTHON_DOWNLOADS=never \
+    UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_NO_CACHE=1
+WORKDIR /tmp/build
+COPY pyproject.toml uv.lock README.md LICENSE ./
+RUN uv sync --locked --no-dev --no-editable --no-install-project
 COPY src/ ./src/
-RUN composer dump-autoload --no-dev --classmap-authoritative
+RUN uv sync --locked --no-dev --no-editable
 
-# ---------------------------------------------------------------------------
-# Runtime image
-# ---------------------------------------------------------------------------
-FROM base
-
-# Production php.ini (no display_errors), no version banners, and only the entry
-# point and static assets reachable over HTTP.
-#
-# Apache listens on ${PORT}, which it reads from the environment when it parses
-# its configuration: the port Cloud Run (or any container runtime) injects,
-# 8080 by default. Written here rather than by the entrypoint, so the
-# configuration stays read-only and Apache runs as www-data, not root.
-# ${PORT} is for Apache, not the shell.
-# hadolint ignore=SC2016
-RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
-    && printf 'expose_php = Off\n' > "$PHP_INI_DIR/conf.d/app.ini" \
-    && printf '%s\n' \
-        '<Directory /var/www/html>' \
-        '    DirectoryIndex sunrise-sunset-calendar.php' \
-        '    Options -Indexes' \
-        '</Directory>' \
-        '<DirectoryMatch "^/var/www/html/(src|vendor|config)">' \
-        '    Require all denied' \
-        '</DirectoryMatch>' \
-        > /etc/apache2/conf-available/app.conf \
-    && a2enconf app \
-    && sed -i -e "s/^ServerTokens .*/ServerTokens Prod/" -e "s/^ServerSignature .*/ServerSignature Off/" /etc/apache2/conf-available/security.conf \
-    && grep -q "^ServerTokens Prod$" /etc/apache2/conf-available/security.conf \
-    && grep -q "^ServerSignature Off$" /etc/apache2/conf-available/security.conf \
-    && sed -i 's/^Listen 80$/Listen ${PORT}/' /etc/apache2/ports.conf \
-    && sed -i 's/^<VirtualHost \*:80>$/<VirtualHost *:${PORT}>/' /etc/apache2/sites-available/000-default.conf \
-    && grep -q '^Listen ${PORT}$' /etc/apache2/ports.conf \
-    && grep -q '^<VirtualHost \*:${PORT}>$' /etc/apache2/sites-available/000-default.conf \
-    && chown root:root /var/www/html \
-    && chmod 0755 /var/www/html
-
-# The base image keeps the compilers and tools that docker-php-ext-install
-# needs (gcc, g++, make, autoconf, re2c, dpkg-dev, pkg-config) plus curl, file
-# and xz-utils. None of them runs here: PHP and its extensions are already
-# built, and their libraries stay installed. Purged as the official image
-# purges its own build dependencies, so a compiler is not part of what an
-# attacker finds, and their CVEs leave the scan.
-RUN apt-get purge -y --auto-remove \
-      autoconf dpkg-dev file g++ gcc libc6-dev make pkg-config re2c curl xz-utils \
-    && php -m > /dev/null
-
-WORKDIR /var/www/html
-
-# Application and dependencies, owned by root: the app only reads them
-COPY --from=vendor /app/vendor/ ./vendor/
-COPY sunrise-sunset-calendar.php ./
-COPY src/ ./src/
-COPY assets/ ./assets/
-
-COPY --chmod=0755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-
-# AUTH_TOKEN and other settings can be injected as environment variables
-# (Cloud Run env vars or Secret Manager). config/config.php still works via volume mount.
-ENV PORT=8080
+FROM python:3.15.2-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
+COPY --from=build /opt/venv /opt/venv
+# PORT is where the server listens: Cloud Run (or any container runtime)
+# injects it; 8080 otherwise. AUTH_TOKEN and the other settings come from the
+# environment too (README, "Configuration").
+ENV PATH=/opt/venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PORT=8080
+# The base image's pip (with the packages it vendors) and ensurepip's
+# bundled pip wheel are never used at run time; removing them keeps their
+# CVEs out of the image.
+RUN /usr/local/bin/python3 -m pip uninstall -y --root-user-action=ignore pip \
+    && rm -rf /usr/local/lib/python3*/ensurepip
+# A fixed UID and GID (useradd -r alone picks a system GID), so runtimes see
+# the same numbers on every build. Everything the app runs is root-owned and
+# read-only for it; it writes nothing.
+RUN groupadd -g 1000 appuser && useradd -r -u 1000 -g 1000 -d /nonexistent -s /usr/sbin/nologin appuser
+USER 1000:1000
 EXPOSE 8080
-
-# www-data (uid 33 in the Debian-based php image): the base image already
-# makes Apache's run, lock and log directories writable for it.
-USER 33:33
-
-CMD ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["sunrise-sunset-calendar"]

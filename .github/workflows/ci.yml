@@ -19,29 +19,16 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@09bc881c557dd70bead1932e686f5dff713d4be4 # main
+  python:
+    uses: mbologna/.github/.github/workflows/python-ci.yml@09bc881c557dd70bead1932e686f5dff713d4be4 # main
     with:
-      php_version: "8.5"
-      php_extensions: "mbstring, json"
-      enable_test: true
-      enable_composer_cache: true
-      test_command: vendor/bin/phpunit --testdox && composer analyse && composer lint
-
-  lint:
-    uses: mbologna/.github/.github/workflows/php-ci.yml@09bc881c557dd70bead1932e686f5dff713d4be4 # main
-    with:
-      php_version: "8.5"
-      enable_test: false
-      enable_lint: true
-      lint_tools: ""
-      lint_command: >-
-        find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l > /dev/null &&
-        ! grep -rEn '\b(eval|exec|system|shell_exec|passthru)\(' --include='*.php' --exclude-dir=vendor . &&
-        ! grep -rn '\$_REQUEST' --include='*.php' --exclude-dir=vendor .
+      python_version: "3.15"
+      enable_codecov: false
+      # The gate itself is fail_under in pyproject.toml ([tool.coverage.report])
+    secrets: inherit
 
   docker:
-    needs: [test, lint]
+    needs: python
     # contents: the release tag and its Release; actions: dispatch the tag
     # build (a tag pushed with GITHUB_TOKEN triggers no run); the rest:
     # push, sign and scan the image, and deploy it.
@@ -64,4 +51,13 @@ jobs:
       # Points the Cloud Run service at the image of each push or manual run
       # on main that builds one; a docs- or CI-only push deploys nothing.
       deploy_type: service
+      # Proves the image serves: starts the server, waits for it, then wants
+      # the health check and a one-week feed back (on loopback: the smoke test
+      # runs without network).
+      smoke_cmd: >-
+        AUTH_TOKEN=smoke CALENDAR_WINDOW_DAYS=7 sunrise-sunset-calendar &
+        get() { python -c "import sys, urllib.request; sys.stdout.write(urllib.request.urlopen(sys.argv[1]).read().decode())" "http://127.0.0.1:8080/$1"; };
+        for i in $(seq 60); do get '?health' >/dev/null 2>&1 && break; sleep 0.5; done;
+        get '?health' | grep -q '"status":"ok"' &&
+        get '?feed=1&token=smoke&daynight=1' | grep -q 'END:VCALENDAR'
     secrets: inherit

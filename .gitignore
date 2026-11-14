@@ -1,59 +1,23 @@
-# Configuration
-config/config.php
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
 
-# IDE and Editor
+# IDE and editor
 .vscode/
 .idea/
-*.sublime-*
 *.swp
-*.swo
 *~
 
-# OS Files
+# OS files
 .DS_Store
 Thumbs.db
-desktop.ini
-
-# Logs
-*.log
-error_log
-access_log
-
-# Temporary files
-*.tmp
-*.temp
-*.cache
-
-# Composer
-/vendor/
-
-# PHPUnit
-.phpunit.result.cache
-/coverage/
-
-# Node (if used for frontend tooling)
-node_modules/
-package-lock.json
-yarn.lock
-
-# Build artifacts
-/build/
-/dist/
-
-# Backup files
-*.bak
-*.backup
-*~
-
-# Personal notes
-TODO.txt
-NOTES.txt
-
-# PHPUnit cache
-.phpunit.cache/
-
-# PHP CS Fixer cache
-.php-cs-fixer.cache
 
 # Claude Code settings
 .claude/
