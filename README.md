@@ -1,7 +1,7 @@
 # Sun & Twilight Calendar Generator
 
 [![CI](https://github.com/mbologna/sunrise-sunset-calendar/actions/workflows/ci.yml/badge.svg)](https://github.com/mbologna/sunrise-sunset-calendar/actions/workflows/ci.yml)
-[![PHP Version](https://img.shields.io/badge/PHP-8.5%2B-blue.svg)](https://www.php.net/)
+[![Python](https://img.shields.io/badge/Python-3.15-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 An iCalendar feed of daily sunrise, sunset and twilight events for any location, computed with the NREL Solar Position Algorithm. Subscribe to it from Google Calendar, Apple Calendar or Outlook.
@@ -25,13 +25,11 @@ An iCalendar feed of daily sunrise, sunset and twilight events for any location,
 ```bash
 git clone https://github.com/mbologna/sunrise-sunset-calendar.git
 cd sunrise-sunset-calendar
-composer install
-cp config/config.example.php config/config.php
-# Set AUTH_TOKEN in config/config.php, e.g. to the output of: openssl rand -hex 32
-php -S localhost:8000
+uv sync
+AUTH_TOKEN="$(openssl rand -hex 32)" PORT=8000 uv run sunrise-sunset-calendar
 ```
 
-Open `http://localhost:8000/sunrise-sunset-calendar.php`, enter the token as the password and generate a subscription URL.
+Open `http://localhost:8000/`, enter the token as the password and generate a subscription URL. The server is [waitress](https://docs.pylonsproject.org/projects/waitress/): one process, no C extensions, which fits a 128 MiB Cloud Run instance.
 
 ### Docker
 
@@ -40,18 +38,22 @@ docker build -t sunrise-sunset-calendar .
 docker run -p 8080:8080 -e AUTH_TOKEN="$(openssl rand -hex 32)" sunrise-sunset-calendar
 ```
 
-The container listens on `$PORT` (default 8080), so it runs unchanged on Cloud Run. Only the entry point and `assets/` are reachable over HTTP.
+The image runs as an unprivileged user, has no pip, and listens on `$PORT` (default 8080), so it runs unchanged on Cloud Run. It serves the page at `/` and `/sunrise-sunset-calendar.php`, the feed at either with `?feed=1`, and the page's CSS and JavaScript under `/assets/`; every other path is a 404.
 
 ## Configuration
 
-Set these as environment variables or as constants in `config/config.php`. Environment variables take precedence.
+All settings are environment variables.
 
 | Setting | Default | Meaning |
 |---------|---------|---------|
-| `AUTH_TOKEN` | none (required) | Secret embedded in feed URLs and used as the web form password |
+| `AUTH_TOKEN` | none (required) | Secret embedded in feed URLs and used as the web form password. Without it every request gets a 500. |
 | `CALENDAR_WINDOW_DAYS` | `400` | Days of future events in the feed |
 | `CALENDAR_PAST_DAYS` | `30` | Days of past events in the feed |
 | `UPDATE_INTERVAL` | `86400` | Refresh interval suggested to calendar apps, in seconds |
+| `PORT` | `8080` | Port the server listens on |
+| `THREADS` | `2` | Requests served at once; each full feed takes about 15 MB while it is built |
+
+The health check, `/?health`, returns `{"status":"ok","python":"<version>","timestamp":<unix time>}`.
 
 ## Feed URL parameters
 
@@ -94,40 +96,49 @@ When the sun never crosses a boundary, an event runs to or from solar noon or so
 ## Development
 
 ```bash
-composer test       # PHPUnit
-composer analyse    # PHPStan (level 6)
-composer lint       # PHP_CodeSniffer (PSR-12)
-composer lint:fix   # fix what phpcbf can
-composer check:all  # all three; CI runs the same checks
+uv sync                     # Python 3.15 and the dev tools
+uv run pytest               # all tests, with the coverage gate (80%)
+uv run ruff check .
+uv run ruff format .
 ```
+
+CI runs the same checks through `mbologna/.github`'s `python-ci`, then builds the image, smoke-tests it (it must answer the health check and serve a feed), and on `main` deploys it to Cloud Run.
+
+### Parity with the PHP version
+
+Up to v2 the calendar was written in PHP. The Python version produces the same feeds byte for byte; only `DTSTAMP`, the moment a feed is generated, differs. That is what makes it a drop-in replacement: the same URLs, parameters and token keep working, and existing subscriptions see no change.
+
+- `tests/golden/` holds a corpus of 1004 responses recorded from the last PHP release: 46 locations (polar day and night, both hemispheres, the equator, the date line, DST rules of every kind, including changes at midnight), the full default window, three more dates (DST changes, New Year, a leap day), the days DST changes skip or repeat midnight, every combination of event types, offsets, notes, malformed input, environment settings, the web page and its form. `test_golden.py` replays every request against the Python app and compares the bytes. `make_corpus.py` records the corpus again from the PHP image (needs Docker), and `http_parity.py` compares status codes and headers of the two images over real HTTP.
+- `tests/php_reference/` records what PHP returns for the primitives the output depends on (rounding, float formatting, input filters, `strip_tags()`, `mb_substr()`, query parsing, wall-clock time zone arithmetic around DST changes), and `test_php.py` checks the Python equivalents in `php.py` against it.
+
+The sunrise and sunset times come from a line-by-line port of the [sun-position-spa-php](https://github.com/abbadon1334/sun-position-spa-php) library the PHP version used: its interpolation of rise and set times differs slightly from other SPA implementations, and the feeds must keep their times to the second. Time zones come from the pinned `tzdata` package, never the host.
 
 ## Project structure
 
 ```
-├── sunrise-sunset-calendar.php   # HTTP entry point: config, routing, headers
-├── src/
-│   ├── astronomy.php             # SPA wrapper, sun_events(), equinoxes, moon phases
-│   ├── calendar-generator.php    # generate_calendar(): builds the VCALENDAR
-│   ├── helpers.php               # iCalendar escaping/folding, descriptions, statistics
-│   ├── functions.php             # input sanitisation, token check, defaults
-│   ├── Cache.php                 # per-request memoisation
-│   ├── strings.php               # all user-facing text
-│   └── index.html.php            # web form template
-├── assets/                       # web form CSS and JavaScript (address search calls Nominatim)
-├── config/config.example.php
-└── tests/                        # Unit, Integration, Reference and Accuracy suites
+├── src/sunrise_sunset_calendar/
+│   ├── app.py          # WSGI entry point: configuration, routing, headers, input sanitisation; main() serves it
+│   ├── feed.py         # generate_calendar(): builds the VCALENDAR
+│   ├── helpers.py      # iCalendar escaping and folding, descriptions, year statistics
+│   ├── astronomy.py    # sun_events(), twilight, equinoxes and solstices, moon phases, moonrise and moonset
+│   ├── spa.py          # NREL Solar Position Algorithm: solar position, sunrise, transit and sunset
+│   ├── php.py          # the PHP behaviours the output depends on, reproduced exactly
+│   ├── web.py          # the web form page
+│   ├── strings.py      # all user-facing text
+│   ├── timezones.py    # accepted time zones (the tz database's zone.tab, plus UTC)
+│   ├── cache.py        # per-request memoisation
+│   └── assets/         # web form CSS and JavaScript (address search calls Nominatim from the browser)
+└── tests/              # unit, integration, reference and accuracy suites, the golden corpus and PHP references
 ```
-
-All of `src/` except the template and strings loads through Composer's autoloader.
 
 ## Accuracy
 
 Solar positions come from the NREL SPA (Reda & Andreas, 2008), specified to ±0.0003°. The test suite checks:
 
-- sunrise against PHP's `date_sun_info()` every day for a year in Rome, New York and Sydney, within 2 minutes;
+- sunrise against PHP's `date_sun_info()` algorithm every day for a year in Rome, New York and Sydney, within 2 minutes;
 - twilight times for Mapello, Italy, against published reference times, within 1–2 minutes;
 - equinoxes, solstices and moon phases (Meeus, *Astronomical Algorithms*) against published dates, moon illumination at each phase within 1%, and moonrise and moonset against the US Naval Observatory within 3 minutes.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). `spa.py` is a port of sun-position-spa-php by Francesco Danti, which its package metadata and source headers license under MIT.

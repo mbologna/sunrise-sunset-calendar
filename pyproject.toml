@@ -1,0 +1,66 @@
+[project]
+name = "sunrise-sunset-calendar"
+version = "0.0.0"
+description = "iCalendar feed of sunrise, sunset, twilight and the moon for any location, computed with the NREL Solar Position Algorithm"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.15"
+dependencies = [
+    # Pinned to the tz database release the PHP version shipped (2026e), so
+    # the golden feeds match; Renovate moves it on.
+    "tzdata==2026.5",
+    "waitress>=3.0.2",
+]
+
+[project.scripts]
+sunrise-sunset-calendar = "sunrise_sunset_calendar.app:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.7,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv]
+required-version = ">=0.12.12"
+# Resolve only releases at least 7 days old (supply-chain cooldown). For an
+# urgent fix, temporarily add exclude-newer-package = { <name> = false } and
+# run `uv lock --upgrade-package <name>`.
+exclude-newer = "7 days"
+
+[tool.ruff]
+line-length = 120
+target-version = "py315"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "C4", "SIM", "RUF"]
+ignore = [
+    # The strings are prose: typographic quotes, dashes and the multiplication sign are intended
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S310", "S603", "S607"]
+# Literal ports of PHP's C state machines: their branch structure is kept as is
+"src/sunrise_sunset_calendar/php.py" = ["SIM102"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.coverage.run]
+source = ["sunrise_sunset_calendar"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true
