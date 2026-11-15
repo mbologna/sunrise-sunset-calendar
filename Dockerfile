@@ -33,6 +33,13 @@ RUN /usr/local/bin/python3 -m pip uninstall -y --root-user-action=ignore pip \
 # the same numbers on every build. Everything the app runs is root-owned and
 # read-only for it; it writes nothing.
 RUN groupadd -g 1000 appuser && useradd -r -u 1000 -g 1000 -d /nonexistent -s /usr/sbin/nologin appuser
+# The distribution's security fixes published since the base image was
+# built: Docker's official images are rebuilt only every week or few.
+# auto-release's fresh rebuild counts the base image's findings because of
+# this line, so a fix ships within a week without a base image update.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
 USER 1000:1000
 EXPOSE 8080
 CMD ["sunrise-sunset-calendar"]
