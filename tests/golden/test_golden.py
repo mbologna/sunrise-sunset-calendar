@@ -31,6 +31,23 @@ def bodies(group: str) -> dict[str, bytes]:
         return {m.name: tar.extractfile(m).read() for m in tar.getmembers()}
 
 
+@cache
+def overrides() -> dict[str, bytes]:
+    """Cases whose real clock rules changed in a tz release after the PHP recording.
+
+    The corpus was recorded with tzdata 2026e (the PHP image's). A later tz
+    release that changes a zone's rules changes that zone's correct output: the
+    old bytes would then test for the wrong times. Such cases are re-recorded
+    from this app, once the changed lines are checked against the release's
+    NEWS entry, into corpus/tz-overrides.tar.xz (record_overrides.py).
+    """
+    path = CORPUS / "tz-overrides.tar.xz"
+    if not path.exists():
+        return {}
+    with tarfile.open(path, "r:xz") as tar:
+        return {m.name: tar.extractfile(m).read() for m in tar.getmembers()}
+
+
 def request(case: Case) -> tuple[int, list[tuple[str, str]], bytes]:
     env = {"AUTH_TOKEN": TOKEN, **case.env}
     now = timegm(datetime.fromisoformat(case.now).timetuple())
@@ -58,7 +75,7 @@ def test_matches_php(case: Case) -> None:
     # The corpus was recorded with PHP's CLI, which keeps no status or headers:
     # test_app.py covers those, against what the PHP entry point sets
     _, _, body = request(case)
-    php_body = bodies(case.group)[case.id]
+    php_body = overrides().get(case.id) or bodies(case.group)[case.id]
 
     if case.id.startswith("http-health"):
         ours_json, php_json = json.loads(body), json.loads(php_body)
