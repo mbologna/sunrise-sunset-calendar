@@ -20,7 +20,7 @@ permissions:
 
 jobs:
   python:
-    uses: mbologna/.github/.github/workflows/python-ci.yml@09bc881c557dd70bead1932e686f5dff713d4be4 # main
+    uses: mbologna/.github/.github/workflows/python-ci.yml@423fe81596d69d9cd74191195ee6d3af7f9bf360 # main
     with:
       python_version: "3.15"
       enable_codecov: false
@@ -39,7 +39,7 @@ jobs:
       attestations: write
       security-events: write
       actions: write
-    uses: mbologna/.github/.github/workflows/docker-ci.yml@09bc881c557dd70bead1932e686f5dff713d4be4 # main
+    uses: mbologna/.github/.github/workflows/docker-ci.yml@423fe81596d69d9cd74191195ee6d3af7f9bf360 # main
     with:
       image_name: sunrise-sunset-calendar
       # push: the Cloud Run deploy runs the sha-* image of each
