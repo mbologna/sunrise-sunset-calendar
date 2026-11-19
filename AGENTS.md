@@ -11,18 +11,16 @@ iCalendar feed of sunrise, sunset, twilight and moon phases for any location, co
   from the PHP release and compares the bytes (README, "Development").
 - `Dockerfile`: two stages, `uv sync --locked` into `/opt/venv`
   (dependencies first, then the app), then a runtime without pip.
-- CI builds the image, pushes it to ghcr.io and Docker Hub on every main
-  build, and deploys it to Cloud Run.
+- CI builds the image, pushes it to ghcr.io on every main build, and
+  deploys it to Cloud Run.
 
 ## Conventions
 
-- Conventional Commits, header at most 72 characters. The commit subjects
-  that reach main are the release notes: `feat`/`fix`/`perf` release, `refactor`,
-  `test`, `docs`, `ci`, `chore` don't (a dependency update to runtime files
-  ships in the weekly maintenance release). CI lints every commit with
-  [commitlint-config-mbologna](https://github.com/mbologna/commitlint-config)
+- Conventional Commits, header at most 72 characters. CI lints every commit
+  with [commitlint-config-mbologna](https://github.com/mbologna/commitlint-config)
   and rejects `fixup!` commits; pull requests merge with a merge commit.
-- Releases are tags; `pyproject.toml`'s version stays `0.0.0`.
+- No releases or version tags: every push to main that changes the image
+  deploys it as `sha-<commit>`. `pyproject.toml`'s version stays `0.0.0`.
 - Coverage may not drop below `fail_under` in `pyproject.toml`; raise it
   when tests are added.
 - Dependencies: `uv add <pkg>`; uv.lock is committed and the image installs
