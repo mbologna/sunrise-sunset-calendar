@@ -5,9 +5,9 @@ name: CI
     branches: [main]
     tags: ["v*.*.*"]
   pull_request:
-  workflow_dispatch:
   schedule:
     - cron: "0 6 * * 1"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -19,12 +19,13 @@ permissions:
   contents: read
 
 jobs:
+  # ruff, the tests with the coverage gate (fail_under in pyproject.toml)
+  # and pip-audit on the locked runtime dependencies.
   python:
     uses: mbologna/.github/.github/workflows/python-ci.yml@423fe81596d69d9cd74191195ee6d3af7f9bf360 # main
     with:
       python_version: "3.15"
       enable_codecov: false
-      # The gate itself is fail_under in pyproject.toml ([tool.coverage.report])
     secrets: inherit
 
   docker:
@@ -45,19 +46,17 @@ jobs:
       # push: the Cloud Run deploy runs the sha-* image of each
       # main build, so main keeps publishing.
       publish: push
+      # Docker Hub too: mbologna/sunrise-sunset-calendar is pulled from there.
+      push_to_dockerhub: true
+      # Proves the image serves: starts the server, waits for it, then wants
+      # the health check and a one-week feed back (on loopback: the smoke test
+      # runs without network).
+      smoke_cmd: 'AUTH_TOKEN=smoke CALENDAR_WINDOW_DAYS=7 sunrise-sunset-calendar & get() { python -c "import sys, urllib.request; sys.stdout.write(urllib.request.urlopen(sys.argv[1]).read().decode())" "http://127.0.0.1:8080/$1"; }; for i in $(seq 60); do get ''health'' >/dev/null 2>&1 && break; sleep 0.5; done; get ''health'' | grep -q ''"status":"ok"'' && get ''?feed=1&token=smoke&daynight=1'' | grep -q ''END:VCALENDAR'''
       # auto-release runs inside docker-ci: Monday's schedule releases with
-      # this strategy, a push to main only a CVE fix.
+      # this strategy (and a maintenance release for dependency updates), a
+      # push to main only a CVE fix.
       release_strategy: conventional
       # Points the Cloud Run service at the image of each push or manual run
       # on main that builds one; a docs- or CI-only push deploys nothing.
       deploy_type: service
-      # Proves the image serves: starts the server, waits for it, then wants
-      # the health check and a one-week feed back (on loopback: the smoke test
-      # runs without network).
-      smoke_cmd: >-
-        AUTH_TOKEN=smoke CALENDAR_WINDOW_DAYS=7 sunrise-sunset-calendar &
-        get() { python -c "import sys, urllib.request; sys.stdout.write(urllib.request.urlopen(sys.argv[1]).read().decode())" "http://127.0.0.1:8080/$1"; };
-        for i in $(seq 60); do get 'health' >/dev/null 2>&1 && break; sleep 0.5; done;
-        get 'health' | grep -q '"status":"ok"' &&
-        get '?feed=1&token=smoke&daynight=1' | grep -q 'END:VCALENDAR'
     secrets: inherit

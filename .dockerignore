@@ -1,10 +1,14 @@
+.env
 .git
 .github
 .claude
+.gitlab-ci.yml
 .venv
+tests
+**/__pycache__
+*.pyc
 .pytest_cache
 .ruff_cache
 .coverage
 coverage.xml
-tests/
-**/__pycache__
+dist

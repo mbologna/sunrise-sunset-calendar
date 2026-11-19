@@ -1,0 +1,62 @@
+# Local checks before each commit (CI runs ruff and the tests again).
+# Install once: pre-commit install
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.4
+    hooks:
+      - id: ruff-check
+        types_or: [python, pyi]
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: check-yaml
+        args: ['--unsafe']  # custom YAML tags (GitLab !reference, Kubernetes)
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-case-conflict
+      - id: detect-private-key
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.4.1
+    hooks:
+      - id: mypy
+        # mypy parses with the interpreter it runs on: the image's Python,
+        # so newer syntax isn't a parse error.
+        language_version: python3.15
+        args: [--ignore-missing-imports]
+        additional_dependencies:
+          - types-requests
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.4
+    hooks:
+      - id: bandit
+        args: ['-c', 'pyproject.toml']
+        additional_dependencies: ['bandit[toml]']
+        exclude: ^tests/
+
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.39.0
+    hooks:
+      - id: check-github-workflows
+      - id: check-renovate
+        additional_dependencies: ['json5']
+
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.15.1
+    hooks:
+      - id: hadolint
+
+# No commit-msg hook here: the commit rules (commitlint-config-mbologna) are
+# checked locally by the dotfiles' global commit-msg hook and in CI on every
+# pull or merge request commit, so a second, weaker local check only drifts.
+default_install_hook_types: [pre-commit]
+default_stages: [pre-commit]

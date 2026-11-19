@@ -1,29 +1,38 @@
+# Build stage: a pinned uv installs exactly what uv.lock pins into
+# /opt/venv. Same base image and digest as the runtime stage, so compiled
+# wheels match the Python they run on.
 FROM python:3.15.2-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS build
 
-# uv from PyPI, hash-checked (requirements-uv.txt says why). Used in this
-# stage only: the runtime stage gets the finished virtualenv.
+# uv from PyPI, hash-checked (requirements-uv.txt says why).
 COPY requirements-uv.txt /tmp/
 RUN pip install --no-cache-dir --root-user-action=ignore --require-hashes -r /tmp/requirements-uv.txt
-# Install exactly what uv.lock pins, checking its hashes; --locked fails the
-# build if uv.lock no longer matches pyproject.toml. Dependencies first, so
-# their layer survives a code change; then the app itself, as a regular
-# (non-editable) package. Bytecode is compiled here because the runtime image
-# sets PYTHONDONTWRITEBYTECODE.
+# Install exactly what uv.lock pins, checking its hashes, rather than
+# re-resolving pyproject.toml at build time; --locked fails the build when
+# uv.lock is out of date. Dependencies first, so their layer survives a code
+# change; then the app itself, as a regular (non-editable) package. Bytecode
+# is compiled here because the runtime image sets PYTHONDONTWRITEBYTECODE and
+# runs read-only.
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_PYTHON=/usr/local/bin/python3 UV_PYTHON_DOWNLOADS=never \
     UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_NO_CACHE=1
 WORKDIR /tmp/build
 COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY LICENSES/ ./LICENSES/
 RUN uv sync --locked --no-dev --no-editable --no-install-project
-COPY src/ ./src/
+COPY src/ src/
 RUN uv sync --locked --no-dev --no-editable
 
 FROM python:3.15.2-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
+# The CI pipeline adds org.opencontainers.image.source and .revision, and
+# .version from the release tag (pyproject.toml's version is a placeholder).
+LABEL org.opencontainers.image.title="sunrise-sunset-calendar" \
+      org.opencontainers.image.description="iCalendar feed of sunrise, sunset, twilight and moon phases for any location, computed with the NREL Solar Position Algorithm" \
+      org.opencontainers.image.licenses="MIT AND GPL-3.0-only"
 COPY --from=build /opt/venv /opt/venv
-# PORT is where the server listens: Cloud Run (or any container runtime)
-# injects it; 8080 otherwise. AUTH_TOKEN and the other settings come from the
-# environment too (README, "Configuration").
-ENV PATH=/opt/venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PORT=8080
+# Run-time writes go to /tmp (HOME too), so the root filesystem can be
+# read-only. PORT is where the server listens: Cloud Run (or any container
+# runtime) injects it; 8080 otherwise. AUTH_TOKEN and the other settings come
+# from the environment too (README, "Configuration").
+ENV PATH=/opt/venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 HOME=/tmp PORT=8080
 # The base image's pip (with the packages it vendors) and ensurepip's
 # bundled pip wheel are never used at run time; removing them keeps their
 # CVEs out of the image.
@@ -42,4 +51,4 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 USER 1000:1000
 EXPOSE 8080
-CMD ["sunrise-sunset-calendar"]
+ENTRYPOINT ["sunrise-sunset-calendar"]
