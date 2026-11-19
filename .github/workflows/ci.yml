@@ -3,16 +3,12 @@ name: CI
 "on":
   push:
     branches: [main]
-    tags: ["v*.*.*"]
   pull_request:
-  schedule:
-    - cron: "0 6 * * 1"
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Never cancel a run on the default branch: it may be releasing, and a cut
-  # release leaves a tag without its Release.
+  # Never cancel a run on the default branch: it may be deploying.
   cancel-in-progress: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 permissions:
@@ -30,32 +26,28 @@ jobs:
 
   docker:
     needs: python
-    # contents: the release tag and its Release; actions: dispatch the tag
-    # build (a tag pushed with GITHUB_TOKEN triggers no run); the rest:
-    # push, sign and scan the image, and deploy it.
+    # Push, sign and scan the image, and deploy it.
     permissions:
-      contents: write
+      contents: read
       packages: write
       id-token: write
       attestations: write
       security-events: write
-      actions: write
     uses: mbologna/.github/.github/workflows/docker-ci.yml@423fe81596d69d9cd74191195ee6d3af7f9bf360 # main
     with:
       image_name: sunrise-sunset-calendar
       # push: the Cloud Run deploy runs the sha-* image of each
       # main build, so main keeps publishing.
       publish: push
-      # Docker Hub too: mbologna/sunrise-sunset-calendar is pulled from there.
-      push_to_dockerhub: true
+      # Cloud Run pulls from GHCR (through infra's Artifact Registry cache);
+      # nothing reads a Docker Hub copy.
+      push_to_dockerhub: false
       # Proves the image serves: starts the server, waits for it, then wants
       # the health check and a one-week feed back (on loopback: the smoke test
       # runs without network).
       smoke_cmd: 'AUTH_TOKEN=smoke CALENDAR_WINDOW_DAYS=7 sunrise-sunset-calendar & get() { python -c "import sys, urllib.request; sys.stdout.write(urllib.request.urlopen(sys.argv[1]).read().decode())" "http://127.0.0.1:8080/$1"; }; for i in $(seq 60); do get ''health'' >/dev/null 2>&1 && break; sleep 0.5; done; get ''health'' | grep -q ''"status":"ok"'' && get ''?feed=1&token=smoke&daynight=1'' | grep -q ''END:VCALENDAR'''
-      # auto-release runs inside docker-ci: Monday's schedule releases with
-      # this strategy (and a maintenance release for dependency updates), a
-      # push to main only a CVE fix.
-      release_strategy: conventional
+      # No release_strategy: every push to main deploys its own sha-* image,
+      # so a version tag would mark nothing that runs.
       # Points the Cloud Run service at the image of each push or manual run
       # on main that builds one; a docs- or CI-only push deploys nothing.
       deploy_type: service
