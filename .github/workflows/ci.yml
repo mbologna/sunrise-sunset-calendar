@@ -18,7 +18,7 @@ jobs:
   # ruff, the tests with the coverage gate (fail_under in pyproject.toml)
   # and pip-audit on the locked runtime dependencies.
   python:
-    uses: mbologna/.github/.github/workflows/python-ci.yml@423fe81596d69d9cd74191195ee6d3af7f9bf360 # main
+    uses: mbologna/.github/.github/workflows/python-ci.yml@685b1bfcda758939a9a01cad34b0c23f308e4677 # main
     with:
       python_version: "3.15"
       enable_codecov: false
@@ -33,7 +33,7 @@ jobs:
       id-token: write
       attestations: write
       security-events: write
-    uses: mbologna/.github/.github/workflows/docker-ci.yml@423fe81596d69d9cd74191195ee6d3af7f9bf360 # main
+    uses: mbologna/.github/.github/workflows/docker-ci.yml@685b1bfcda758939a9a01cad34b0c23f308e4677 # main
     with:
       image_name: sunrise-sunset-calendar
       # push: the Cloud Run deploy runs the sha-* image of each
@@ -42,6 +42,9 @@ jobs:
       # Cloud Run pulls from GHCR (through infra's Artifact Registry cache);
       # nothing reads a Docker Hub copy.
       push_to_dockerhub: false
+      # tests/golden/generator/Dockerfile and http_parity.py pin the last PHP
+      # release's image by this tag; the cleanup keeps only five versions.
+      cleanup_keep_tags: '^sha-b47c648$'
       # Proves the image serves: starts the server, waits for it, then wants
       # the health check and a one-week feed back (on loopback: the smoke test
       # runs without network).
