@@ -17,10 +17,12 @@ import os
 import platform
 import re
 import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from email.parser import BytesParser
 from email.policy import HTTP
 from importlib import resources
+from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
 
 from .feed import Options, render_feed
 from .php import ARRAY, env_int, filter_validate_float, filter_validate_int, http_build_query, mb_substr, parse_query
@@ -123,7 +125,7 @@ def verify_token(config: Config, provided: bytes) -> bool:
     return hmac.compare_digest(config.auth_token or b"", provided)
 
 
-def _form(environ) -> dict:
+def _form(environ: WSGIEnvironment) -> dict:
     """The POST body as PHP's $_POST: urlencoded or multipart forms only."""
     content_type = environ.get("CONTENT_TYPE", "")
     try:
@@ -147,7 +149,9 @@ def _form(environ) -> dict:
                 if part.get_filename() is not None:
                     continue
                 name = part.get_param("name", header="content-disposition")
-                if name:
+                # EmailMessage decodes RFC 2231 values (name*=) to str; only the compat32
+                # policy returns them as (charset, language, value) tuples
+                if isinstance(name, str) and name:
                     key = parse_query(urlencode_key(name) + b"=")
                     for k in key:
                         fields[k] = ARRAY if key[k] is ARRAY else (part.get_payload(decode=True) or b"")
@@ -166,12 +170,12 @@ def urlencode_key(name: str) -> bytes:
 # ============================================================================
 
 
-def make_app(config: Config | None = None, clock=time.time):
+def make_app(config: Config | None = None, clock: Callable[[], float] = time.time) -> WSGIApplication:
     """The WSGI application."""
     config = config or Config.from_env()
     strings = STRINGS
 
-    def app(environ, start_response):
+    def app(environ: WSGIEnvironment, start_response: StartResponse) -> Iterable[bytes]:
         path = environ.get("PATH_INFO", "") or "/"
         method = environ.get("REQUEST_METHOD", "GET")
 
@@ -187,7 +191,7 @@ def make_app(config: Config | None = None, clock=time.time):
             start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8")])
             return [body]
 
-        def respond(status: str, body: bytes, headers: list[tuple[str, str]]):
+        def respond(status: str, body: bytes, headers: list[tuple[str, str]]) -> list[bytes]:
             start_response(status, [*headers, ("Content-Length", str(len(body)))])
             return [b"" if method == "HEAD" else body]
 
@@ -289,7 +293,7 @@ def main() -> None:
     port = int(os.environ.get("PORT", "8080"))
     waitress.serve(
         make_app(),
-        host="0.0.0.0",  # noqa: S104 - a container's listener
+        host="0.0.0.0",  # noqa: S104  # nosec B104: a container's listener
         port=port,
         threads=int(os.environ.get("THREADS", "2")),
         ident=None,
