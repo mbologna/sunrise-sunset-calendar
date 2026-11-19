@@ -77,11 +77,17 @@ def test_feed_rejects_bad_tokens(config: Config, query: str) -> None:
 
 
 def test_page(config: Config) -> None:
-    for path in ("/", "/sunrise-sunset-calendar.php", "/sunrise-sunset-calendar.php/extra"):
-        status, headers, body = call(config, path)
-        assert status == "200 OK"
-        assert headers[:4] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8")]
-        assert b'<option value="Europe/Rome" selected>Europe/Rome</option>' in body
+    status, headers, body = call(config, "/")
+    assert status == "200 OK"
+    assert headers[:4] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8")]
+    assert b'<option value="Europe/Rome" selected>Europe/Rome</option>' in body
+
+
+@pytest.mark.parametrize("path", ["/sunrise-sunset-calendar.php", "/sunrise-sunset-calendar.php/extra"])
+def test_the_php_path_is_gone(config: Config, path: str) -> None:
+    status, _, body = call(config, path, query="feed=1&token=app-test-token")
+    assert status == "404 Not Found"
+    assert body == b"Not Found"
 
 
 def test_head_has_no_body(config: Config) -> None:
@@ -115,7 +121,7 @@ def test_form_generates_urls(config: Config) -> None:
     body = b"generate_url=1&password=app-test-token&lat=1&lon=2&zone=UTC&location=A+%26+B&civil=on&daynight=on"
     _, _, page = form_post(config, body, "application/x-www-form-urlencoded", HTTP_X_FORWARDED_PROTO="https")
     url = (
-        "https://calendar.example/sunrise-sunset-calendar.php?feed=1&amp;token=app-test-token&amp;lat=1&amp;lon=2"
+        "https://calendar.example/?feed=1&amp;token=app-test-token&amp;lat=1&amp;lon=2"
         "&amp;zone=UTC&amp;location=A+%26+B&amp;rise_off=0&amp;set_off=0&amp;desc=&amp;civil=1&amp;daynight=1"
     )
     assert url.encode() in page
@@ -124,11 +130,11 @@ def test_form_generates_urls(config: Config) -> None:
 
 def test_form_over_plain_http(config: Config) -> None:
     _, _, page = form_post(config, b"generate_url=1&password=app-test-token", "application/x-www-form-urlencoded")
-    assert b"http://calendar.example/sunrise-sunset-calendar.php?feed=1&amp;" in page
+    assert b"http://calendar.example/?feed=1&amp;" in page
     _, _, page = form_post(
         config, b"generate_url=1&password=app-test-token", "application/x-www-form-urlencoded", HTTPS="on"
     )
-    assert b"https://calendar.example/sunrise-sunset-calendar.php?feed=1&amp;" in page
+    assert b"https://calendar.example/?feed=1&amp;" in page
 
 
 def test_form_behind_a_path_proxy(config: Config) -> None:
@@ -140,17 +146,17 @@ def test_form_behind_a_path_proxy(config: Config) -> None:
         HTTP_X_FORWARDED_HOST="feeds.example",
         HTTP_X_FORWARDED_PREFIX="/sunrise-sunset-calendar/",
     )
-    assert b"https://feeds.example/sunrise-sunset-calendar/sunrise-sunset-calendar.php?feed=1&amp;" in page
-    assert b"webcal://feeds.example/sunrise-sunset-calendar/sunrise-sunset-calendar.php?feed=1&amp;" in page
+    assert b"https://feeds.example/sunrise-sunset-calendar/?feed=1&amp;" in page
+    assert b"webcal://feeds.example/sunrise-sunset-calendar/?feed=1&amp;" in page
 
 
 @pytest.mark.parametrize(
     ("forwarded", "expected"),
     [
-        ({"HTTP_X_FORWARDED_HOST": "evil.example/<script>"}, b"http://calendar.example/sunrise-sunset-calendar.php?"),
-        ({"HTTP_X_FORWARDED_PREFIX": "../x"}, b"http://calendar.example/sunrise-sunset-calendar.php?"),
-        ({"HTTP_X_FORWARDED_PREFIX": "/a b"}, b"http://calendar.example/sunrise-sunset-calendar.php?"),
-        ({"HTTP_X_FORWARDED_HOST": "a.example, b.example"}, b"http://a.example/sunrise-sunset-calendar.php?"),
+        ({"HTTP_X_FORWARDED_HOST": "evil.example/<script>"}, b"http://calendar.example/?"),
+        ({"HTTP_X_FORWARDED_PREFIX": "../x"}, b"http://calendar.example/?"),
+        ({"HTTP_X_FORWARDED_PREFIX": "/a b"}, b"http://calendar.example/?"),
+        ({"HTTP_X_FORWARDED_HOST": "a.example, b.example"}, b"http://a.example/?"),
     ],
 )
 def test_form_ignores_malformed_forwarded_headers(config: Config, forwarded: dict, expected: bytes) -> None:
