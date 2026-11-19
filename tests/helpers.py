@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import calendar
 import math
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 from sunrise_sunset_calendar import astronomy, php
@@ -24,16 +25,18 @@ def assert_time_equals(expected: int | str, actual: int, message: str = "", tole
     The expectation is a timestamp or an "HH:MM[:SS]" string, read on the
     actual timestamp's date in the default time zone.
     """
-    if isinstance(expected, str) and ":" in expected:
+    if isinstance(expected, str):
         parts = expected.split(":")
         ref = php.local(actual)
-        expected = php.mktime(
+        expected_ts = php.mktime(
             int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 0, ref.month, ref.day, ref.year
         )
+    else:
+        expected_ts = expected
 
-    diff = abs(expected - actual)
+    diff = abs(expected_ts - actual)
     assert diff <= tolerance_seconds, (
-        f"{message}\n    Expected: {php.php_date('Y-m-d H:i:s', expected)}\n"
+        f"{message}\n    Expected: {php.php_date('Y-m-d H:i:s', expected_ts)}\n"
         f"    Actual:   {php.php_date('Y-m-d H:i:s', actual)}\n"
         f"    Difference: {diff / 60:.2f} minutes ({diff} seconds, tolerance: {tolerance_seconds} seconds)"
     )
@@ -163,3 +166,19 @@ def date_sun_info_sunrise(timestamp: int, lat: float, lon: float) -> int | bool:
         return True
     t = _RADEG * math.acos(cost) / 15.0
     return int((tsouth - t) * 3600 + midnight)
+
+
+class StartResponse:
+    """A WSGI start_response that records the status and headers it is called with."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, list[tuple[str, str]]]] = []
+
+    def __call__(
+        self, status: str, headers: list[tuple[str, str]], exc_info: object = None, /
+    ) -> Callable[[bytes], object]:
+        self.calls.append((status, headers))
+        return self.write
+
+    def write(self, data: bytes) -> None:
+        raise AssertionError("the app returns its body; it never calls write()")

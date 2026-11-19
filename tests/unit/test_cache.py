@@ -8,7 +8,7 @@ from sunrise_sunset_calendar import cache, helpers, php
 
 
 @pytest.fixture(autouse=True)
-def fresh_cache():
+def fresh_cache() -> None:
     cache.reset()
 
 

@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from sunrise_sunset_calendar.app import Config, make_app
+from tests.helpers import StartResponse
 
 from .cases import CASES, TOKEN, Case
 
@@ -28,10 +29,20 @@ DTSTAMP = re.compile(rb"^DTSTAMP:\d{8}T\d{6}Z\r$", re.M)
 PHP_SCRIPT_URL = re.compile(rb"((?:https?|webcal)://[^/\"<\s]*)/sunrise-sunset-calendar\.php\?")
 
 
+def _read_tar(path: Path) -> dict[str, bytes]:
+    """Every member of a .tar.xz corpus, by name: all regular files."""
+    files = {}
+    with tarfile.open(path, "r:xz") as tar:
+        for member in tar.getmembers():
+            data = tar.extractfile(member)
+            assert data is not None, f"{path.name}: {member.name} is not a regular file"
+            files[member.name] = data.read()
+    return files
+
+
 @cache
 def bodies(group: str) -> dict[str, bytes]:
-    with tarfile.open(CORPUS / f"{group}.tar.xz", "r:xz") as tar:
-        return {m.name: tar.extractfile(m).read() for m in tar.getmembers()}
+    return _read_tar(CORPUS / f"{group}.tar.xz")
 
 
 @cache
@@ -47,8 +58,7 @@ def overrides() -> dict[str, bytes]:
     path = CORPUS / "tz-overrides.tar.xz"
     if not path.exists():
         return {}
-    with tarfile.open(path, "r:xz") as tar:
-        return {m.name: tar.extractfile(m).read() for m in tar.getmembers()}
+    return _read_tar(path)
 
 
 def request(case: Case) -> tuple[int, list[tuple[str, str]], bytes]:
@@ -68,9 +78,10 @@ def request(case: Case) -> tuple[int, list[tuple[str, str]], bytes]:
         environ["CONTENT_TYPE"] = "application/x-www-form-urlencoded"
     if case.https:
         environ["HTTP_X_FORWARDED_PROTO"] = "https"
-    status: list = []
-    output = b"".join(app(environ, lambda s, h: status.extend([s, h])))
-    return int(status[0].split()[0]), status[1], output
+    start_response = StartResponse()
+    output = b"".join(app(environ, start_response))
+    status, headers = start_response.calls[0]
+    return int(status.split()[0]), headers, output
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c.id for c in CASES])
