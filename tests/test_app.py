@@ -38,7 +38,7 @@ def config() -> Config:
 
 @pytest.mark.parametrize("token", [None, b"", b"CHANGE_ME_TO_A_RANDOM_STRING"])
 def test_without_a_token_every_request_fails(token) -> None:
-    status, headers, body = call(Config(auth_token=token), "/healthz")
+    status, headers, body = call(Config(auth_token=token), "/health")
     assert status == "500 Internal Server Error"
     assert body == b"Error: Please set AUTH_TOKEN via environment variable or config/config.php"
     # PHP exits before it sets the security headers
@@ -46,8 +46,8 @@ def test_without_a_token_every_request_fails(token) -> None:
     assert not any(name.startswith("X-") for name, _ in headers)
 
 
-def test_healthz(config: Config) -> None:
-    status, headers, body = call(config, "/healthz")
+def test_health(config: Config) -> None:
+    status, headers, body = call(config, "/health")
     assert status == "200 OK"
     assert headers[:5] == [*SECURITY, ("Content-Type", "application/json"), ("Cache-Control", "no-store")]
     data = json.loads(body)
@@ -56,8 +56,8 @@ def test_healthz(config: Config) -> None:
     assert "python" in data
 
 
-def test_healthz_head_has_no_body(config: Config) -> None:
-    status, _, body = call(config, "/healthz", method="HEAD")
+def test_health_head_has_no_body(config: Config) -> None:
+    status, _, body = call(config, "/health", method="HEAD")
     assert status == "200 OK"
     assert body == b""
 

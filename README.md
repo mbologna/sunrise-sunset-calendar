@@ -53,7 +53,7 @@ All settings are environment variables.
 | `PORT` | `8080` | Port the server listens on |
 | `THREADS` | `2` | Requests served at once; each full feed takes about 15 MB while it is built |
 
-The health check, `/healthz`, returns `{"status":"ok","python":"<version>","timestamp":<unix time>}` with `Cache-Control: no-store` (the PHP release's `/?health` is gone).
+The health check, `/health`, returns `{"status":"ok","python":"<version>","timestamp":<unix time>}` with `Cache-Control: no-store` (the PHP release's `/?health` is gone).
 
 ## Feed URL parameters
 

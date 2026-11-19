@@ -1,7 +1,7 @@
 """Replay the golden corpus: every response must match the PHP release byte for byte.
 
 Only DTSTAMP (when the feed was generated) and the subscription URL's path
-may differ (the health check is no longer a PHP output: /healthz replaced
+may differ (the health check is no longer a PHP output: /health replaced
 /?health on 2026-11-19): the PHP release built it on
 /sunrise-sunset-calendar.php, which this app no longer serves (2026-11-19).
 """
