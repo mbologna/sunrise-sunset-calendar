@@ -57,7 +57,7 @@ jobs:
       smoke_cmd: >-
         AUTH_TOKEN=smoke CALENDAR_WINDOW_DAYS=7 sunrise-sunset-calendar &
         get() { python -c "import sys, urllib.request; sys.stdout.write(urllib.request.urlopen(sys.argv[1]).read().decode())" "http://127.0.0.1:8080/$1"; };
-        for i in $(seq 60); do get '?health' >/dev/null 2>&1 && break; sleep 0.5; done;
-        get '?health' | grep -q '"status":"ok"' &&
+        for i in $(seq 60); do get 'healthz' >/dev/null 2>&1 && break; sleep 0.5; done;
+        get 'healthz' | grep -q '"status":"ok"' &&
         get '?feed=1&token=smoke&daynight=1' | grep -q 'END:VCALENDAR'
     secrets: inherit

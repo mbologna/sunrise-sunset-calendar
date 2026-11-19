@@ -16,12 +16,12 @@ from sunrise_sunset_calendar import app
 TOKEN = b"entry-point-test-token"
 
 
-def request(query: str) -> str:
-    """The response body for a GET request with the given query string."""
+def request(query: str, path: str = "/") -> str:
+    """The response body for a GET request to path with the given query string."""
     application = app.make_app(app.Config(auth_token=TOKEN, window_days=7, past_days=0))
     environ = {
         "REQUEST_METHOD": "GET",
-        "PATH_INFO": "/",
+        "PATH_INFO": path,
         "QUERY_STRING": query,
         "wsgi.input": io.BytesIO(b""),
     }
@@ -41,7 +41,7 @@ def request(query: str) -> str:
 
 
 def test_health_endpoint() -> None:
-    data = json.loads(request("health=1"))
+    data = json.loads(request("", path="/healthz"))
 
     assert data["status"] == "ok"
     assert data["python"] == platform.python_version()

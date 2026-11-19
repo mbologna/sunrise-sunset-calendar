@@ -1,14 +1,14 @@
 """Replay the golden corpus: every response must match the PHP release byte for byte.
 
-Only DTSTAMP (when the feed was generated), the health check's runtime and
-clock, and the subscription URL's path may differ: the PHP release built it on
+Only DTSTAMP (when the feed was generated) and the subscription URL's path
+may differ (the health check is no longer a PHP output: /healthz replaced
+/?health on 2026-11-19): the PHP release built it on
 /sunrise-sunset-calendar.php, which this app no longer serves (2026-11-19).
 """
 
 from __future__ import annotations
 
 import io
-import json
 import re
 import tarfile
 from calendar import timegm
@@ -80,10 +80,5 @@ def test_matches_php(case: Case) -> None:
     _, _, body = request(case)
     php_body = overrides().get(case.id) or bodies(case.group)[case.id]
 
-    if case.id.startswith("http-health"):
-        ours_json, php_json = json.loads(body), json.loads(php_body)
-        assert ours_json["status"] == php_json["status"] == "ok"
-        assert abs(ours_json["timestamp"] - php_json["timestamp"]) < 120
-        return
     php_body = PHP_SCRIPT_URL.sub(rb"\1/?", php_body)
     assert DTSTAMP.sub(b"DTSTAMP", body) == DTSTAMP.sub(b"DTSTAMP", php_body)

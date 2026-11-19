@@ -29,22 +29,19 @@ from .strings import STRINGS
 from .timezones import timezone_identifiers, timezone_set
 from .web import DEFAULT_LAT, DEFAULT_LAT_TEXT, DEFAULT_LON, DEFAULT_LON_TEXT, DEFAULT_TIMEZONE, render_page
 
-# Behind a proxy that serves the app under a path of another host
-# (feeds.michelebologna.net/sunrise-sunset-calendar/), the subscription URL
-# must name that host and path, not Cloud Run's. Malformed values are ignored.
+# Behind a proxy that serves the app on another host
+# (sunrise-sunset-calendar.michelebologna.net, through the feeds Worker, which
+# reaches Cloud Run under the service's own host), the subscription URL must
+# name the proxy's host. A malformed X-Forwarded-Host is ignored.
 FORWARDED_HOST = re.compile(r"[A-Za-z0-9.-]+(:[0-9]{1,5})?")
-FORWARDED_PREFIX = re.compile(r"(/[A-Za-z0-9._~-]+)+")
 
 
-def public_location(environ: dict) -> tuple[str, str]:
-    """The host and path prefix the client used: X-Forwarded-Host and -Prefix when set, else the Host header."""
+def public_host(environ: dict) -> str:
+    """The host the client used: X-Forwarded-Host when set and well formed, else the Host header."""
     forwarded = environ.get("HTTP_X_FORWARDED_HOST", "").split(",")[0].strip()
     if FORWARDED_HOST.fullmatch(forwarded):
-        host = forwarded
-    else:
-        host = environ.get("HTTP_HOST", "").encode("latin-1").decode("utf-8", "replace")
-    prefix = environ.get("HTTP_X_FORWARDED_PREFIX", "").strip().rstrip("/")
-    return host, prefix if FORWARDED_PREFIX.fullmatch(prefix) else ""
+        return forwarded
+    return environ.get("HTTP_HOST", "").encode("latin-1").decode("utf-8", "replace")
 
 
 PLACEHOLDER_TOKEN = b"CHANGE_ME_TO_A_RANDOM_STRING"
@@ -183,9 +180,9 @@ def make_app(config: Config | None = None, clock=time.time):
             body = resources.files(__package__).joinpath("assets", filename).read_bytes()
             start_response("200 OK", [("Content-Type", content_type), ("Content-Length", str(len(body)))])
             return [b"" if method == "HEAD" else body]
-        # The PHP release also answered at /sunrise-sunset-calendar.php; every
-        # subscription moved to /?feed=1 on feeds.michelebologna.net (2026-11-19).
-        if path != "/":
+        # The page and feed at /, the health check at /healthz. The PHP release's
+        # /sunrise-sunset-calendar.php and /?health are gone (2026-11-19).
+        if path not in ("/", "/healthz"):
             body = b"Not Found"
             start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8")])
             return [body]
@@ -203,11 +200,12 @@ def make_app(config: Config | None = None, clock=time.time):
         query = parse_query(environ.get("QUERY_STRING", "").encode("latin-1"))
         now = int(clock())
 
-        if "health" in query:
+        if path == "/healthz":
             body = json.dumps(
                 {"status": "ok", "python": platform.python_version(), "timestamp": now}, separators=(",", ":")
             ).encode()
-            return respond("200 OK", body, [*SECURITY_HEADERS, ("Content-Type", "application/json")])
+            headers = [*SECURITY_HEADERS, ("Content-Type", "application/json"), ("Cache-Control", "no-store")]
+            return respond("200 OK", body, headers)
 
         if "feed" in query:
             if not verify_token(config, param(query, "token")):
@@ -270,10 +268,8 @@ def make_app(config: Config | None = None, clock=time.time):
                     ]
                     params += [(kind, b"1") for kind in ("civil", "nautical", "astro", "daynight") if kind in form]
                     https = environ.get("HTTPS", "") == "on" or environ.get("HTTP_X_FORWARDED_PROTO", "") == "https"
-                    host, prefix = public_location(environ)
-                    subscription_url = (
-                        ("https" if https else "http") + "://" + host + prefix + "/?" + http_build_query(params)
-                    )
+                    host = public_host(environ)
+                    subscription_url = ("https" if https else "http") + "://" + host + "/?" + http_build_query(params)
                     webcal_url = re.sub(r"^https?://", "webcal://", subscription_url, count=1)
 
         page = render_page(now, timezone_identifiers(), error, subscription_url, webcal_url)

@@ -38,7 +38,7 @@ docker build -t sunrise-sunset-calendar .
 docker run -p 8080:8080 -e AUTH_TOKEN="$(openssl rand -hex 32)" sunrise-sunset-calendar
 ```
 
-The image runs as an unprivileged user, has no pip, and listens on `$PORT` (default 8080), so it runs unchanged on Cloud Run. It serves the page at `/`, the feed at `/?feed=1`, and the page's CSS and JavaScript under `/assets/`; every other path is a 404. Behind a proxy that serves it under a path of another host, as `feeds.michelebologna.net/sunrise-sunset-calendar/` does, it builds subscription URLs from the `X-Forwarded-Host` and `X-Forwarded-Prefix` headers, ignoring malformed values. The PHP release's `/sunrise-sunset-calendar.php` path is gone since 2026-11-19.
+The image runs as an unprivileged user, has no pip, and listens on `$PORT` (default 8080), so it runs unchanged on Cloud Run. It serves the page at `/`, the feed at `/?feed=1`, and the page's CSS and JavaScript under `/assets/`; every other path is a 404. Behind a proxy that serves it on another host, as `sunrise-sunset-calendar.michelebologna.net` does, it builds subscription URLs from the `X-Forwarded-Host` header, ignoring a malformed value. The PHP release's `/sunrise-sunset-calendar.php` path is gone since 2026-11-19.
 
 ## Configuration
 
@@ -53,7 +53,7 @@ All settings are environment variables.
 | `PORT` | `8080` | Port the server listens on |
 | `THREADS` | `2` | Requests served at once; each full feed takes about 15 MB while it is built |
 
-The health check, `/?health`, returns `{"status":"ok","python":"<version>","timestamp":<unix time>}`.
+The health check, `/healthz`, returns `{"status":"ok","python":"<version>","timestamp":<unix time>}` with `Cache-Control: no-store` (the PHP release's `/?health` is gone).
 
 ## Feed URL parameters
 
