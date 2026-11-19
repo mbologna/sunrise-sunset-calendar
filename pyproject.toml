@@ -76,6 +76,12 @@ ignore = [
 quote-style = "double"
 indent-style = "space"
 
+[tool.mypy]
+# The pre-commit hook passes mypy only the staged files: without this, a
+# commit that touches only tests checks them against an unresolved package
+# (every import Any) and leaves a cache that fails the next full run.
+mypy_path = "src"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --strict-markers"
