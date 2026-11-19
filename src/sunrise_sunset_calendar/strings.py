@@ -434,9 +434,9 @@ STRINGS = {
     },
     # Responses of the HTTP entry point
     "errors": {
-        "missing_token": "Error: Please set AUTH_TOKEN via environment variable or config/config.php",
-        "invalid_token": "Invalid authentication token",
-        "invalid_password": "Invalid password",
+        "missing_token": "Error: Please set AUTH_TOKEN via environment variable or config/config.php",  # nosec B105: an error message, not a credential
+        "invalid_token": "Invalid authentication token",  # nosec B105: an error message, not a credential
+        "invalid_password": "Invalid password",  # nosec B105: an error message, not a credential
     },
     # Web page for generating subscription URLs
     "web": {
@@ -480,7 +480,7 @@ STRINGS = {
         "address": "Address",
         "address_placeholder": "e.g. Rome, Italy",
         "search_location": "Search",
-        "password": "Password",
+        "password": "Password",  # nosec B105: a form label, not a credential
         "location": "Location name",
         "location_placeholder": "e.g. Rome",
         "location_help": 'Calendar name: "🌅 Your location · Sun & Twilight"',
@@ -538,7 +538,7 @@ STRINGS = {
             "unavailable": "location unavailable.",
             "timeout": "the request timed out.",
             "select_type": "Please select at least one event type.",
-            "enter_password": "Please enter the password.",
+            "enter_password": "Please enter the password.",  # nosec B105: a prompt, not a credential
             "copied": "✓ Copied",
             "copy_failed": "Failed to copy: ",
         },
