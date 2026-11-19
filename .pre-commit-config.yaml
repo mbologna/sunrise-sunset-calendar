@@ -23,6 +23,8 @@ repos:
       - id: trailing-whitespace
       - id: check-case-conflict
       - id: detect-private-key
+        # Test fixtures may hold throwaway keys, or build them at run time.
+        exclude: ^tests/
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v2.4.1
@@ -54,9 +56,8 @@ repos:
     rev: v2.15.1
     hooks:
       - id: hadolint
-        # Records the golden test corpus from the last PHP release; never
-        # built in CI or shipped, and changing it would change the recording.
-        exclude: ^tests/golden/generator/Dockerfile$
+        # A Dockerfile under tests/ is a fixture, never built into an image.
+        exclude: ^tests/
 
 # No commit-msg hook here: the commit rules (commitlint-config-mbologna) are
 # checked locally by the dotfiles' global commit-msg hook and in CI on every

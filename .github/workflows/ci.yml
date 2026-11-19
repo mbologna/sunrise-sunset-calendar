@@ -4,11 +4,14 @@ name: CI
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Never cancel a run on the default branch: it may be deploying.
+  # Never cancel a run on the default branch: it may be deploying or releasing,
+  # and a cut release leaves a tag without its Release.
   cancel-in-progress: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
 
 permissions:
@@ -36,11 +39,10 @@ jobs:
     uses: mbologna/.github/.github/workflows/docker-ci.yml@016832d015988220ca1ad06a483742cded255428 # main
     with:
       image_name: sunrise-sunset-calendar
-      # push: the Cloud Run deploy runs the sha-* image of each
-      # main build, so main keeps publishing.
+      # Every push to main publishes the image, tagged latest and
+      # sha-<commit>; pull requests build it without pushing. The release
+      # tags build nothing.
       publish: push
-      # Cloud Run pulls from GHCR (through infra's Artifact Registry cache);
-      # nothing reads a Docker Hub copy.
       push_to_dockerhub: false
       # tests/golden/generator/Dockerfile and http_parity.py pin the last PHP
       # release's image by this tag; the cleanup keeps only five versions.
@@ -49,9 +51,33 @@ jobs:
       # the health check and a one-week feed back (on loopback: the smoke test
       # runs without network).
       smoke_cmd: 'AUTH_TOKEN=smoke CALENDAR_WINDOW_DAYS=7 sunrise-sunset-calendar & get() { python -c "import sys, urllib.request; sys.stdout.write(urllib.request.urlopen(sys.argv[1]).read().decode())" "http://127.0.0.1:8080/$1"; }; for i in $(seq 60); do get ''health'' >/dev/null 2>&1 && break; sleep 0.5; done; get ''health'' | grep -q ''"status":"ok"'' && get ''?feed=1&token=smoke&daynight=1'' | grep -q ''END:VCALENDAR'''
-      # No release_strategy: every push to main deploys its own sha-* image,
-      # so a version tag would mark nothing that runs.
-      # Points the Cloud Run service at the image of each push or manual run
-      # on main that builds one; a docs- or CI-only push deploys nothing.
+      # No release_strategy: its auto-release would dispatch a tag build
+      # that publishes X.Y.Z images, which nothing runs. The auto-release
+      # job below tags the changelog instead.
+      # Points the Cloud Run service at the image digest of each push or
+      # manual run on main that builds one; a docs- or CI-only push deploys
+      # nothing. Needs the GCP_WORKLOAD_IDENTITY_PROVIDER and
+      # GCP_SERVICE_ACCOUNT secrets.
       deploy_type: service
+    secrets: inherit
+
+  # Release tags as a changelog: Monday's schedule tags vX.Y.Z with a GitHub
+  # Release of the commit subjects when a feat, fix, perf, revert or
+  # breaking commit landed (or a maintenance release for dependency
+  # updates), and a push to main tags only a CVE fix (a fix(security)
+  # commit, or a Dockerfile base image update that fixes CVEs). A tag
+  # records what main already deployed; it builds nothing.
+  auto-release:
+    needs: [python, docker]
+    # contents: push the tag and create the Release.
+    permissions:
+      contents: write
+    uses: mbologna/.github/.github/workflows/auto-release.yml@016832d015988220ca1ad06a483742cded255428 # main
+    with:
+      strategy: conventional
+      # The security strategy compares this Dockerfile's base image at the
+      # last tag and at the pushed commit. No image input: there is no X.Y.Z
+      # image to scan, so no fresh-rebuild release either.
+      dockerfiles: Dockerfile
+      dispatch_tag_build: false
     secrets: inherit

@@ -1,14 +1,14 @@
 [project]
 name = "sunrise-sunset-calendar"
-# A placeholder, never bumped: a release is the git tag vX.Y.Z that
-# auto-release creates, and the image built from that tag carries the
-# version in its org.opencontainers.image.version label. Nothing reads this
-# field at run time.
+# A placeholder, never bumped: each push to main publishes its image as
+# latest and sha-<commit>, and the git tag vX.Y.Z that auto-release creates
+# marks a changelog entry with no image of its own. Nothing reads this field
+# at run time.
 version = "0.0.0"
 description = "iCalendar feed of sunrise, sunset, twilight and moon phases for any location, computed with the NREL Solar Position Algorithm"
 readme = "README.md"
 license = "MIT AND GPL-3.0-only"
-license-files = ["LICENSE", "LICENSES/GPL-3.0-only.txt"]
+license-files = ["LICENSE", "LICENSES/*"]
 authors = [{ name = "Michele Bologna" }]
 # The Python the Dockerfile's base image ships; Renovate moves the image,
 # a person moves this floor with the next minor.

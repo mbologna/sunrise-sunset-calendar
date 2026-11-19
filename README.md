@@ -42,7 +42,9 @@ docker build -t sunrise-sunset-calendar .
 docker run -p 8080:8080 -e AUTH_TOKEN="$(openssl rand -hex 32)" sunrise-sunset-calendar
 ```
 
-The server is [waitress](https://docs.pylonsproject.org/projects/waitress/): one process with no C extensions, small enough for a 128 MiB [Cloud Run](https://cloud.google.com/run) instance. The image runs as an unprivileged user, has no pip and listens on `$PORT`. Images are tagged `latest` and `sha-<commit>`; there are no version releases.
+The server is [waitress](https://docs.pylonsproject.org/projects/waitress/): one process with no C extensions, small enough for a 128 MiB [Cloud Run](https://cloud.google.com/run) instance. The image runs as an unprivileged user, has no pip and listens on `$PORT`. Images are tagged `latest` and `sha-<commit>` only and carry no version number. Each push to `main` that changes the image deploys it to Cloud Run by its digest.
+
+Releases are a changelog. Every Monday at 06:00 UTC the auto-release job reads the [Conventional Commits](https://www.conventionalcommits.org/) subjects merged since the last tag; if one is a `feat`, `fix`, `perf`, `revert` or breaking change, it tags `vX.Y.Z` and publishes a GitHub Release listing them. A week with only dependency updates gets a maintenance release. The tags build no image and deploy nothing.
 
 ## Configuration
 
