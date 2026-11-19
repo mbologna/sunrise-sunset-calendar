@@ -31,7 +31,7 @@ REQUESTS = [
     ("GET", "/", None),
     ("GET", "/sunrise-sunset-calendar.php", None),
     ("HEAD", "/", None),
-    ("GET", "/healthz", None),
+    ("GET", "/health", None),
     ("GET", f"/sunrise-sunset-calendar.php?feed=1&token={TOKEN}&lat=45.46&lon=9.19&zone=Europe/Milan&daynight=1", None),
     (
         "GET",
@@ -51,8 +51,8 @@ REQUESTS = [
 # Where the two servers legitimately differ, by (method, path)
 GONE = {"status", "body", *HEADERS}  # a path one of the two servers does not have
 EXPECTED = {
-    # /healthz replaced the PHP release's /?health (2026-11-19)
-    ("GET", "/healthz"): GONE,
+    # /health replaced the PHP release's /?health (2026-11-19)
+    ("GET", "/health"): GONE,
     # The form's subscription URL: /?feed=1 instead of the .php script
     ("POST", "/"): {"body"},
     ("GET", "/sunrise-sunset-calendar.php"): GONE,

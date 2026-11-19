@@ -180,9 +180,9 @@ def make_app(config: Config | None = None, clock=time.time):
             body = resources.files(__package__).joinpath("assets", filename).read_bytes()
             start_response("200 OK", [("Content-Type", content_type), ("Content-Length", str(len(body)))])
             return [b"" if method == "HEAD" else body]
-        # The page and feed at /, the health check at /healthz. The PHP release's
+        # The page and feed at /, the health check at /health. The PHP release's
         # /sunrise-sunset-calendar.php and /?health are gone (2026-11-19).
-        if path not in ("/", "/healthz"):
+        if path not in ("/", "/health"):
             body = b"Not Found"
             start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8")])
             return [body]
@@ -200,7 +200,7 @@ def make_app(config: Config | None = None, clock=time.time):
         query = parse_query(environ.get("QUERY_STRING", "").encode("latin-1"))
         now = int(clock())
 
-        if path == "/healthz":
+        if path == "/health":
             body = json.dumps(
                 {"status": "ok", "python": platform.python_version(), "timestamp": now}, separators=(",", ":")
             ).encode()

@@ -41,7 +41,7 @@ def request(query: str, path: str = "/") -> str:
 
 
 def test_health_endpoint() -> None:
-    data = json.loads(request("", path="/healthz"))
+    data = json.loads(request("", path="/health"))
 
     assert data["status"] == "ok"
     assert data["python"] == platform.python_version()
