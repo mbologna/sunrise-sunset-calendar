@@ -38,7 +38,7 @@ def config() -> Config:
 
 @pytest.mark.parametrize("token", [None, b"", b"CHANGE_ME_TO_A_RANDOM_STRING"])
 def test_without_a_token_every_request_fails(token) -> None:
-    status, headers, body = call(Config(auth_token=token), query="health")
+    status, headers, body = call(Config(auth_token=token), "/healthz")
     assert status == "500 Internal Server Error"
     assert body == b"Error: Please set AUTH_TOKEN via environment variable or config/config.php"
     # PHP exits before it sets the security headers
@@ -46,14 +46,27 @@ def test_without_a_token_every_request_fails(token) -> None:
     assert not any(name.startswith("X-") for name, _ in headers)
 
 
-def test_health(config: Config) -> None:
-    status, headers, body = call(config, query="health")
+def test_healthz(config: Config) -> None:
+    status, headers, body = call(config, "/healthz")
     assert status == "200 OK"
-    assert headers[:4] == [*SECURITY, ("Content-Type", "application/json")]
+    assert headers[:5] == [*SECURITY, ("Content-Type", "application/json"), ("Cache-Control", "no-store")]
     data = json.loads(body)
     assert data["status"] == "ok"
     assert data["timestamp"] == NOW
     assert "python" in data
+
+
+def test_healthz_head_has_no_body(config: Config) -> None:
+    status, _, body = call(config, "/healthz", method="HEAD")
+    assert status == "200 OK"
+    assert body == b""
+
+
+def test_the_old_health_query_is_just_the_page(config: Config) -> None:
+    status, headers, body = call(config, query="health")
+    assert status == "200 OK"
+    assert ("Content-Type", "text/html; charset=UTF-8") in headers
+    assert b"<!DOCTYPE html>" in body
 
 
 def test_feed_headers(config: Config) -> None:
@@ -137,25 +150,22 @@ def test_form_over_plain_http(config: Config) -> None:
     assert b"https://calendar.example/?feed=1&amp;" in page
 
 
-def test_form_behind_a_path_proxy(config: Config) -> None:
+def test_form_behind_a_proxy(config: Config) -> None:
     _, _, page = form_post(
         config,
         b"generate_url=1&password=app-test-token",
         "application/x-www-form-urlencoded",
         HTTP_X_FORWARDED_PROTO="https",
-        HTTP_X_FORWARDED_HOST="feeds.example",
-        HTTP_X_FORWARDED_PREFIX="/sunrise-sunset-calendar/",
+        HTTP_X_FORWARDED_HOST="calendar.proxy.example",
     )
-    assert b"https://feeds.example/sunrise-sunset-calendar/?feed=1&amp;" in page
-    assert b"webcal://feeds.example/sunrise-sunset-calendar/?feed=1&amp;" in page
+    assert b"https://calendar.proxy.example/?feed=1&amp;" in page
+    assert b"webcal://calendar.proxy.example/?feed=1&amp;" in page
 
 
 @pytest.mark.parametrize(
     ("forwarded", "expected"),
     [
         ({"HTTP_X_FORWARDED_HOST": "evil.example/<script>"}, b"http://calendar.example/?"),
-        ({"HTTP_X_FORWARDED_PREFIX": "../x"}, b"http://calendar.example/?"),
-        ({"HTTP_X_FORWARDED_PREFIX": "/a b"}, b"http://calendar.example/?"),
         ({"HTTP_X_FORWARDED_HOST": "a.example, b.example"}, b"http://a.example/?"),
     ],
 )

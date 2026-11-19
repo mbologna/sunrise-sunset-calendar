@@ -31,7 +31,7 @@ REQUESTS = [
     ("GET", "/", None),
     ("GET", "/sunrise-sunset-calendar.php", None),
     ("HEAD", "/", None),
-    ("GET", "/?health", None),
+    ("GET", "/healthz", None),
     ("GET", f"/sunrise-sunset-calendar.php?feed=1&token={TOKEN}&lat=45.46&lon=9.19&zone=Europe/Milan&daynight=1", None),
     (
         "GET",
@@ -49,10 +49,10 @@ REQUESTS = [
 ]
 
 # Where the two servers legitimately differ, by (method, path)
-GONE = {"status", "body", *HEADERS}  # /sunrise-sunset-calendar.php: 404 since 2026-11-19
+GONE = {"status", "body", *HEADERS}  # a path one of the two servers does not have
 EXPECTED = {
-    # The health check names its runtime ("php" became "python")
-    ("GET", "/?health"): {"body"},
+    # /healthz replaced the PHP release's /?health (2026-11-19)
+    ("GET", "/healthz"): GONE,
     # The form's subscription URL: /?feed=1 instead of the .php script
     ("POST", "/"): {"body"},
     ("GET", "/sunrise-sunset-calendar.php"): GONE,
@@ -85,7 +85,7 @@ def fetch(port: int, method: str, path: str, body: str | None):
 def wait(port: int) -> None:
     for _ in range(60):
         try:
-            fetch(port, "GET", "/?health", None)
+            fetch(port, "GET", "/", None)
             return
         except OSError:
             time.sleep(0.5)
@@ -130,7 +130,7 @@ def main() -> int:
             subprocess.run(["docker", "rm", "-f", container], check=True, capture_output=True)
         containers = [run(PHP_IMAGE, 18080, {}), run(python_image, 18081, {})]
         time.sleep(3)
-        php, py = fetch(18080, "GET", "/?health", None), fetch(18081, "GET", "/?health", None)
+        php, py = fetch(18080, "GET", "/", None), fetch(18081, "GET", "/", None)
         same = php[0] == py[0] and php[2] == py[2]
         unexpected += not same
         print(f"{'ok' if same else 'UNEXPECTED':10} missing AUTH_TOKEN -> {php[0]} {php[2]!r} / {py[0]} {py[2]!r}")

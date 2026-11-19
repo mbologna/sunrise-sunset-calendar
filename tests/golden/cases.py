@@ -242,8 +242,6 @@ def _cases() -> list[Case]:
 
     # E. Responses other than a feed
     others = {
-        "health": "health",
-        "health-array": "health[]=1",
         "token-wrong": "feed=1&token=wrong&lat=45&lon=9",
         "token-missing": "feed=1&lat=45&lon=9",
         "token-array": "feed=1&token[]=golden-token",
