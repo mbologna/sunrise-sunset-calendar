@@ -10,7 +10,177 @@ placeholders follow PHP's sprintf(): %s, %d, %02d, %% and positional %1$s;
 date and time formats follow PHP's date() (see php.format_datetime()).
 """
 
-STRINGS = {
+from __future__ import annotations
+
+from typing import Literal, TypedDict
+
+# The shape of STRINGS. Sections the code looks up by a computed key are
+# plain mappings; sections that mix kinds of value are TypedDicts.
+
+
+class MoonStrings(TypedDict):
+    current: str
+    moonless: str
+    moonless_all: str
+    moonless_none: str
+    impact: dict[str, str]
+    exact: str
+    phase_at: str
+
+
+class SeasonText(TypedDict):
+    moment: str
+    moment_names: dict[str, str]
+    sun: dict[str, str]
+    begins: str
+    east_west: str
+    daylight: str
+    near_12: str
+    longest_day: str
+    shortest_day: str
+    noon_highest: str
+    noon_lowest: str
+    noon_tropics: str
+    noon_below: str
+
+
+class DayFact(TypedDict):
+    title: str
+    lead: str
+
+
+# The day facts with a title and a lead of their own
+DayFactKind = Literal[
+    "sunrise_latest",
+    "sunrise_earliest",
+    "sunset_earliest",
+    "sunset_latest",
+    "twelve_hours_rising",
+    "twelve_hours_falling",
+    "midnight_sun_begins",
+    "midnight_sun_ends",
+    "polar_night_begins",
+    "polar_night_ends",
+    "white_nights_begins",
+    "white_nights_ends",
+]
+
+
+class Meteorological(TypedDict):
+    title: str
+    lead: str
+    seasons: dict[int, str]
+    opposite: dict[str, str]
+    months: dict[int, str]
+    marks: dict[str, str]
+
+
+class DayFacts(TypedDict):
+    sunrise_latest: DayFact
+    sunrise_earliest: DayFact
+    sunset_earliest: DayFact
+    sunset_latest: DayFact
+    stable: str
+    trend: dict[str, str]
+    why: str
+    twelve_hours_rising: DayFact
+    twelve_hours_falling: DayFact
+    midnight_sun_begins: DayFact
+    midnight_sun_ends: DayFact
+    polar_night_begins: DayFact
+    polar_night_ends: DayFact
+    white_nights_begins: DayFact
+    white_nights_ends: DayFact
+    meteorological: Meteorological
+
+
+class WebStrings(TypedDict):
+    title: str
+    heading: str
+    today_heading: str
+    today_date: str
+    today_date_format: str
+    today_times: dict[str, str]
+    day_length: str
+    error: str
+    generated: str
+    subscription_url: str
+    copy_url: str
+    webcal_url: str
+    copy_webcal: str
+    google_heading: str
+    google_link: str
+    google_steps: list[str]
+    auth_heading: str
+    auth_text: str
+    use_location: str
+    search_address: str
+    address: str
+    address_placeholder: str
+    search_location: str
+    password: str
+    location: str
+    location_placeholder: str
+    location_help: str
+    latitude: str
+    latitude_help: str
+    longitude: str
+    longitude_help: str
+    timezone: str
+    event_types: str
+    event_types_help: str
+    types: dict[str, str]
+    rise_offset: str
+    set_offset: str
+    offset_help: str
+    note: str
+    note_placeholder: str
+    submit: str
+    footer: list[tuple[str, str]]
+    js: dict[str, str]
+
+
+class Strings(TypedDict):
+    calendar_prodid: str
+    calendar_name_format: str
+    calendar_description_format: str
+    place_named: str
+    place_coordinates: str
+    formats: dict[str, str]
+    none: str
+    units: dict[str, str]
+    date_range: str
+    range_join: str
+    summaries: dict[str, str]
+    week_titles: dict[str, str]
+    names: dict[str, str]
+    instants: dict[str, str]
+    sequence: dict[str, str]
+    headers: dict[str, str]
+    schedule: dict[str, str]
+    labels: dict[str, str]
+    clock: dict[str, str]
+    year: dict[str, dict[str, str]]
+    light: dict[str, str]
+    comparisons: dict[str, str]
+    about: dict[str, dict[str, str]]
+    about_dynamic: dict[str, str]
+    no_crossing: dict[str, str]
+    supplemental: dict[str, str]
+    schedule_labels: dict[str, str]
+    # Northern-hemisphere emoji, southern-hemisphere emoji, name
+    moon_phases: dict[str, tuple[str, str, str]]
+    moon_phase_unknown: tuple[str, str, str]
+    moon: MoonStrings
+    seasons: dict[str, dict[str, str]]
+    season_text: SeasonText
+    day_facts: DayFacts
+    location_facts: dict[str, str]
+    errors: dict[str, str]
+    web: WebStrings
+
+
+STRINGS: Strings = {
     # Calendar metadata
     "calendar_prodid": "-//Sun & Twilight Calendar//EN",
     "calendar_name_format": "🌅 %s · Sun & Twilight",  # %s = location name, or coordinates
@@ -281,16 +451,16 @@ STRINGS = {
     # names, keyed by the names the astronomy code uses. South of the equator the
     # moon looks mirrored: a waxing crescent is lit on the left.
     "moon_phases": {
-        "New Moon": ["🌑", "🌑", "New Moon"],
-        "Waxing Crescent": ["🌒", "🌘", "Waxing Crescent"],
-        "First Quarter": ["🌓", "🌗", "First Quarter"],
-        "Waxing Gibbous": ["🌔", "🌖", "Waxing Gibbous"],
-        "Full Moon": ["🌕", "🌕", "Full Moon"],
-        "Waning Gibbous": ["🌖", "🌔", "Waning Gibbous"],
-        "Last Quarter": ["🌗", "🌓", "Last Quarter"],
-        "Waning Crescent": ["🌘", "🌒", "Waning Crescent"],
+        "New Moon": ("🌑", "🌑", "New Moon"),
+        "Waxing Crescent": ("🌒", "🌘", "Waxing Crescent"),
+        "First Quarter": ("🌓", "🌗", "First Quarter"),
+        "Waxing Gibbous": ("🌔", "🌖", "Waxing Gibbous"),
+        "Full Moon": ("🌕", "🌕", "Full Moon"),
+        "Waning Gibbous": ("🌖", "🌔", "Waning Gibbous"),
+        "Last Quarter": ("🌗", "🌓", "Last Quarter"),
+        "Waning Crescent": ("🌘", "🌒", "Waning Crescent"),
     },
-    "moon_phase_unknown": ["🌙", "🌙", "Moon"],
+    "moon_phase_unknown": ("🌙", "🌙", "Moon"),
     # Moon
     "moon": {
         "current": "%s, %d%% lit",  # phase name, illumination
@@ -434,9 +604,9 @@ STRINGS = {
     },
     # Responses of the HTTP entry point
     "errors": {
-        "missing_token": "Error: Please set AUTH_TOKEN via environment variable or config/config.php",
-        "invalid_token": "Invalid authentication token",
-        "invalid_password": "Invalid password",
+        "missing_token": "Error: Please set AUTH_TOKEN via environment variable or config/config.php",  # nosec B105: an error message, not a credential
+        "invalid_token": "Invalid authentication token",  # nosec B105: an error message, not a credential
+        "invalid_password": "Invalid password",  # nosec B105: an error message, not a credential
     },
     # Web page for generating subscription URLs
     "web": {
@@ -480,7 +650,7 @@ STRINGS = {
         "address": "Address",
         "address_placeholder": "e.g. Rome, Italy",
         "search_location": "Search",
-        "password": "Password",
+        "password": "Password",  # nosec B105: a form label, not a credential
         "location": "Location name",
         "location_placeholder": "e.g. Rome",
         "location_help": 'Calendar name: "🌅 Your location · Sun & Twilight"',
@@ -507,22 +677,22 @@ STRINGS = {
         "note_placeholder": "Added to daylight and night events",
         "submit": "Generate subscription URL",
         "footer": [
-            [
+            (
                 "How it is calculated",
                 "Sunrise and sunset come from the NREL Solar Position Algorithm, which allows "
                 "for refraction; twilight and the moon from standard astronomical formulas.",
-            ],
-            [
+            ),
+            (
                 "Twilight",
                 "Civil: from 6° below the horizon to sunrise or sunset, enough light to be outdoors "
                 "without lamps. Nautical: 6° to 12° below, the horizon visible at sea while bright stars are "
                 "out. Astronomical: 12° to 18° below, the last trace of sunlight before full darkness.",
-            ],
-            [
+            ),
+            (
                 "Tip",
                 "Choose only Daylight & night for an uncluttered calendar: the Daylight event still lists "
                 "every twilight time.",
-            ],
+            ),
         ],
         # Messages shown by assets/script.js
         "js": {
@@ -538,7 +708,7 @@ STRINGS = {
             "unavailable": "location unavailable.",
             "timeout": "the request timed out.",
             "select_type": "Please select at least one event type.",
-            "enter_password": "Please enter the password.",
+            "enter_password": "Please enter the password.",  # nosec B105: a prompt, not a credential
             "copied": "✓ Copied",
             "copy_failed": "Failed to copy: ",
         },

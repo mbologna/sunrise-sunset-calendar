@@ -31,6 +31,7 @@ def test_sunrise_hour_angle_for_sunrise() -> None:
     angle = -0.833  # Standard sunrise/sunset
 
     ha = sunrise_hour_angle(lat, decl, angle)
+    assert ha is not None
 
     # At equinox, sunrise should be around 6 hours before noon (90°)
     # Hour angle in degrees should be close to 90°
@@ -44,6 +45,8 @@ def test_sunrise_hour_angle_for_twilight() -> None:
 
     ha_sunrise = sunrise_hour_angle(lat, decl, -0.833)
     ha_civil = sunrise_hour_angle(lat, decl, -6.0)
+    assert ha_sunrise is not None
+    assert ha_civil is not None
 
     # Civil twilight starts before sunrise (larger hour angle)
     assert ha_civil > ha_sunrise, "Civil twilight hour angle > sunrise hour angle"
@@ -167,16 +170,16 @@ def test_equinox_day_length() -> None:
 
     # Test various latitudes
     locations = [
-        {"lat": 0, "name": "Equator"},
-        {"lat": 30, "name": "30°N"},
-        {"lat": 45, "name": "45°N"},
-        {"lat": 60, "name": "60°N"},
+        (0.0, "Equator"),
+        (30.0, "30°N"),
+        (45.0, "45°N"),
+        (60.0, "60°N"),
     ]
 
-    for loc in locations:
-        result = calculate_sun_times(*equinox_date, float(loc["lat"]), 0.0, 0)
+    for lat, name in locations:
+        result = calculate_sun_times(*equinox_date, lat, 0.0, 0)
 
-        assert_in_range(result["daylength_h"], 11.5, 12.5, f"{loc['name']} day length at equinox")
+        assert_in_range(result["daylength_h"], 11.5, 12.5, f"{name} day length at equinox")
 
 
 def test_leap_year_february_29() -> None:

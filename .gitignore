@@ -1,4 +1,4 @@
-# Python
+.env
 __pycache__/
 *.pyc
 .venv/
@@ -6,8 +6,8 @@ __pycache__/
 .ruff_cache/
 .coverage
 coverage.xml
-htmlcov/
 dist/
+htmlcov/
 
 # IDE and editor
 .vscode/
@@ -21,4 +21,3 @@ Thumbs.db
 
 # Claude Code settings
 .claude/
-CLAUDE.md

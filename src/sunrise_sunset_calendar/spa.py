@@ -26,6 +26,7 @@ image, which include this file, are therefore distributed under the GPL's terms.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from functools import lru_cache
 
 _PI = math.pi
@@ -67,25 +68,29 @@ def _limit_to(degrees: float, limit: float) -> float:
     return limited
 
 
-def _polynomial(x: float, coeffs) -> float:
-    total = 0
+def _polynomial(x: float, coeffs: Sequence[float]) -> float:
+    total: float = 0
     for index, v in enumerate(coeffs):
         total = total + v * math.pow(x, index)
     return total
 
 
-def _earth_terms(jme: float, table) -> list[float]:
-    sums = []
+# Periodic terms (A, B, C) of each power of the Julian ephemeris millennium
+_TermTable = Sequence[Sequence[tuple[float, float, float]]]
+
+
+def _earth_terms(jme: float, table: _TermTable) -> list[float]:
+    sums: list[float] = []
     cos = math.cos
     for terms in table:
-        total = 0
+        total: float = 0
         for a, b, c in terms:
             total = total + a * cos(b + c * jme)
         sums.append(total)
     return sums
 
 
-def _earth_poly(jme: float, table) -> float:
+def _earth_poly(jme: float, table: _TermTable) -> float:
     return _polynomial(jme, _earth_terms(jme, table)) / 1e8
 
 
@@ -129,11 +134,11 @@ def geocentric(jd: float) -> tuple[float, float, float, float, float, float]:
     x = [_polynomial(jce, NUTATION_COEFFS[i]) for i in range(5)]
     sin = math.sin
     cos = math.cos
-    dpsi_sum = 0
-    deps_sum = 0
+    dpsi_sum: float = 0
+    deps_sum: float = 0
     for idx, (a, b, c, d) in enumerate(COEFF_PSI_EPSILON):
         terms = SIN_TERMS[idx]
-        xy = 0
+        xy: float = 0
         for j in range(5):
             xy = xy + x[j] * terms[j]
         arg = _to_radians(xy)

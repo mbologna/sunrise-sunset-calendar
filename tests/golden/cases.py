@@ -91,7 +91,10 @@ def slug(name: str) -> str:
     return "".join(c if c.isalnum() else "-" for c in name.lower()).strip("-")
 
 
-def feed_query(lat: float, lon: float, zone: str, location: str = "", flags=ALL_FLAGS, **extra: str) -> str:
+def feed_query(
+    lat: float, lon: float, zone: str, location: str = "", flags: dict[str, str] = ALL_FLAGS, /, **extra: str
+) -> str:
+    """A feed query; extra holds more query parameters, so the named ones are positional only."""
     params = {"feed": "1", "token": TOKEN, "lat": repr(lat), "lon": repr(lon), "zone": zone}
     if location:
         params["location"] = location

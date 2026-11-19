@@ -1,4 +1,5 @@
-# uv for the image build: installed with pip --require-hashes in the Dockerfile.
+# uv for the image build and, on GitLab, ci-templates' python-test job:
+# installed with pip --require-hashes in both.
 # From PyPI rather than the ghcr.io/astral-sh/uv image, because PyPI gives
 # Renovate a release date: a new uv waits out the age gate and automerges.
 uv==0.13.7 \

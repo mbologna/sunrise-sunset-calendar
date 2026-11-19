@@ -1,10 +1,17 @@
 [project]
 name = "sunrise-sunset-calendar"
+# A placeholder, never bumped: a release is the git tag vX.Y.Z that
+# auto-release creates, and the image built from that tag carries the
+# version in its org.opencontainers.image.version label. Nothing reads this
+# field at run time.
 version = "0.0.0"
-description = "iCalendar feed of sunrise, sunset, twilight and the moon for any location, computed with the NREL Solar Position Algorithm"
+description = "iCalendar feed of sunrise, sunset, twilight and moon phases for any location, computed with the NREL Solar Position Algorithm"
 readme = "README.md"
 license = "MIT AND GPL-3.0-only"
 license-files = ["LICENSE", "LICENSES/GPL-3.0-only.txt"]
+authors = [{ name = "Michele Bologna" }]
+# The Python the Dockerfile's base image ships; Renovate moves the image,
+# a person moves this floor with the next minor.
 requires-python = ">=3.15"
 dependencies = [
     # Pinned to the tz database release the PHP version shipped (2026e), so
@@ -16,22 +23,23 @@ dependencies = [
 [project.scripts]
 sunrise-sunset-calendar = "sunrise_sunset_calendar.app:main"
 
+[build-system]
+requires = ["uv_build>=0.13,<0.14"]
+build-backend = "uv_build"
+
 [dependency-groups]
 dev = [
+    "pre-commit>=4.5.1",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "ruff>=0.17.0",
 ]
 
-[build-system]
-requires = ["uv_build>=0.13.7,<0.14"]
-build-backend = "uv_build"
-
 [tool.uv]
 required-version = ">=0.12.12"
-# Resolve only releases at least 7 days old (supply-chain cooldown). For an
-# urgent fix, temporarily add exclude-newer-package = { <name> = false } and
-# run `uv lock --upgrade-package <name>`.
+# Resolve only releases at least 7 days old, so a compromised release has
+# time to be caught and yanked before it lands in uv.lock. For an urgent
+# fix, add `<name> = false` to exclude-newer-package and run `uv lock`.
 exclude-newer = "7 days"
 
 [tool.ruff]
@@ -39,8 +47,20 @@ line-length = 120
 target-version = "py315"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B", "UP", "S", "C4", "SIM", "RUF"]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "S",   # flake8-bandit
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific rules
+]
 ignore = [
+    "E501",  # line too long (the formatter handles it)
     # The strings are prose: typographic quotes, dashes and the multiplication sign are intended
     "RUF001",
     "RUF002",
@@ -52,15 +72,32 @@ ignore = [
 # Literal ports of PHP's C state machines: their branch structure is kept as is
 "src/sunrise_sunset_calendar/php.py" = ["SIM102"]
 
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+# The pre-commit hook passes mypy only the staged files: without this, a
+# commit that touches only tests checks them against an unresolved package
+# (every import Any) and leaves a cache that fails the next full run.
+mypy_path = "src"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-v --strict-markers"
+
+[tool.bandit]
+exclude_dirs = ["tests"]
 
 [tool.coverage.run]
 source = ["sunrise_sunset_calendar"]
 branch = true
+# `python -m sunrise_sunset_calendar` only calls main().
+omit = ["*/__main__.py"]
 
 [tool.coverage.report]
+# CI fails below this total (python-ci and ci-templates' python-test read
+# it). Raise it with the tests; don't lower it to merge.
 fail_under = 80
 show_missing = true
 skip_covered = true

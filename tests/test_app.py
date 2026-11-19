@@ -9,13 +9,16 @@ import pytest
 
 from sunrise_sunset_calendar import app as app_module
 from sunrise_sunset_calendar.app import Config, make_app
+from tests.helpers import StartResponse
 
 TOKEN = b"app-test-token"
 NOW = 1774778400  # 2026-03-29 10:00 UTC
 SECURITY = [("X-Content-Type-Options", "nosniff"), ("X-Frame-Options", "DENY"), ("Referrer-Policy", "no-referrer")]
 
 
-def call(config: Config, path: str = "/", query: str = "", method: str = "GET", body: bytes = b"", **extra):
+def call(
+    config: Config, path: str = "/", query: str = "", method: str = "GET", body: bytes = b"", **extra: str
+) -> tuple[str, list[tuple[str, str]], bytes]:
     application = make_app(config, clock=lambda: NOW)
     environ = {
         "REQUEST_METHOD": method,
@@ -26,9 +29,10 @@ def call(config: Config, path: str = "/", query: str = "", method: str = "GET", 
         "CONTENT_LENGTH": str(len(body)),
         **extra,
     }
-    result: list = []
-    output = b"".join(application(environ, lambda status, headers: result.extend([status, headers])))
-    return result[0], result[1], output
+    start_response = StartResponse()
+    output = b"".join(application(environ, start_response))
+    status, headers = start_response.calls[0]
+    return status, headers, output
 
 
 @pytest.fixture
@@ -37,7 +41,7 @@ def config() -> Config:
 
 
 @pytest.mark.parametrize("token", [None, b"", b"CHANGE_ME_TO_A_RANDOM_STRING"])
-def test_without_a_token_every_request_fails(token) -> None:
+def test_without_a_token_every_request_fails(token: bytes | None) -> None:
     status, headers, body = call(Config(auth_token=token), "/health")
     assert status == "500 Internal Server Error"
     assert body == b"Error: Please set AUTH_TOKEN via environment variable or config/config.php"
@@ -126,7 +130,7 @@ def test_other_paths_are_not_found(config: Config, path: str) -> None:
     assert call(config, path)[0] == "404 Not Found"
 
 
-def form_post(config: Config, body: bytes, content_type: str, **extra):
+def form_post(config: Config, body: bytes, content_type: str, **extra: str) -> tuple[str, list[tuple[str, str]], bytes]:
     return call(config, method="POST", body=body, CONTENT_TYPE=content_type, **extra)
 
 
@@ -209,9 +213,9 @@ def test_config_from_env() -> None:
 
 
 def test_main_serves_on_port(monkeypatch: pytest.MonkeyPatch) -> None:
-    served = {}
+    served: dict[str, object] = {}
 
-    def serve(application, **kwargs):
+    def serve(application: object, **kwargs: object) -> None:
         served.update(kwargs, app=application)
 
     monkeypatch.setattr("waitress.serve", serve)

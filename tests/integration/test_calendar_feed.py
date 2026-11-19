@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 
@@ -14,28 +16,28 @@ from tests.helpers import date_sun_info_sunrise, ical_timestamp
 
 ALL_TYPES = {"civil": True, "nautical": True, "astro": True, "daylight": True}
 
-DEFAULTS = {
-    "lat": 41.9028,
-    "lon": 12.4964,
-    "timezone": "Europe/Rome",
-    "location": "Rome",
-    "description": "",
-    "rise_offset": 0,
-    "set_offset": 0,
-    "enabled": ALL_TYPES,
-    "past_days": 0,
-    "window_days": 365,
-    "refresh_seconds": 86400,
-    "today": "2026-10-15",
-}
+DEFAULTS = Options(
+    lat=41.9028,
+    lon=12.4964,
+    timezone="Europe/Rome",
+    location="Rome",
+    description="",
+    rise_offset=0,
+    set_offset=0,
+    enabled=ALL_TYPES,
+    past_days=0,
+    window_days=365,
+    refresh_seconds=86400,
+    today="2026-10-15",
+)
 
 # PHP's trim() characters
 _TRIM = " \t\n\r\0\x0b"
 
 
-def feed(**overrides) -> str:
+def feed(**overrides: Any) -> str:
     """The feed for the default options, with overrides replacing them."""
-    return generate_calendar(Options(**(DEFAULTS | overrides)))
+    return generate_calendar(dataclasses.replace(DEFAULTS, **overrides))
 
 
 def events(ics: str) -> list[dict[str, str]]:
@@ -493,7 +495,7 @@ def test_night_gives_the_moonless_window() -> None:
 
 def test_moon_emoji_is_mirrored_south_of_the_equator() -> None:
     # Waxing crescent on Nov 15, 2026: lit on the right from Rome, on the left from Sydney
-    def night(**place) -> dict[str, str]:
+    def night(**place: float | str) -> dict[str, str]:
         return events_of_type(feed(**place, today="2026-11-15", window_days=0), "night")[0]
 
     rome = night()

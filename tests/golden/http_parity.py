@@ -18,6 +18,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from email.message import Message
 
 PHP_IMAGE = (
     "ghcr.io/mbologna/sunrise-sunset-calendar:sha-b47c648"
@@ -69,7 +70,7 @@ def run(image: str, port: int, env: dict[str, str]) -> str:
     return subprocess.run([*args, image], check=True, capture_output=True, text=True).stdout.strip()
 
 
-def fetch(port: int, method: str, path: str, body: str | None):
+def fetch(port: int, method: str, path: str, body: str | None) -> tuple[int, Message, bytes]:
     data = body.encode() if body is not None else None
     request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=data, method=method)
     request.add_header("Host", "calendar.example")

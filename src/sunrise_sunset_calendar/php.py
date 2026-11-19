@@ -14,6 +14,7 @@ import calendar as _calendar
 import math
 import re
 import time as _time
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, date, datetime, timedelta
@@ -76,9 +77,9 @@ def intdiv(a: int, b: int) -> int:
     return q if (a >= 0) == (b >= 0) else -q
 
 
-def array_sum(values) -> float:
+def array_sum(values: Iterable[float]) -> float:
     """PHP array_sum(): plain left-to-right addition (Python's sum() compensates)."""
-    total = 0
+    total: float = 0
     for v in values:
         total = total + v
     return total
@@ -114,7 +115,7 @@ def float_to_str(value: float) -> str:
     return f"{sign}{digits[:decpt]}.{digits[decpt:]}"
 
 
-def to_str(value) -> str:
+def to_str(value: object) -> str:
     """PHP string conversion of a scalar."""
     if isinstance(value, bool):
         return "1" if value else ""
@@ -125,7 +126,7 @@ def to_str(value) -> str:
     return str(value)
 
 
-def to_int(value) -> int:
+def to_int(value: float) -> int:
     """PHP (int) conversion of an int or float (truncation)."""
     if isinstance(value, float):
         if not math.isfinite(value) or not (-(2.0**63) <= value < 2.0**63):
@@ -640,7 +641,7 @@ def default_timezone() -> str:
 
 
 @contextmanager
-def default_timezone_set(name: str):
+def default_timezone_set(name: str) -> Iterator[None]:
     """date_default_timezone_set() for the duration of a block."""
     token = _default_tz.set(name)
     try:
@@ -650,7 +651,7 @@ def default_timezone_set(name: str):
 
 
 @contextmanager
-def frozen_time(now: int):
+def frozen_time(now: int) -> Iterator[None]:
     """The moment time() reports for the duration of a block (mktime() depends on it)."""
     token = _now.set(now)
     try:
@@ -664,14 +665,22 @@ def php_time() -> int:
     return int(_time.time()) if now is None else now
 
 
-def _tz():
+def _tz() -> ZoneInfo:
     return zone(_default_tz.get())
 
 
 def _offset_info(ts: int, tz: ZoneInfo) -> tuple[int, bool, str | None]:
     """UTC offset, DST flag and abbreviation in effect at a UTC instant."""
     dt = datetime.fromtimestamp(ts, tz)
-    return int(dt.utcoffset().total_seconds()), bool(dt.dst()), dt.tzname()
+    return _utc_offset(dt), bool(dt.dst()), dt.tzname()
+
+
+def _utc_offset(dt: datetime) -> int:
+    """The UTC offset of an aware datetime, in seconds."""
+    offset = dt.utcoffset()
+    if offset is None:
+        raise ValueError(f"{dt} has no time zone")
+    return int(offset.total_seconds())
 
 
 def _transition_time(ts: int, tz: ZoneInfo) -> int | None:
@@ -848,7 +857,7 @@ class LocalDate:
 
     __slots__ = ("dst", "ts", "tz", "wall")
 
-    def __init__(self, wall: datetime, tz: ZoneInfo, dst: bool = False, have_zone: bool = False):
+    def __init__(self, wall: datetime, tz: ZoneInfo, dst: bool = False, have_zone: bool = False) -> None:
         self.tz = tz
         self.ts = resolve(wall, tz, dst, have_zone)
         self.wall = wall_clock(self.ts, tz)
@@ -881,7 +890,7 @@ class LocalDate:
         return LocalDate(self.wall.replace(hour=hour, minute=minute, second=0, microsecond=0), self.tz, self.dst, True)
 
     def offset(self) -> int:
-        return int(datetime.fromtimestamp(self.ts, self.tz).utcoffset().total_seconds())
+        return _utc_offset(datetime.fromtimestamp(self.ts, self.tz))
 
     def format(self, fmt: str) -> str:
         return format_datetime(self.wall, fmt)

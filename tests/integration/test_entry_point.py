@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 import pytest
 
 from sunrise_sunset_calendar import app
+from tests.helpers import StartResponse
 
 TOKEN = b"entry-point-test-token"
 
@@ -25,16 +26,13 @@ def request(query: str, path: str = "/") -> str:
         "QUERY_STRING": query,
         "wsgi.input": io.BytesIO(b""),
     }
-    statuses = []
-
-    def start_response(status, headers):
-        statuses.append(status)
+    start_response = StartResponse()
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         body = b"".join(application(environ, start_response))
 
-    assert len(statuses) == 1
+    assert len(start_response.calls) == 1
     assert caught == [], "No warnings or errors"
 
     return body.decode("utf-8")

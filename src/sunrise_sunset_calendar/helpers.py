@@ -7,6 +7,8 @@ text of each event description.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
+from typing import TypedDict
 
 from . import cache
 from .astronomy import calculate_equinox_solstice, moon_phases_between
@@ -22,9 +24,47 @@ from .php import (
     sprintf,
     strtolower,
 )
-from .strings import STRINGS
+from .strings import STRINGS, DayFactKind
 
 S = STRINGS
+
+# A calendar period: start, end, and the instants that bound it ("sunrise", "solar_noon", ...)
+Span = tuple[int, int, str, str]
+
+
+class Carriers(TypedDict):
+    """The twilight events that carry the Daylight and Night blocks, when those aren't events."""
+
+    morning: str | None
+    evening: str | None
+
+
+class DaylightInfo(TypedDict):
+    seconds: int
+    change: int
+    # Both None when sunrise or sunset is missing today or yesterday
+    sunrise_shift: int | None
+    sunset_shift: int | None
+
+
+class NightInfo(TypedDict):
+    seconds: int
+    comparison: str | None
+    moon: dict
+
+
+class DayContext(TypedDict):
+    """One day of the feed, as the event descriptions read it."""
+
+    ev: dict
+    spans: dict[str, Span | None]
+    enabled: dict[str, bool]
+    year: dict
+    carriers: Carriers
+    spans_tomorrow: dict[str, Span | None] | None
+    daylight: DaylightInfo
+    night: NightInfo
+
 
 # ============================================================================
 # DURATIONS
@@ -174,10 +214,8 @@ def format_clock_shift(shift_seconds: int, alone: bool = False) -> str:
 def schedule_entry(start: int | None, end: int | None, label: str, note: str | None) -> str:
     """One schedule entry, time first, then an optional indented note."""
     texts = S["schedule"]
-    if start is None and end is None:
-        when = texts["all_day"]
-    elif start is None:
-        when = sprintf(texts["until"], format_local(end))
+    if start is None:
+        when = texts["all_day"] if end is None else sprintf(texts["until"], format_local(end))
     elif end is None:
         when = sprintf(texts["from"], format_local(start))
     else:
@@ -188,7 +226,7 @@ def schedule_entry(start: int | None, end: int | None, label: str, note: str | N
     return line + "\n" + ("" if note is None else f"  {note}\n")
 
 
-def format_schedule_span(label: str, span, note: str) -> str:
+def format_schedule_span(label: str, span: Span, note: str) -> str:
     """One twilight as a schedule entry."""
     return schedule_entry(span[0], span[1], label, note)
 
@@ -361,7 +399,7 @@ _TWILIGHT_PROFILE_FIELDS = {
 }
 
 
-def _pick_first(values: list, target) -> int:
+def _pick_first(values: list[float], target: float) -> int:
     for i, v in enumerate(values):
         if v == target:
             return i
@@ -379,7 +417,7 @@ def year_summary(lat: float, lon: float, year: int, utc_offset: float) -> dict:
     timestamps = [d["timestamp"] for d in days]
     lengths = [d["daylength_h"] for d in days]
 
-    def pick(values: list, choose) -> list:
+    def pick(values: list[float], choose: Callable[[list[float]], float]) -> list[float]:
         i = _pick_first(values, choose(values))
         return [values[i], timestamps[i]]
 
@@ -389,7 +427,7 @@ def year_summary(lat: float, lon: float, year: int, utc_offset: float) -> dict:
     white_nights = [d["astro_begin_frac"] is None and abs(lat + d["declination_deg"]) - 90 > -18 for d in days]
 
     # Twilight lengths by day, with the same solar noon and midnight stand-ins as solar_spans()
-    bands = {}
+    bands: dict[str, dict[str, list[int]] | None] = {}
     for band, (deep, shallow) in _TWILIGHT_PROFILE_FIELDS.items():
         info = _TWILIGHT_BANDS[band]
         deep_angle, high_angle, morning = info["deep"], info["high"], info["morning"]
@@ -531,7 +569,7 @@ _TURN = re.compile(r"^(sunrise|sunset)_(earliest|latest)$")
 def day_fact_text(fact: dict, ev: dict, year: dict) -> tuple[str, str]:
     """Title and description of a day fact from year_day_facts()."""
     texts = S["day_facts"]
-    kind = fact["kind"]
+    kind: DayFactKind = fact["kind"]
 
     m = _TURN.match(kind)
     if m:
@@ -661,13 +699,13 @@ def season_description(event: dict, ev: dict, year: dict, lat: float) -> str:
 # ============================================================================
 
 
-def missing_boundaries(key: str, span) -> tuple[bool, bool]:
+def missing_boundaries(key: str, span: Span) -> tuple[bool, bool]:
     """Which of a twilight's boundary angles the sun fails to reach: (deep missing, shallow missing)."""
     morning = _TWILIGHT_BANDS[key]["morning"]
     return span[2 if morning else 3] == "solar_midnight", span[3 if morning else 2] == "solar_noon"
 
 
-def twilight_details(key: str, span, ev: dict, year: dict, clock: str | None = None) -> str:
+def twilight_details(key: str, span: Span, ev: dict, year: dict, clock: str | None = None) -> str:
     """The data lines of a twilight event: its length within the year's range, and the sun's path."""
     labels = S["labels"]
     length = format_duration(span[1] - span[0])
@@ -730,9 +768,9 @@ def format_light_block(ev: dict) -> str:
     texts = S["light"]
     groups: dict[str, list[str]] = {"morning": [], "midday": [], "evening": []}
     for group, kind, start, end in grouped_light_periods(ev):
-        if start is None and end is None:
-            return texts["all_day"]
         if start is None:
+            if end is None:
+                return texts["all_day"]
             when = sprintf(texts["until"], format_local(end))
         elif end is None:
             when = sprintf(texts["from"], format_local(start))
@@ -755,7 +793,7 @@ def light_entries(ev: dict, groups: list[str]) -> list[tuple[int, str]]:
     return entries
 
 
-def format_sequence(key: str, spans: dict) -> str:
+def format_sequence(key: str, spans: dict[str, Span | None]) -> str:
     """Today's sequence with the current twilight bracketed: "Night → [Astronomical] → …"."""
     texts = S["sequence"]
     morning = key.startswith("morning")
@@ -764,20 +802,20 @@ def format_sequence(key: str, spans: dict) -> str:
         if morning
         else ("evening_civil", "evening_nautical", "evening_astronomical")
     )
-    present = [k for k in keys if spans[k] is not None]
-    first = spans[present[0]]
-    last = spans[present[-1]]
+    present = [(k, span) for k in keys if (span := spans[k]) is not None]
+    first = present[0][1]
+    last = present[-1][1]
     if morning:
         opening = "solar_midnight" if first[2] == "solar_midnight" else "night"
         closing = "solar_noon" if last[3] == "solar_noon" else "sunrise"
     else:
         opening = "solar_noon" if first[2] == "solar_noon" else "sunset"
         closing = "solar_midnight" if last[3] == "solar_midnight" else "night"
-    items = [f"[{texts[k]}]" if k == key else texts[k] for k in present]
+    items = [f"[{texts[k]}]" if k == key else texts[k] for k, _ in present]
     return " → ".join([texts[opening], *items, texts[closing]])
 
 
-def twilight_path(key: str, span, ev: dict) -> str | None:
+def twilight_path(key: str, span: Span, ev: dict) -> str | None:
     """The sun's path through a twilight on a day it misses one of the boundaries, or None."""
     deep_missing, high_missing = missing_boundaries(key, span)
     if not deep_missing and not high_missing:
@@ -814,7 +852,7 @@ def twilight_path(key: str, span, ev: dict) -> str | None:
     return texts["polar_night"] + lcfirst(path) if civil and high_missing else path
 
 
-def twilight_about(key: str, span, spans: dict) -> str:
+def twilight_about(key: str, span: Span, spans: dict[str, Span | None]) -> str:
     """The "About" section of a twilight: what is happening and what it is good for."""
     about = S["about"][key]
     deep_missing, high_missing = missing_boundaries(key, span)
@@ -834,7 +872,7 @@ def twilight_about(key: str, span, spans: dict) -> str:
     )
 
 
-def daylight_details(c: dict, with_clock: bool = True) -> str:
+def daylight_details(c: DayContext, with_clock: bool = True) -> str:
     """Daylight facts: how the day is changing, where the sun peaks, and where the day sits in the year."""
     ev = c["ev"]
     d = c["daylight"]
@@ -843,7 +881,7 @@ def daylight_details(c: dict, with_clock: bool = True) -> str:
 
     lines = [labels["midnight_sun"]] if ev["polar"] == "day" else []
     trend = format_comparison(d["change"], S["comparisons"]["yesterday"])
-    if with_clock and d["sunrise_shift"] is not None:
+    if with_clock and d["sunrise_shift"] is not None and d["sunset_shift"] is not None:
         trend += sprintf(labels["clock"], format_clock_shift(d["sunrise_shift"]), format_clock_shift(d["sunset_shift"]))
     lines.append(trend)
     if ev["polar"] == "day":
@@ -868,9 +906,11 @@ def daylight_details(c: dict, with_clock: bool = True) -> str:
     return "\n".join(lines) + "\n"
 
 
-def night_details(c: dict) -> str:
+def night_details(c: DayContext) -> str:
     """Night facts with the moon, shared by the Night event and the evening schedule."""
     span = c["spans"]["night"]
+    if span is None:
+        raise ValueError("night_details() needs a day with a night")
     n = c["night"]
     labels = S["labels"]
 
@@ -914,7 +954,7 @@ def night_about() -> str:
     return sprintf(S["headers"]["about"], S["names"]["night"]) + "\n" + S["about"]["night"]["text"]
 
 
-def build_dawn_supplemental(c: dict, key: str) -> str:
+def build_dawn_supplemental(c: DayContext, key: str) -> str:
     """The Today schedule: morning periods not subscribed to as events, in time order."""
     twilights = ("morning_astronomical", "morning_nautical", "morning_civil")
     carrier = c["carriers"]["morning"] == key
@@ -927,14 +967,14 @@ def build_dawn_supplemental(c: dict, key: str) -> str:
     return build_supplemental(c, "today", twilights, "daylight", carrier, light)
 
 
-def build_dusk_supplemental(c: dict, key: str) -> str:
+def build_dusk_supplemental(c: DayContext, key: str) -> str:
     """The evening schedule (counterpart of build_dawn_supplemental())."""
     twilights = ("evening_civil", "evening_nautical", "evening_astronomical")
     light = ["evening"] if key == "evening_civil" and not c["enabled"]["daylight"] else []
     return build_supplemental(c, "tonight", twilights, "night", c["carriers"]["evening"] == key, light)
 
 
-def build_twilight_schedule(c: dict, part: str, header: str | None = None) -> str:
+def build_twilight_schedule(c: DayContext, part: str, header: str | None = None) -> str:
     """Twilights for a calendar subscribed to no twilight events, on the event right before them."""
     enabled = c["enabled"]
     if enabled["civil"] or enabled["nautical"] or enabled["astro"]:
@@ -947,24 +987,30 @@ def build_twilight_schedule(c: dict, part: str, header: str | None = None) -> st
         keys = ("morning_astronomical", "morning_nautical", "morning_civil")
     info = ""
     for key in keys:
-        if spans.get(key) is not None:
-            info += format_schedule_span(S["summaries"][key], spans[key], S["supplemental"][key])
+        span = spans.get(key)
+        if span is not None:
+            info += format_schedule_span(S["summaries"][key], span, S["supplemental"][key])
     return "" if info == "" else "\n\n" + S["headers"][header or part] + "\n" + info.rstrip("\n")
 
 
 def build_supplemental(
-    c: dict, header: str, twilights, period: str, with_period: bool, light: list[str] | None = None
+    c: DayContext,
+    header: str,
+    twilights: tuple[str, ...],
+    period: str,
+    with_period: bool,
+    light: list[str] | None = None,
 ) -> str:
     """A schedule of times in order, then the details of the period it leads to as a section of its own."""
     entries = light_entries(c["ev"], light or [])
     for key in twilights:
-        if not c["enabled"][_TWILIGHT_BANDS[key]["flag"]] and c["spans"][key] is not None:
-            span = c["spans"][key]
+        span = c["spans"][key]
+        if not c["enabled"][_TWILIGHT_BANDS[key]["flag"]] and span is not None:
             entries.append((span[0], format_schedule_span(S["summaries"][key], span, S["supplemental"][key])))
 
     details = ""
-    if with_period and not c["enabled"]["daylight"] and c["spans"][period] is not None:
-        span = c["spans"][period]
+    span = c["spans"][period]
+    if with_period and not c["enabled"]["daylight"] and span is not None:
         entries.append((span[0], schedule_entry(span[0], span[1], S["schedule_labels"][period], None)))
         # With civil twilight subscribed, its morning and evening events say how sunrise and sunset moved
         text = daylight_details(c, not c["enabled"]["civil"]) if period == "daylight" else night_details(c)

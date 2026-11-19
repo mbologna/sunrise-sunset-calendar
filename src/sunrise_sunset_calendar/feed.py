@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from . import cache
 from .astronomy import get_accurate_moon_phase, moon_phases_between, moon_rise_set, sun_events
 from .helpers import (
+    DayContext,
+    Span,
     build_dawn_supplemental,
     build_dusk_supplemental,
     build_twilight_schedule,
@@ -73,7 +76,7 @@ class Options:
     now: int | None = None
 
 
-def solar_spans(ev: dict, nxt: dict) -> dict:
+def solar_spans(ev: dict, nxt: dict) -> dict[str, Span | None]:
     """Split one day into calendar periods, from morning astronomical twilight to night.
 
     When the sun never crosses one of a twilight's altitudes, solar noon or
@@ -89,7 +92,7 @@ def solar_spans(ev: dict, nxt: dict) -> dict:
         (0.0, ev["sunrise"], ev["sunset"], "sunrise", "sunset"),
     )
 
-    spans: dict = {}
+    spans: dict[str, Span | None] = {}
     for i, band in enumerate(("astronomical", "nautical", "civil")):
         low_alt, low_rise, low_set, low_dawn, low_dusk = crossings[i]
         high_alt, high_rise, high_set, high_dawn, high_dusk = crossings[i + 1]
@@ -112,7 +115,7 @@ def solar_spans(ev: dict, nxt: dict) -> dict:
                 "solar_midnight" if low_set is None else low_dusk,
             )
 
-    daylight = None
+    daylight: Span | None = None
     if ev["sunrise"] is not None and ev["sunset"] is not None:
         daylight = (ev["sunrise"], ev["sunset"], "sunrise", "sunset")
     elif ev["polar"] == "day":
@@ -208,13 +211,15 @@ def _render(o: Options, now: int) -> bytes:
     name = o.location if o.location not in ("", "0") else f"{float_to_str(lat)}, {float_to_str(lon)}"
 
     out = _Output()
-    out += [
-        f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:{S['calendar_prodid']}\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n",
-        ical_text_property("X-WR-CALNAME", sprintf(S["calendar_name_format"], name)),
-        ical_text_property("X-WR-CALDESC", calendar_description),
-        f"X-WR-TIMEZONE:{o.timezone}\r\n",
-        f"X-PUBLISHED-TTL:{refresh}\r\nREFRESH-INTERVAL;VALUE=DURATION:{refresh}\r\n",
-    ]
+    out.extend(
+        [
+            f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:{S['calendar_prodid']}\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n",
+            ical_text_property("X-WR-CALNAME", sprintf(S["calendar_name_format"], name)),
+            ical_text_property("X-WR-CALDESC", calendar_description),
+            f"X-WR-TIMEZONE:{o.timezone}\r\n",
+            f"X-PUBLISHED-TTL:{refresh}\r\nREFRESH-INTERVAL;VALUE=DURATION:{refresh}\r\n",
+        ]
+    )
 
     day_facts: dict[int, dict] = {}
     first = today.add_days(-o.past_days)
@@ -245,6 +250,7 @@ def _render(o: Options, now: int) -> bytes:
         def clock(ts: int) -> int:
             return ts - LocalDate.from_timestamp(ts, tz).set_time(0, 0).ts
 
+        clock_shifts: tuple[int, int] | tuple[None, None]
         if ev["sunrise"] and ev["sunset"] and prev["sunrise"] and prev["sunset"]:
             clock_shifts = (
                 clock(ev["sunrise"]) - clock(prev["sunrise"]),
@@ -263,10 +269,10 @@ def _render(o: Options, now: int) -> bytes:
 
         # The twilight nearest to daylight and to night carry those periods' blocks
         # when they aren't events of their own
-        def nearest(keys: tuple[str, ...], spans: dict = spans) -> str | None:
+        def nearest(keys: tuple[str, ...], spans: dict[str, Span | None] = spans) -> str | None:
             return next((k for k in keys if enabled[bands[k]["flag"]] and spans[k] is not None), None)
 
-        c = {
+        c: DayContext = {
             "ev": ev,
             "spans": spans,
             "enabled": enabled,
@@ -364,9 +370,9 @@ def _render(o: Options, now: int) -> bytes:
 
         # Twilights
         for key, band in bands.items():
-            if not enabled[band["flag"]] or spans[key] is None:
-                continue
             span = spans[key]
+            if not enabled[band["flag"]] or span is None:
+                continue
             offset = o.rise_offset if band["morning"] else o.set_offset
 
             # Without a Daylight event, the civil twilight that ends at sunrise or starts at
@@ -458,19 +464,21 @@ def _render(o: Options, now: int) -> bytes:
         day = day.add_days(1)
 
     out.append("END:VCALENDAR\r\n")
-    return b"".join(out)
+    return b"".join(out.parts)
 
 
-class _Output(list):
+class _Output:
     """Feed parts, each stored as UTF-8 bytes."""
 
-    def append(self, text: str) -> None:
-        super().append(text.encode("utf-8", "surrogateescape"))
+    def __init__(self) -> None:
+        self.parts: list[bytes] = []
 
-    def __iadd__(self, texts):
+    def append(self, text: str) -> None:
+        self.parts.append(text.encode("utf-8", "surrogateescape"))
+
+    def extend(self, texts: Iterable[str]) -> None:
         for text in texts:
             self.append(text)
-        return self
 
 
 def _clock_shift_alone(shift: int) -> str:

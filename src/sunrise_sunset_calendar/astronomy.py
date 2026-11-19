@@ -69,10 +69,10 @@ def calculate_sun_times(y: int, m: int, d: int, lat: float, lon: float, utc_offs
         sunset_frac = sunset_hours / 24.0
         daylength_h = sunset_hours - sunrise_hours
 
-    def begin(ha):
+    def begin(ha: float | None) -> float | None:
         return None if ha is None else solar_noon - ha / 360
 
-    def end(ha):
+    def end(ha: float | None) -> float | None:
         return None if ha is None else solar_noon + ha / 360
 
     ha_civil = sunrise_hour_angle(lat, decl, -6.0)
@@ -521,6 +521,7 @@ def jde_to_year(jde: float) -> int:
 
 def calculate_delta_t(year: int) -> float:
     """DeltaT (TD - UT) in seconds."""
+    t: float
     if 2005 <= year <= 2050:
         t = year - 2000
         return 62.92 + 0.32217 * t + 0.005589 * t * t
