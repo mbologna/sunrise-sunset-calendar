@@ -54,6 +54,9 @@ repos:
     rev: v2.15.1
     hooks:
       - id: hadolint
+        # Records the golden test corpus from the last PHP release; never
+        # built in CI or shipped, and changing it would change the recording.
+        exclude: ^tests/golden/generator/Dockerfile$
 
 # No commit-msg hook here: the commit rules (commitlint-config-mbologna) are
 # checked locally by the dotfiles' global commit-msg hook and in CI on every
