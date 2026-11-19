@@ -29,8 +29,6 @@ from .strings import STRINGS
 from .timezones import timezone_identifiers, timezone_set
 from .web import DEFAULT_LAT, DEFAULT_LAT_TEXT, DEFAULT_LON, DEFAULT_LON_TEXT, DEFAULT_TIMEZONE, render_page
 
-SCRIPT_NAME = "/sunrise-sunset-calendar.php"
-
 # Behind a proxy that serves the app under a path of another host
 # (feeds.michelebologna.net/sunrise-sunset-calendar/), the subscription URL
 # must name that host and path, not Cloud Run's. Malformed values are ignored.
@@ -185,7 +183,9 @@ def make_app(config: Config | None = None, clock=time.time):
             body = resources.files(__package__).joinpath("assets", filename).read_bytes()
             start_response("200 OK", [("Content-Type", content_type), ("Content-Length", str(len(body)))])
             return [b"" if method == "HEAD" else body]
-        if path not in ("/", SCRIPT_NAME) and not path.startswith(SCRIPT_NAME + "/"):
+        # The PHP release also answered at /sunrise-sunset-calendar.php; every
+        # subscription moved to /?feed=1 on feeds.michelebologna.net (2026-11-19).
+        if path != "/":
             body = b"Not Found"
             start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8")])
             return [body]
@@ -272,13 +272,7 @@ def make_app(config: Config | None = None, clock=time.time):
                     https = environ.get("HTTPS", "") == "on" or environ.get("HTTP_X_FORWARDED_PROTO", "") == "https"
                     host, prefix = public_location(environ)
                     subscription_url = (
-                        ("https" if https else "http")
-                        + "://"
-                        + host
-                        + prefix
-                        + SCRIPT_NAME
-                        + "?"
-                        + http_build_query(params)
+                        ("https" if https else "http") + "://" + host + prefix + "/?" + http_build_query(params)
                     )
                     webcal_url = re.sub(r"^https?://", "webcal://", subscription_url, count=1)
 

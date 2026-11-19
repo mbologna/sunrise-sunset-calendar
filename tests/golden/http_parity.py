@@ -48,10 +48,17 @@ REQUESTS = [
     ("GET", "/sunrise-sunset-calendar.php/extra/path", None),
 ]
 
-# Where the two servers legitimately differ
+# Where the two servers legitimately differ, by (method, path)
+GONE = {"status", "body", *HEADERS}  # /sunrise-sunset-calendar.php: 404 since 2026-11-19
 EXPECTED = {
     # The health check names its runtime ("php" became "python")
-    "/?health": {"body"},
+    ("GET", "/?health"): {"body"},
+    # The form's subscription URL: /?feed=1 instead of the .php script
+    ("POST", "/"): {"body"},
+    ("GET", "/sunrise-sunset-calendar.php"): GONE,
+    ("GET", f"/sunrise-sunset-calendar.php?feed=1&token={TOKEN}&lat=45.46&lon=9.19&zone=Europe/Milan&daynight=1"): GONE,
+    ("POST", "/sunrise-sunset-calendar.php"): GONE,
+    ("GET", "/sunrise-sunset-calendar.php/extra/path"): GONE,
 }
 
 
@@ -108,7 +115,7 @@ def main() -> int:
                     differences.add(header)
             if normalise(php[2]) != normalise(py[2]):
                 differences.add("body")
-            allowed = EXPECTED.get(path, set())
+            allowed = EXPECTED.get((method, path), set())
             for difference in sorted(differences):
                 tag = "expected" if difference in allowed else "UNEXPECTED"
                 unexpected += tag == "UNEXPECTED"

@@ -38,7 +38,7 @@ docker build -t sunrise-sunset-calendar .
 docker run -p 8080:8080 -e AUTH_TOKEN="$(openssl rand -hex 32)" sunrise-sunset-calendar
 ```
 
-The image runs as an unprivileged user, has no pip, and listens on `$PORT` (default 8080), so it runs unchanged on Cloud Run. It serves the page at `/` and `/sunrise-sunset-calendar.php`, the feed at either with `?feed=1`, and the page's CSS and JavaScript under `/assets/`; every other path is a 404. Behind a proxy that serves it under a path of another host, as `feeds.michelebologna.net/sunrise-sunset-calendar/` does, it builds subscription URLs from the `X-Forwarded-Host` and `X-Forwarded-Prefix` headers, ignoring malformed values.
+The image runs as an unprivileged user, has no pip, and listens on `$PORT` (default 8080), so it runs unchanged on Cloud Run. It serves the page at `/`, the feed at `/?feed=1`, and the page's CSS and JavaScript under `/assets/`; every other path is a 404. Behind a proxy that serves it under a path of another host, as `feeds.michelebologna.net/sunrise-sunset-calendar/` does, it builds subscription URLs from the `X-Forwarded-Host` and `X-Forwarded-Prefix` headers, ignoring malformed values. The PHP release's `/sunrise-sunset-calendar.php` path is gone since 2026-11-19.
 
 ## Configuration
 
@@ -57,7 +57,7 @@ The health check, `/?health`, returns `{"status":"ok","python":"<version>","time
 
 ## Feed URL parameters
 
-`https://example.com/sunrise-sunset-calendar.php?feed=1&token=TOKEN&lat=40.7128&lon=-74.0060&zone=America/New_York&daynight=1`
+`https://example.com/?feed=1&token=TOKEN&lat=40.7128&lon=-74.0060&zone=America/New_York&daynight=1`
 
 | Parameter | Required | Values |
 |-----------|----------|--------|

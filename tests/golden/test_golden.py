@@ -1,7 +1,8 @@
 """Replay the golden corpus: every response must match the PHP release byte for byte.
 
-Only DTSTAMP (when the feed was generated) and the health check's runtime
-and clock may differ.
+Only DTSTAMP (when the feed was generated), the health check's runtime and
+clock, and the subscription URL's path may differ: the PHP release built it on
+/sunrise-sunset-calendar.php, which this app no longer serves (2026-11-19).
 """
 
 from __future__ import annotations
@@ -23,6 +24,8 @@ from .cases import CASES, TOKEN, Case
 
 CORPUS = Path(__file__).parent / "corpus"
 DTSTAMP = re.compile(rb"^DTSTAMP:\d{8}T\d{6}Z\r$", re.M)
+# The form's subscription and webcal URLs, as the PHP release wrote them.
+PHP_SCRIPT_URL = re.compile(rb"((?:https?|webcal)://[^/\"<\s]*)/sunrise-sunset-calendar\.php\?")
 
 
 @cache
@@ -55,7 +58,7 @@ def request(case: Case) -> tuple[int, list[tuple[str, str]], bytes]:
     body = (case.body or "").encode("latin-1")
     environ = {
         "REQUEST_METHOD": "GET" if case.body is None else "POST",
-        "PATH_INFO": "/sunrise-sunset-calendar.php",
+        "PATH_INFO": "/",
         "QUERY_STRING": case.query,
         "HTTP_HOST": case.host,
         "wsgi.input": io.BytesIO(body),
@@ -82,4 +85,5 @@ def test_matches_php(case: Case) -> None:
         assert ours_json["status"] == php_json["status"] == "ok"
         assert abs(ours_json["timestamp"] - php_json["timestamp"]) < 120
         return
+    php_body = PHP_SCRIPT_URL.sub(rb"\1/?", php_body)
     assert DTSTAMP.sub(b"DTSTAMP", body) == DTSTAMP.sub(b"DTSTAMP", php_body)
