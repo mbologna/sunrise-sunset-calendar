@@ -30,6 +30,25 @@ from .timezones import timezone_identifiers, timezone_set
 from .web import DEFAULT_LAT, DEFAULT_LAT_TEXT, DEFAULT_LON, DEFAULT_LON_TEXT, DEFAULT_TIMEZONE, render_page
 
 SCRIPT_NAME = "/sunrise-sunset-calendar.php"
+
+# Behind a proxy that serves the app under a path of another host
+# (feeds.michelebologna.net/sunrise-sunset-calendar/), the subscription URL
+# must name that host and path, not Cloud Run's. Malformed values are ignored.
+FORWARDED_HOST = re.compile(r"[A-Za-z0-9.-]+(:[0-9]{1,5})?")
+FORWARDED_PREFIX = re.compile(r"(/[A-Za-z0-9._~-]+)+")
+
+
+def public_location(environ: dict) -> tuple[str, str]:
+    """The host and path prefix the client used: X-Forwarded-Host and -Prefix when set, else the Host header."""
+    forwarded = environ.get("HTTP_X_FORWARDED_HOST", "").split(",")[0].strip()
+    if FORWARDED_HOST.fullmatch(forwarded):
+        host = forwarded
+    else:
+        host = environ.get("HTTP_HOST", "").encode("latin-1").decode("utf-8", "replace")
+    prefix = environ.get("HTTP_X_FORWARDED_PREFIX", "").strip().rstrip("/")
+    return host, prefix if FORWARDED_PREFIX.fullmatch(prefix) else ""
+
+
 PLACEHOLDER_TOKEN = b"CHANGE_ME_TO_A_RANDOM_STRING"
 SECURITY_HEADERS = [
     ("X-Content-Type-Options", "nosniff"),
@@ -251,9 +270,15 @@ def make_app(config: Config | None = None, clock=time.time):
                     ]
                     params += [(kind, b"1") for kind in ("civil", "nautical", "astro", "daynight") if kind in form]
                     https = environ.get("HTTPS", "") == "on" or environ.get("HTTP_X_FORWARDED_PROTO", "") == "https"
-                    host = environ.get("HTTP_HOST", "").encode("latin-1").decode("utf-8", "replace")
+                    host, prefix = public_location(environ)
                     subscription_url = (
-                        ("https" if https else "http") + "://" + host + SCRIPT_NAME + "?" + http_build_query(params)
+                        ("https" if https else "http")
+                        + "://"
+                        + host
+                        + prefix
+                        + SCRIPT_NAME
+                        + "?"
+                        + http_build_query(params)
                     )
                     webcal_url = re.sub(r"^https?://", "webcal://", subscription_url, count=1)
 
