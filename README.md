@@ -1,26 +1,28 @@
-# Sun & Twilight Calendar Generator
+# sunrise-sunset-calendar
 
 [![CI](https://github.com/mbologna/sunrise-sunset-calendar/actions/workflows/ci.yml/badge.svg)](https://github.com/mbologna/sunrise-sunset-calendar/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.15-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT%20%2B%20GPL--3.0-green.svg)](#license)
+[![License](https://img.shields.io/badge/license-MIT%20%2B%20GPL--3.0-green.svg)](#licence)
 
-An iCalendar feed of daily sunrise, sunset and twilight events for any location, computed with the NREL Solar Position Algorithm. Subscribe to it from Google Calendar, Apple Calendar or Outlook.
+An [iCalendar](https://en.wikipedia.org/wiki/ICalendar) feed of sunrise, sunset, twilight and moon phases for any location, computed with the [NREL Solar Position Algorithm](https://midcdmz.nrel.gov/spa/). Google Calendar, Apple Calendar and Outlook can subscribe to it, and a web page builds the subscription URL.
 
-## Features
+## What the feed contains
 
-- Morning and evening civil, nautical and astronomical twilight as separate events
-- Daylight and night events with their length in the title, the change since yesterday (including how far sunrise and sunset moved on the clock), and where today sits between the year's shortest and longest
-- The noon sun's height, and blue and golden hour on the Daylight event (photographers' rules of thumb)
-- The moon on night events: phase, illumination, and the moonless part of the night
-- Weekly daylight summaries spanning Sunday to Saturday, with sunrise and sunset drift
-- Equinoxes and solstices named by the local season, with the exact moment and facts for the location
-- All-day events on the days something changes, each told on its own day: sunrises or sunsets turning earlier or later, 12 hours of daylight, the start of each meteorological season (outside the tropics), and the start and end of midnight sun, polar night and fully dark nights
-- A plain-language explanation of each period in its description
-- A calendar description with the location's daylight range, midnight sun, polar night and white nights
-- Correct times across daylight-saving changes, and continuous twilight during polar days and white nights
-- Token-protected feed URLs
+- Daylight and night as events, each titled with its length. The description gives the change since yesterday (including how far sunrise and sunset moved on the clock) and where the day sits between the year's shortest and longest.
+- Morning and evening civil, nautical and astronomical twilight, each as its own event.
+- On Daylight: the noon sun's height, and the morning and evening blue and golden hours.
+- On Night: the moon's phase and illumination, and the moonless part of the night.
+- Weekly summaries from Sunday to Saturday, with the drift of sunrise and sunset.
+- Equinoxes and solstices, named by the local season, with the exact moment and facts for the location.
+- All-day events on the days something changes: sunrises or sunsets turning earlier or later, 12 hours of daylight, the start of each meteorological season (outside the tropics), and the start and end of midnight sun, polar night and fully dark nights.
+- A calendar description with the location's daylight range, midnight sun, polar night and white nights.
+- Correct times across daylight-saving changes, and continuous twilight during polar days and white nights.
 
-## Installation
+Every feed URL carries a secret token.
+
+## Running it
+
+From a clone, with [uv](https://docs.astral.sh/uv/):
 
 ```bash
 git clone https://github.com/mbologna/sunrise-sunset-calendar.git
@@ -29,16 +31,18 @@ uv sync
 AUTH_TOKEN="$(openssl rand -hex 32)" PORT=8000 uv run sunrise-sunset-calendar
 ```
 
-Open `http://localhost:8000/`, enter the token as the password and generate a subscription URL. The server is [waitress](https://docs.pylonsproject.org/projects/waitress/): one process, no C extensions, which fits a 128 MiB Cloud Run instance.
+Open `http://localhost:8000/`, enter the token as the password and generate a subscription URL.
 
-### Docker
+As a container, from the image CI publishes on every push to `main`, or built locally:
 
 ```bash
+docker run -p 8080:8080 -e AUTH_TOKEN="$(openssl rand -hex 32)" ghcr.io/mbologna/sunrise-sunset-calendar:latest
+
 docker build -t sunrise-sunset-calendar .
 docker run -p 8080:8080 -e AUTH_TOKEN="$(openssl rand -hex 32)" sunrise-sunset-calendar
 ```
 
-The image runs as an unprivileged user, has no pip, and listens on `$PORT` (default 8080), so it runs unchanged on Cloud Run. It serves the page at `/`, the feed at `/?feed=1`, and the page's CSS and JavaScript under `/assets/`; every other path is a 404. Behind a proxy that serves it on another host, as `sunrise-sunset-calendar.michelebologna.net` does, it builds subscription URLs from the `X-Forwarded-Host` header, ignoring a malformed value. The PHP release's `/sunrise-sunset-calendar.php` path is gone since 2026-11-19.
+The server is [waitress](https://docs.pylonsproject.org/projects/waitress/): one process with no C extensions, small enough for a 128 MiB [Cloud Run](https://cloud.google.com/run) instance. The image runs as an unprivileged user, has no pip and listens on `$PORT`. Images are tagged `latest` and `sha-<commit>`; there are no version releases.
 
 ## Configuration
 
@@ -53,7 +57,16 @@ All settings are environment variables.
 | `PORT` | `8080` | Port the server listens on |
 | `THREADS` | `2` | Requests served at once; each full feed takes about 15 MB while it is built |
 
-The health check, `/health`, returns `{"status":"ok","python":"<version>","timestamp":<unix time>}` with `Cache-Control: no-store` (the PHP release's `/?health` is gone).
+## Endpoints
+
+| Path | Response |
+|------|----------|
+| `/` | The web page that builds subscription URLs |
+| `/?feed=1&…` | The feed (parameters below) |
+| `/assets/` | The page's CSS and JavaScript; its address search calls [Nominatim](https://nominatim.org/) from the browser |
+| `/health` | `{"status":"ok","python":"<version>","timestamp":<unix time>}`, with `Cache-Control: no-store` |
+
+Every other path returns 404. Behind a proxy that serves the app on another host, it builds subscription URLs from the `X-Forwarded-Host` header and ignores a malformed value.
 
 ## Feed URL parameters
 
@@ -72,11 +85,13 @@ The health check, `/health`, returns `{"status":"ok","python":"<version>","times
 | `rise_off`, `set_off` | no | Minutes (-1440 to 1440) to shift morning and evening events |
 | `desc` | no | Note appended to daylight and night events |
 
-Types not subscribed to as events are carried in the descriptions of the events that are, so any selection still carries every time. Each piece goes once, on the subscribed event nearest in time: the one that contains it or comes right before it. The times come as one schedule in time order (`🕒 Today`, `🕒 This evening`), blue and golden hour included when there is no Daylight event, followed by the carried period's details as a section of its own. On a twilight-only calendar, daylight rides on the last morning twilight and night on the last evening one; the civil twilight that ends at sunrise says how sunrise moved, and the one that starts at sunset says how sunset moved and gives the evening's blue and golden hour. On a daylight-and-night calendar, Daylight lists this evening's twilights and Night tomorrow morning's.
+Any selection of event types still carries every time. A period without its own event goes into the description of the subscribed event nearest in time: the one that contains it or comes just before it. Each description lists its times as one schedule in time order (`🕒 Today`, `🕒 This evening`), then the carried period's details in a section of their own. When there is no Daylight event, the schedule includes blue and golden hour.
 
-## Event types
+On a twilight-only calendar, daylight rides on the last morning twilight and night on the last evening one. The civil twilight that ends at sunrise says how sunrise moved; the one that starts at sunset says how sunset moved and gives the evening's blue and golden hour. On a daylight-and-night calendar, Daylight lists this evening's twilights and Night tomorrow morning's.
 
-Each event is a period, titled with its name; the calendar shows when it starts and ends, so the description doesn't repeat that. It opens with what changed since yesterday, then where today sits in the year: an "Over the year" bar between the year's shortest and longest (`9h 08m ▕█░░░░░░░░░▏ 15h 14m`, linear, with both ends labelled), and how far today is from each, with their dates. Night gives the moonless part of the night, the window that matters for stargazing. Daylight also lists the day's blue and golden hours, morning and evening. An explanation of the period comes last.
+## Events
+
+Each event is a period titled with its name. Its description opens with what changed since yesterday, then an "Over the year" bar between the year's shortest and longest (`9h 08m ▕█░░░░░░░░░▏ 15h 14m`, linear, both ends labelled) with the distance to each and their dates. It closes with a plain-language explanation of the period.
 
 | Event | Title | From | To |
 |-------|-------|------|----|
@@ -89,57 +104,58 @@ Each event is a period, titled with its name; the calendar shows when it starts 
 | Evening astronomical twilight | 🌌 Evening Astronomical Twilight | nautical dusk | astronomical dusk (18° below) |
 | Night | *moon phase* Night · *length* | astronomical dusk | the next astronomical dawn |
 
-Sunrise and sunset are when the sun's top edge crosses the horizon, allowing for refraction. Weekly summaries are all-day events from Sunday to Saturday. Equinoxes, solstices and the other days when something changes are all-day events on their local date, so they show in every calendar view, whatever event types the feed includes. An event only states facts about its own day; a fact about another day gets an event on that day.
+Sunrise and sunset are when the sun's top edge crosses the horizon, allowing for refraction. Weekly summaries, equinoxes, solstices and the other days of change are all-day events on their local date, so they appear whatever event types the feed includes. An event states facts about its own day only; a fact about another day gets an event on that day.
 
-When the sun never crosses a boundary, an event runs to or from solar noon or solar midnight instead, and its description says why. During polar night, civil twilight peaks at solar noon; under the midnight sun, daylight lasts 24 hours and no twilight or night events appear. Wherever the sun stays within 18° of the horizon all night (above about 48.6° latitude around the summer solstice), there are no night events. Above about 84.6° latitude the noon sun can stay more than 18° below the horizon in winter; night then runs from solar noon to solar noon, around the clock.
+When the sun never crosses a boundary, an event runs to or from solar noon or solar midnight, and its description says why. During polar night, civil twilight peaks at solar noon. Under the midnight sun, daylight lasts 24 hours and no twilight or night events appear. Wherever the sun stays within 18° of the horizon all night (above about 48.6° latitude around the summer solstice), there are no night events. Above about 84.6° the winter noon sun can stay more than 18° below the horizon, and night then runs from solar noon to solar noon.
+
+## Accuracy
+
+Solar positions come from the NREL SPA (Reda & Andreas, 2008), specified to ±0.0003°. The tests check:
+
+- sunrise against PHP's `date_sun_info()` algorithm every day for a year in Rome, New York and Sydney, within 2 minutes;
+- twilight times for Mapello, Italy, against published reference times, within 1 to 2 minutes;
+- equinoxes, solstices and moon phases (Meeus, *Astronomical Algorithms*) against published dates, moon illumination at each phase within 1%, and moonrise and moonset against the US Naval Observatory within 3 minutes.
+
+Time zones come from the pinned [`tzdata`](https://pypi.org/project/tzdata/) package, never the host.
 
 ## Development
 
 ```bash
-uv sync                     # Python 3.15 and the dev tools
-uv run pytest               # all tests, with the coverage gate (80%)
-uv run ruff check .
-uv run ruff format .
+uv sync                          # Python 3.15 and the dev tools
+uv run pytest                    # all tests, with the coverage gate (80%)
+uv run ruff check . && uv run ruff format .
+uv run pre-commit run --all-files  # ruff, mypy, bandit, hadolint and file checks
 ```
 
-CI runs the same checks through `mbologna/.github`'s `python-ci`, then builds the image, smoke-tests it (it must answer the health check and serve a feed), and on `main` deploys it to Cloud Run.
-
-### Parity with the PHP version
-
-Up to v2 the calendar was written in PHP. The Python version produces the same feeds byte for byte; only `DTSTAMP`, the moment a feed is generated, differs. That is what makes it a drop-in replacement: the same URLs, parameters and token keep working, and existing subscriptions see no change.
-
-- `tests/golden/` holds a corpus of 1004 responses recorded from the last PHP release: 46 locations (polar day and night, both hemispheres, the equator, the date line, DST rules of every kind, including changes at midnight), the full default window, three more dates (DST changes, New Year, a leap day), the days DST changes skip or repeat midnight, every combination of event types, offsets, notes, malformed input, environment settings, the web page and its form. `test_golden.py` replays every request against the Python app and compares the bytes. `make_corpus.py` records the corpus again from the PHP image (needs Docker), and `http_parity.py` compares status codes and headers of the two images over real HTTP.
-- `tests/php_reference/` records what PHP returns for the primitives the output depends on (rounding, float formatting, input filters, `strip_tags()`, `mb_substr()`, query parsing, wall-clock time zone arithmetic around DST changes), and `test_php.py` checks the Python equivalents in `php.py` against it.
-
-The sunrise and sunset times come from a line-by-line port of the [sun-position-spa-php](https://github.com/abbadon1334/sun-position-spa-php) library the PHP version used: its interpolation of rise and set times differs slightly from other SPA implementations, and the feeds must keep their times to the second. Time zones come from the pinned `tzdata` package, never the host.
-
-## Project structure
+CI runs ruff and the tests through `mbologna/.github`'s `python-ci`, then builds the image and smoke-tests it: the image must answer the health check and serve a feed. Each push to `main` that changes the image deploys it to Cloud Run. The skeleton (Dockerfile, CI, lint and test settings) comes from [python-app-template](https://github.com/mbologna/python-app-template); `.copier-answers.yml` records the answers its updates read.
 
 ```
 ├── src/sunrise_sunset_calendar/
-│   ├── app.py          # WSGI entry point: configuration, routing, headers, input sanitisation; main() serves it
+│   ├── app.py          # WSGI app: configuration, routing, headers, input sanitisation; main() serves it
 │   ├── feed.py         # generate_calendar(): builds the VCALENDAR
 │   ├── helpers.py      # iCalendar escaping and folding, descriptions, year statistics
 │   ├── astronomy.py    # sun_events(), twilight, equinoxes and solstices, moon phases, moonrise and moonset
 │   ├── spa.py          # NREL Solar Position Algorithm: solar position, sunrise, transit and sunset
-│   ├── php.py          # the PHP behaviours the output depends on, reproduced exactly
-│   ├── web.py          # the web form page
+│   ├── php.py          # the PHP behaviours the output depends on (see below)
+│   ├── web.py          # the web page
 │   ├── strings.py      # all user-facing text
 │   ├── timezones.py    # accepted time zones (the tz database's zone.tab, plus UTC)
 │   ├── cache.py        # per-request memoisation
-│   └── assets/         # web form CSS and JavaScript (address search calls Nominatim from the browser)
-└── tests/              # unit, integration, reference and accuracy suites, the golden corpus and PHP references
+│   └── assets/         # the page's CSS and JavaScript
+└── tests/              # unit, integration, reference and accuracy suites, the golden corpus, PHP references
 ```
 
-## Accuracy
+### Parity with the PHP version
 
-Solar positions come from the NREL SPA (Reda & Andreas, 2008), specified to ±0.0003°. The test suite checks:
+Up to v2 the calendar was written in PHP. The Python version produces the same feeds byte for byte, apart from `DTSTAMP`, the moment a feed is generated, so existing subscriptions, URLs, parameters and tokens work unchanged. The PHP version's `/sunrise-sunset-calendar.php` path and `/?health` check are gone.
 
-- sunrise against PHP's `date_sun_info()` algorithm every day for a year in Rome, New York and Sydney, within 2 minutes;
-- twilight times for Mapello, Italy, against published reference times, within 1–2 minutes;
-- equinoxes, solstices and moon phases (Meeus, *Astronomical Algorithms*) against published dates, moon illumination at each phase within 1%, and moonrise and moonset against the US Naval Observatory within 3 minutes.
+- `php.py` reproduces the PHP 8.5 primitives whose results reach the output: rounding, float-to-string conversion, input filters, `strip_tags()`, multibyte truncation, date formatting and wall-clock time zone arithmetic. Each follows php-src's C code, so edge cases match too.
+- `tests/php_reference/` records what PHP returns for those primitives, and `test_php.py` checks `php.py` against it.
+- `tests/golden/` holds 1004 responses recorded from the last PHP release: 46 locations (polar day and night, both hemispheres, the equator, the date line, every kind of DST rule, including changes at midnight), the full default window, extra dates (DST changes, New Year, a leap day), every combination of event types, offsets, notes, malformed input, environment settings, the web page and its form. `test_golden.py` replays every request against the Python app and compares the bytes. `make_corpus.py` records the corpus again from the PHP image (needs Docker), and `http_parity.py` compares the two images' status codes and headers over HTTP.
 
-## License
+The sunrise and sunset times come from a line-by-line port of [sun-position-spa-php](https://github.com/abbadon1334/sun-position-spa-php), the library the PHP version used. Its interpolation of rise and set times differs slightly from other SPA implementations, and the feeds keep their times to the second.
+
+## Licence
 
 The code is MIT ([LICENSE](LICENSE)), except `src/sunrise_sunset_calendar/spa.py`, which is GPL-3.0 ([LICENSES/GPL-3.0-only.txt](LICENSES/GPL-3.0-only.txt)).
 
