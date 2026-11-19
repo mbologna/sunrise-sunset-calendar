@@ -131,6 +131,35 @@ def test_form_over_plain_http(config: Config) -> None:
     assert b"https://calendar.example/sunrise-sunset-calendar.php?feed=1&amp;" in page
 
 
+def test_form_behind_a_path_proxy(config: Config) -> None:
+    _, _, page = form_post(
+        config,
+        b"generate_url=1&password=app-test-token",
+        "application/x-www-form-urlencoded",
+        HTTP_X_FORWARDED_PROTO="https",
+        HTTP_X_FORWARDED_HOST="feeds.example",
+        HTTP_X_FORWARDED_PREFIX="/sunrise-sunset-calendar/",
+    )
+    assert b"https://feeds.example/sunrise-sunset-calendar/sunrise-sunset-calendar.php?feed=1&amp;" in page
+    assert b"webcal://feeds.example/sunrise-sunset-calendar/sunrise-sunset-calendar.php?feed=1&amp;" in page
+
+
+@pytest.mark.parametrize(
+    ("forwarded", "expected"),
+    [
+        ({"HTTP_X_FORWARDED_HOST": "evil.example/<script>"}, b"http://calendar.example/sunrise-sunset-calendar.php?"),
+        ({"HTTP_X_FORWARDED_PREFIX": "../x"}, b"http://calendar.example/sunrise-sunset-calendar.php?"),
+        ({"HTTP_X_FORWARDED_PREFIX": "/a b"}, b"http://calendar.example/sunrise-sunset-calendar.php?"),
+        ({"HTTP_X_FORWARDED_HOST": "a.example, b.example"}, b"http://a.example/sunrise-sunset-calendar.php?"),
+    ],
+)
+def test_form_ignores_malformed_forwarded_headers(config: Config, forwarded: dict, expected: bytes) -> None:
+    _, _, page = form_post(
+        config, b"generate_url=1&password=app-test-token", "application/x-www-form-urlencoded", **forwarded
+    )
+    assert expected in page
+
+
 def test_form_rejects_a_wrong_password(config: Config) -> None:
     _, _, page = form_post(config, b"generate_url=1&password=nope", "application/x-www-form-urlencoded")
     assert b"<strong>Error:</strong> Invalid password" in page
