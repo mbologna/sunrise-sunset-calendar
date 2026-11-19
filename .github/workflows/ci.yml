@@ -18,7 +18,7 @@ jobs:
   # ruff, the tests with the coverage gate (fail_under in pyproject.toml)
   # and pip-audit on the locked runtime dependencies.
   python:
-    uses: mbologna/.github/.github/workflows/python-ci.yml@b7dbcb832fb522ee322af852018cc343778f3399 # main
+    uses: mbologna/.github/.github/workflows/python-ci.yml@016832d015988220ca1ad06a483742cded255428 # main
     with:
       python_version: "3.15"
       enable_codecov: false
@@ -33,7 +33,7 @@ jobs:
       id-token: write
       attestations: write
       security-events: write
-    uses: mbologna/.github/.github/workflows/docker-ci.yml@b7dbcb832fb522ee322af852018cc343778f3399 # main
+    uses: mbologna/.github/.github/workflows/docker-ci.yml@016832d015988220ca1ad06a483742cded255428 # main
     with:
       image_name: sunrise-sunset-calendar
       # push: the Cloud Run deploy runs the sha-* image of each
