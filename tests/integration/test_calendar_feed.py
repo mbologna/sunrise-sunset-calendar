@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from sunrise_sunset_calendar import php
+from sunrise_sunset_calendar import clock, php
 from sunrise_sunset_calendar.feed import Options, generate_calendar
 from sunrise_sunset_calendar.helpers import format_duration, year_summary
 from tests.helpers import date_sun_info_sunrise, ical_timestamp
@@ -78,8 +78,8 @@ def is_valid_utf8(line: str) -> bool:
 
 
 def local_time(value: str, zone: str, fmt: str) -> str:
-    """An iCalendar UTC date-time in a time zone, formatted as PHP's date() would."""
-    return php.format_datetime(datetime.fromtimestamp(ical_timestamp(value), php.zone(zone)), fmt)
+    """An iCalendar UTC date-time in a time zone, through a date template."""
+    return clock.format_datetime(datetime.fromtimestamp(ical_timestamp(value), clock.zone(zone)), fmt)
 
 
 def test_feed_is_well_formed() -> None:
@@ -130,7 +130,7 @@ def test_daylight_starts_at_sunrise_across_dst_changes(lat: float, lon: float, z
     (date_sun_info(), ported in tests/helpers.py).
     """
     ics = feed(lat=lat, lon=lon, timezone=zone)
-    tz = php.zone(zone)
+    tz = clock.zone(zone)
 
     daylight = events_of_type(ics, "daylight")
     assert len(daylight) == 366
@@ -290,7 +290,7 @@ def test_daylight_only_calendar_still_lists_every_twilight() -> None:
     # Tomorrow morning's twilights follow the Night, which ends where they start
     morning = re.search(r"🕒 Tomorrow morning\n(\d\d:\d\d)–\d\d:\d\d 🌌 Morning Astronomical Twilight", night)
     assert morning is not None
-    ends = local_time(night_event["DTEND"], "Europe/Rome", "H:i")
+    ends = local_time(night_event["DTEND"], "Europe/Rome", "{hour:02d}:{minute:02d}")
     assert morning[1] == ends
     assert "Evening Civil Twilight" not in night
 
@@ -327,8 +327,8 @@ def test_week_summary_on_sundays_only() -> None:
     for summary in summaries:
         # All-day from Sunday through Saturday: DTEND is the following Sunday
         start = datetime.fromtimestamp(ical_timestamp(summary["DTSTART"]), UTC)
-        assert php.format_datetime(start, "w") == "0"
-        assert php.format_datetime(start + timedelta(days=7), "Ymd") == summary["DTEND"]
+        assert start.weekday() == 6, "Weeks start on Sunday"
+        assert clock.format_datetime(start + timedelta(days=7), clock.BASIC_DATE) == summary["DTEND"]
     assert re.search(r"^📉 \d+m less daylight this week$", summaries[0]["SUMMARY"]), "Days shorten in October"
     assert re.search(r"Sunrise \d\d:\d\d → \d\d:\d\d · Sunset \d\d:\d\d → \d\d:\d\d", summaries[0]["DESCRIPTION"])
 
@@ -701,17 +701,17 @@ def test_year_extremes_fall_on_the_solstices() -> None:
         (41.9028, 12.4964, "Europe/Rome", 2028),
     ]
     for lat, lon, zone, y in places:
-        with php.default_timezone_set(zone):
-            offset = php.LocalDate.parse(f"{y}-01-15", php.zone(zone)).set_time(12, 0).offset() / 3600
+        with clock.use_zone(zone):
+            offset = clock.LocalDate.parse(f"{y}-01-15", clock.zone(zone)).set_time(12, 0).offset() / 3600
             year = year_summary(lat, lon, y, offset)
-            short = php.php_date("M j", year["daylight_min"][1])
-            long = php.php_date("M j", year["daylight_max"][1])
+            short = clock.format_local_time(year["daylight_min"][1], "{month_short} {day}")
+            long = clock.format_local_time(year["daylight_max"][1], "{month_short} {day}")
         winter, summer = (r"^Dec 2[0-2]$", r"^Jun 2[0-2]$") if lat > 0 else (r"^Jun 2[0-2]$", r"^Dec 2[0-2]$")
         assert re.search(winter, short), f"{zone} {y} shortest day"
         assert re.search(summer, long), f"{zone} {y} longest day"
 
 
-def test_default_timezone_is_restored() -> None:
+def test_the_zone_is_restored() -> None:
     feed(window_days=0)
 
-    assert php.default_timezone() == "UTC"
+    assert clock.current_zone() == "UTC"

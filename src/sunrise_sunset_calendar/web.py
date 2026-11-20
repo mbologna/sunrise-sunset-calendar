@@ -12,9 +12,10 @@ from importlib import resources
 
 from . import cache
 from .astronomy import sun_events
+from .clock import LocalDate, format_local_time, use_zone, zone
 from .helpers import format_duration, format_time
 from .numbers import round_int
-from .php import LocalDate, default_timezone_set, frozen_time, htmlspecialchars, php_date, zone
+from .php import htmlspecialchars
 from .strings import STRINGS
 
 DEFAULT_LAT = 41.9028
@@ -85,10 +86,10 @@ def render_page(
 ) -> str:
     """The page, with today's times in Rome and the generated URLs."""
     cache.reset()
-    with default_timezone_set(DEFAULT_TIMEZONE), frozen_time(now):
+    with use_zone(DEFAULT_TIMEZONE):
         today = sun_events(LocalDate.today(zone(DEFAULT_TIMEZONE), now), DEFAULT_LAT, DEFAULT_LON)
         daylight_seconds = round_int(today["daylength_h"] * 3600)
-        date_line = _W["today_date"].format(php_date(_W["today_date_format"], now))
+        date_line = _W["today_date"].format(format_local_time(now, _W["today_date_format"]))
         times = "".join(
             f"                    {e(label)}: {e(format_time(today[key]))}<br>\n                "
             for key, label in _W["today_times"].items()

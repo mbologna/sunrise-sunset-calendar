@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sunrise_sunset_calendar import app, php
+from sunrise_sunset_calendar import app, clock
 from sunrise_sunset_calendar.helpers import (
     day_runs,
     format_clock_shift,
@@ -67,8 +67,8 @@ def test_range_bar_is_linear_between_labelled_ends() -> None:
 
 
 def test_extremes_name_the_end_today() -> None:
-    shortest = (9 * 3600, php.mktime(12, 0, 0, 12, 21, 2026))
-    longest = (15 * 3600, php.mktime(12, 0, 0, 6, 21, 2026))
+    shortest = (9 * 3600, clock.local_timestamp(2026, 12, 21, 12, 0, 0))
+    longest = (15 * 3600, clock.local_timestamp(2026, 6, 21, 12, 0, 0))
 
     assert (
         format_extremes("daylight", 10 * 3600, shortest, longest)

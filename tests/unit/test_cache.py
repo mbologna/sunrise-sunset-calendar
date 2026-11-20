@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from sunrise_sunset_calendar import cache, helpers, php
+from sunrise_sunset_calendar import cache, clock, helpers
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +38,7 @@ def test_solar_calc_cache_miss() -> None:
 
 
 def test_week_summary_is_cached() -> None:
-    week_start = php.mktime(0, 0, 0, 2, 1, 2026)
+    week_start = clock.local_timestamp(2026, 2, 1, 0, 0, 0)
 
     summary = helpers.get_week_summary(week_start, 40.0, 15.0, 1.0)
 

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 from . import cache
 from .astronomy import get_accurate_moon_phase, moon_phases_between, moon_rise_set, sun_events
+from .clock import BASIC_DATE, ICAL_UTC, ISO_DATE, LocalDate, format_local_time, format_utc_time, use_zone, zone
 from .helpers import (
     DayContext,
     Span,
@@ -39,14 +40,6 @@ from .helpers import (
     year_summary,
 )
 from .numbers import format_coordinate, round_int
-from .php import (
-    LocalDate,
-    default_timezone_set,
-    frozen_time,
-    gmdate,
-    php_date,
-    zone,
-)
 from .strings import STRINGS as S
 
 
@@ -184,7 +177,7 @@ def render_feed(o: Options) -> bytes:
     """
     cache.reset()
     now = int(time.time()) if o.now is None else o.now
-    with default_timezone_set(o.timezone), frozen_time(now):
+    with use_zone(o.timezone):
         return _render(o, now)
 
 
@@ -194,14 +187,17 @@ def _render(o: Options, now: int) -> bytes:
     lon = o.lon
     enabled = o.enabled
     uid_suffix = f"{format_coordinate(lat)}-{format_coordinate(lon)}@sun-calendar"
-    dtstamp = gmdate("Ymd\\THis\\Z", now)
+    dtstamp = format_utc_time(now, ICAL_UTC)
     refresh = ical_duration(o.refresh_seconds)
 
     def timed(start: int, end: int) -> list[str]:
-        return ["DTSTART:" + gmdate("Ymd\\THis\\Z", start), "DTEND:" + gmdate("Ymd\\THis\\Z", end)]
+        return ["DTSTART:" + format_utc_time(start, ICAL_UTC), "DTEND:" + format_utc_time(end, ICAL_UTC)]
 
     def all_day(day: LocalDate, days: int = 1) -> list[str]:
-        return ["DTSTART;VALUE=DATE:" + day.format("Ymd"), "DTEND;VALUE=DATE:" + day.add_days(days).format("Ymd")]
+        return [
+            "DTSTART;VALUE=DATE:" + day.format(BASIC_DATE),
+            "DTEND;VALUE=DATE:" + day.add_days(days).format(BASIC_DATE),
+        ]
 
     # Offsets move an event away from the instants its description names; say so
     def offset_note(start: int, end: int) -> str:
@@ -241,7 +237,7 @@ def _render(o: Options, now: int) -> bytes:
     special_events: dict[str, dict] = {}
     for y in range(first.year, last.year + 1):
         for event in get_special_astronomical_events(y, lat):
-            special_events[php_date("Y-m-d", event["date"])] = event
+            special_events[format_local_time(event["date"], ISO_DATE)] = event
 
     bands = twilight_bands()
     no_twilight_events = not (enabled["civil"] or enabled["nautical"] or enabled["astro"])
@@ -249,7 +245,7 @@ def _render(o: Options, now: int) -> bytes:
     day = first
     while day.ts <= last.ts:
         year = day.year
-        date_str = day.format("Ymd")
+        date_str = day.format(BASIC_DATE)
         ev = sun_events(day, lat, lon)
         prev = sun_events(day.add_days(-1), lat, lon)
         nxt = sun_events(day.add_days(1), lat, lon)
@@ -314,7 +310,7 @@ def _render(o: Options, now: int) -> bytes:
         }
 
         # Weekly summary: an all-day event spanning Sunday through Saturday
-        if enabled["daylight"] and day.format("w") == "0":
+        if enabled["daylight"] and day.wall.weekday() == 6:  # Sunday
             week = get_week_summary(day.ts, lat, lon, ev["utc_offset"])
             phases = [
                 S["moon"]["phase_at"].format(
@@ -354,7 +350,7 @@ def _render(o: Options, now: int) -> bytes:
         # Days when something changes: all day, so they show without opening anything
         if year not in day_facts:
             day_facts[year] = year_day_facts(year_info)
-        for fact in day_facts[year].get(day.format("Y-m-d"), []):
+        for fact in day_facts[year].get(day.format(ISO_DATE), []):
             title, text = day_fact_text(fact, ev, year_info)
             slug = fact["kind"].replace("_", "-")
             out.append(ical_event(f"{slug}-{date_str}-{uid_suffix}", all_day(day), title, text, dtstamp))
@@ -365,7 +361,7 @@ def _render(o: Options, now: int) -> bytes:
             out.append(ical_event(uid, all_day(day), title, text, dtstamp))
 
         # Equinoxes and solstices: all day on the local date, exact moment in the description
-        special = special_events.get(day.format("Y-m-d"))
+        special = special_events.get(day.format(ISO_DATE))
         if special:
             out.append(
                 ical_event(

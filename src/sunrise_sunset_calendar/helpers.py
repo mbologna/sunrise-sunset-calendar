@@ -13,14 +13,17 @@ from typing import TypedDict
 
 from . import cache
 from .astronomy import calculate_equinox_solstice, moon_phases_between
-from .numbers import round_int
-from .php import (
+from .clock import (
+    ISO_DATE,
     LocalDate,
-    default_timezone,
-    gmmktime,
-    mktime,
-    php_date,
+    current_zone,
+    days_later,
+    format_local_time,
+    local,
+    local_timestamp,
+    utc_timestamp,
 )
+from .numbers import round_int
 from .strings import STRINGS, DayFactKind
 
 S = STRINGS
@@ -153,7 +156,7 @@ def moon_phase_name(phase_name: str) -> str:
 
 def format_local(timestamp: int, fmt: str = "time") -> str:
     """A timestamp in one of the strings' date formats, in the default time zone."""
-    return php_date(S["formats"][fmt], timestamp)
+    return format_local_time(timestamp, S["formats"][fmt])
 
 
 def format_time(timestamp: int | None) -> str:
@@ -297,9 +300,9 @@ def get_year_profile(lat: float, lon: float, year: int, utc_offset: float) -> li
         profile = []
         days_in_year = 366 if _is_leap(year) else 365
         for day in range(1, days_in_year + 1):
-            timestamp = mktime(12, 0, 0, 1, day, year)
+            timestamp = local_timestamp(year, 1, day, 12, 0, 0)
             y, m, d = _local_parts(timestamp)
-            midnight = gmmktime(0, 0, 0, m, d, y) - round_int(utc_offset * 3600)
+            midnight = utc_timestamp(y, m, d, 0, 0, 0) - round_int(utc_offset * 3600)
             profile.append(
                 {"timestamp": timestamp, "midnight": midnight} | calculate_sun_times(y, m, d, lat, lon, utc_offset)
             )
@@ -312,8 +315,6 @@ def _is_leap(year: int) -> bool:
 
 
 def _local_parts(timestamp: int) -> tuple[int, int, int]:
-    from .php import local
-
     lt = local(timestamp)
     return lt.year, lt.month, lt.day
 
@@ -321,7 +322,6 @@ def _local_parts(timestamp: int) -> tuple[int, int, int]:
 def get_week_summary(week_start: int, lat: float, lon: float, utc_offset: float) -> dict:
     """Daylight over the seven days from week_start: first and last lengths, change and trend."""
     from .astronomy import calculate_sun_times
-    from .php import strtotime_days
 
     key = f"{week_start}:{lat:.4f}:{lon:.4f}:{utc_offset:.2f}"
     store = cache.get().week_summary
@@ -330,7 +330,7 @@ def get_week_summary(week_start: int, lat: float, lon: float, utc_offset: float)
 
     lengths = []
     for i in range(7):
-        parts = _local_parts(strtotime_days(i, week_start))
+        parts = _local_parts(days_later(week_start, i))
         result = calculate_sun_times(*parts, lat, lon, utc_offset)
         lengths.append(result["daylength_h"] * 3600)
 
@@ -418,13 +418,13 @@ def _sunlit_all_date(day: dict) -> bool:
     if (rise is None) == (set_ is None):
         return False
     instant = day["midnight"] + round_int((set_ if rise is None else rise) * 86400)
-    return php_date("Y-m-d", instant) != php_date("Y-m-d", day["timestamp"])
+    return format_local_time(instant, ISO_DATE) != format_local_time(day["timestamp"], ISO_DATE)
 
 
 def year_summary(lat: float, lon: float, year: int, utc_offset: float) -> dict:
     """Facts about a location's year, derived from its year profile."""
     memo = cache.get().year_summary
-    key = f"{lat:.4f}:{lon:.4f}:{year}:{utc_offset:.2f}:{default_timezone()}"
+    key = f"{lat:.4f}:{lon:.4f}:{year}:{utc_offset:.2f}:{current_zone()}"
     if key in memo:
         return memo[key]
 
@@ -530,7 +530,7 @@ def year_day_facts(year: dict) -> dict[str, list[dict]]:
     facts: dict[str, list[dict]] = {}
 
     def add(index: int, fact: dict) -> None:
-        facts.setdefault(php_date("Y-m-d", days[index]["timestamp"]), []).append({"index": index} | fact)
+        facts.setdefault(format_local_time(days[index]["timestamp"], ISO_DATE), []).append({"index": index} | fact)
 
     for event, field in (("sunrise", "sunrise_frac"), ("sunset", "sunset_frac")):
         values = [d[field] for d in days]

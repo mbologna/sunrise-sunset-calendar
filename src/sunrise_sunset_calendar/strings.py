@@ -7,7 +7,7 @@ through the instants that bound it.
 
 Edit this file to customise event text without touching the main code. The
 placeholders are str.format() fields ({}, {:d}, {:02d}, positional {0});
-date and time formats follow PHP's date() (see php.format_datetime()).
+date and time formats are templates over clock.format_fields().
 """
 
 from __future__ import annotations
@@ -184,11 +184,11 @@ STRINGS: Strings = {
     "the moon computed from the JPL DE442 ephemeris.",  # {0} = place, {1} = time zone
     "place_named": "{0} ({1}, {2})",  # name, latitude, longitude
     "place_coordinates": "{1}, {2}",
-    # Date and time formats (PHP date())
+    # Date and time formats (templates over clock.format_fields())
     "formats": {
-        "time": "H:i",
-        "date_short": "M j",
-        "datetime": "D, M j, H:i",
+        "time": "{hour:02d}:{minute:02d}",
+        "date_short": "{month_short} {day}",
+        "datetime": "{weekday_short}, {month_short} {day}, {hour:02d}:{minute:02d}",
     },
     "none": "—",  # a time that does not occur today
     # Duration units: "9h 05m", "32m", "2m 05s", "45s"
@@ -616,7 +616,7 @@ STRINGS: Strings = {
         "heading": "🌅 Sun & Twilight Calendar",
         "today_heading": "Today in Rome",
         "today_date": "Date: {}",
-        "today_date_format": "l, F j, Y",
+        "today_date_format": "{weekday}, {month_name} {day}, {year}",
         "today_times": {
             "astro_begin": "Astronomical dawn",
             "nautical_begin": "Nautical dawn",

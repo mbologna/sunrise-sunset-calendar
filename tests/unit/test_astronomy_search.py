@@ -9,10 +9,9 @@ import numpy as np
 import pytest
 from skyfield.api import wgs84
 
-from sunrise_sunset_calendar import astronomy, php
-from sunrise_sunset_calendar.php import gmdate, gmmktime
+from sunrise_sunset_calendar import astronomy, clock
 
-START, STOP = gmmktime(0, 0, 0, 1, 1, 2026), gmmktime(0, 0, 0, 1, 1, 2027)
+START, STOP = clock.utc_timestamp(2026, 1, 1, 0, 0, 0), clock.utc_timestamp(2027, 1, 1, 0, 0, 0)
 
 
 def compare(observer: Any, body: Any, height: Callable[[np.ndarray], np.ndarray], horizon: float | None) -> None:
@@ -45,7 +44,7 @@ def test_each_crossing_belongs_to_one_day(lat: float, lon: float) -> None:
     fields = [f"{field}_frac" for band in astronomy._BANDS for field in band]
     previous: dict[str, int] = {}
     for day in range(365):
-        y, m, d = (int(part) for part in gmdate("Y-n-j", START + day * 86400).split("-"))
+        y, m, d = (int(part) for part in clock.format_utc_time(START + day * 86400, "{year}-{month}-{day}").split("-"))
         times = astronomy.calculate_sun_times(y, m, d, lat, lon, 0.0)
         for field in fields:
             if times[field] is None:
@@ -58,7 +57,9 @@ def test_each_crossing_belongs_to_one_day(lat: float, lon: float) -> None:
 def test_the_sun_rises_and_sets_once_a_year_at_the_north_pole() -> None:
     _, _, crossings = astronomy._solar_year(90.0, 0.0, 2026)
     rises, sets = crossings[astronomy.SUNRISE_ALTITUDE]
-    in_year = [[gmdate("Y-m-d", round(t)) for t in ts if START <= t < STOP] for ts in (rises, sets)]
+    in_year = [
+        [clock.format_utc_time(round(t), clock.ISO_DATE) for t in ts if START <= t < STOP] for ts in (rises, sets)
+    ]
     # Refraction lifts the sun two to three days before the March equinox and keeps it after September's
     assert in_year == [["2026-03-18"], ["2026-09-25"]]
 
@@ -83,8 +84,8 @@ def test_the_moon_rises_and_sets_at_the_north_pole() -> None:
 )
 def test_consecutive_dates_have_consecutive_solar_days(lat: float, lon: float, zone: str) -> None:
     """Even where solar noon falls near local midnight, which the equation of time moves either side."""
-    tz = php.zone(zone)
-    day = php.LocalDate.parse("2026-01-01", tz)
+    tz = clock.zone(zone)
+    day = clock.LocalDate.parse("2026-01-01", tz)
     noons = []
     while day.year == 2026:
         noons.append(astronomy.sun_events(day, lat, lon)["solar_noon"])
