@@ -12,6 +12,8 @@ Configuration comes from the environment:
 
 from __future__ import annotations
 
+import dataclasses
+import hashlib
 import hmac
 import json
 import math
@@ -28,6 +30,7 @@ from urllib.parse import parse_qsl, urlencode
 from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
 
 from .astronomy import FIRST_YEAR, LAST_YEAR
+from .clock import zone
 from .feed import Options, render_feed
 from .strings import STRINGS
 from .timezones import timezone_identifiers, timezone_set
@@ -177,6 +180,37 @@ def sanitize_text(value: bytes, max_length: int = 500) -> str:
     return clean.decode("utf-8", "replace")[:max_length]
 
 
+def code_revision() -> str:
+    """What code is running: Cloud Run's revision name, or else a hash of the package's source."""
+    revision = os.environ.get("K_REVISION")
+    if revision:
+        return revision
+    digest = hashlib.sha256()
+    for entry in sorted(resources.files(__package__).iterdir(), key=lambda e: e.name):
+        if entry.name.endswith(".py"):
+            digest.update(entry.read_bytes())
+    return digest.hexdigest()
+
+
+def feed_etag(revision: str, options: Options, now: int) -> str:
+    """A feed's ETag: what its content depends on, DTSTAMP aside.
+
+    The code, the options (the token isn't one) and the date in the feed's zone: the
+    events start from a date, so the content holds until local midnight.
+    """
+    today = options.today or datetime.fromtimestamp(now, zone(options.timezone)).date().isoformat()
+    fields = dataclasses.asdict(options)
+    del fields["now"]
+    key = json.dumps([revision, today, fields], sort_keys=True)
+    return '"' + hashlib.sha256(key.encode()).hexdigest()[:20] + '"'
+
+
+def etag_matches(etag: str, if_none_match: str) -> bool:
+    """Whether an If-None-Match header names the ETag (weak or not) or is "*"."""
+    tags = [tag.strip().removeprefix("W/") for tag in if_none_match.split(",")]
+    return etag in tags or "*" in tags
+
+
 def verify_token(config: Config, provided: bytes) -> bool:
     """Whether provided is one of the tokens, comparing with each in constant time."""
     matched = False
@@ -226,6 +260,7 @@ def _form(environ: WSGIEnvironment) -> dict[str, bytes]:
 def make_app(config: Config | None = None, clock: Callable[[], float] = time.time) -> WSGIApplication:
     """The WSGI application."""
     config = config or Config.from_env()
+    revision = code_revision()
     strings = STRINGS
 
     def app(environ: WSGIEnvironment, start_response: StartResponse) -> Iterable[bytes]:
@@ -297,16 +332,14 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
                 refresh_seconds=config.update_interval,
                 now=now,
             )
+            etag = feed_etag(revision, options, now)
+            # Calendar apps may keep it; shared caches must not, as its URL holds the token
+            cache_headers = [("ETag", etag), ("Cache-Control", f"private, max-age={config.update_interval}")]
+            # A client that still has today's feed gets a 304, and the feed isn't built
+            if etag_matches(etag, environ.get("HTTP_IF_NONE_MATCH", "")):
+                return respond("304 Not Modified", b"", cache_headers)
             body = render_feed(options)
-            return respond(
-                "200 OK",
-                body,
-                [
-                    ("Content-Type", "text/calendar; charset=utf-8"),
-                    # Calendar apps may keep it; shared caches must not, as its URL holds the token
-                    ("Cache-Control", f"private, max-age={config.update_interval}"),
-                ],
-            )
+            return respond("200 OK", body, [("Content-Type", "text/calendar; charset=utf-8"), *cache_headers])
 
         # The form posts back to the page's own URL, token and all
         subscription_url = webcal_url = None
