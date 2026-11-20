@@ -70,7 +70,8 @@ def test_feed_returns_calendar() -> None:
 
 
 def test_web_interface_renders() -> None:
-    body = request("")
+    assert request("") == "Invalid authentication token"
+    body = request(f"token={TOKEN.decode()}")
 
     assert "<title>Sun &amp; Twilight Calendar</title>" in body
     assert '<option value="Europe/Rome" selected>' in body

@@ -2,7 +2,7 @@
 
 Configuration comes from the environment:
 
-- AUTH_TOKEN (required): the secret in feed URLs, and the page's password
+- AUTH_TOKEN (required): the secret in feed URLs and in the page's
 - CALENDAR_WINDOW_DAYS (400): days of future events in a feed
 - CALENDAR_PAST_DAYS (30): days of past events
 - UPDATE_INTERVAL (86400): refresh interval suggested to calendar apps, in seconds
@@ -223,11 +223,13 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
             status = "200 OK" if health["status"] == "ok" else "503 Service Unavailable"
             return respond(status, body, [("Content-Type", "application/json"), NO_STORE])
 
+        # The feed and the page that builds its URL both need the token; only /health doesn't
+        if not verify_token(config, param(query, "token")):
+            return respond(
+                "403 Forbidden", strings["errors"]["invalid_token"].encode(), [("Content-Type", HTML), NO_STORE]
+            )
+
         if "feed" in query:
-            if not verify_token(config, param(query, "token")):
-                return respond(
-                    "403 Forbidden", strings["errors"]["invalid_token"].encode(), [("Content-Type", HTML), NO_STORE]
-                )
 
             def flag(key: str) -> bool:
                 return param(query, key) == b"1"
@@ -262,31 +264,29 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
                 ],
             )
 
-        error = subscription_url = webcal_url = None
+        # The form posts back to the page's own URL, token and all
+        subscription_url = webcal_url = None
         if method == "POST":
             form = _form(environ)
             if "generate_url" in form:
-                if not verify_token(config, param(form, "password")):
-                    error = strings["errors"]["invalid_password"]
-                else:
-                    params = [
-                        ("feed", b"1"),
-                        ("token", token),
-                        ("lat", param(form, "lat", DEFAULT_LAT_TEXT.encode())),
-                        ("lon", param(form, "lon", DEFAULT_LON_TEXT.encode())),
-                        ("zone", param(form, "zone", DEFAULT_TIMEZONE.encode())),
-                        ("location", param(form, "location")),
-                        ("rise_off", param(form, "rise_off", b"0")),
-                        ("set_off", param(form, "set_off", b"0")),
-                        ("desc", param(form, "description")),
-                    ]
-                    params += [(kind, b"1") for kind in ("civil", "nautical", "astro", "daynight") if kind in form]
-                    https = environ.get("HTTPS", "") == "on" or environ.get("HTTP_X_FORWARDED_PROTO", "") == "https"
-                    host = public_host(environ)
-                    subscription_url = ("https" if https else "http") + "://" + host + "/?" + http_build_query(params)
-                    webcal_url = re.sub(r"^https?://", "webcal://", subscription_url, count=1)
+                params = [
+                    ("feed", b"1"),
+                    ("token", token),
+                    ("lat", param(form, "lat", DEFAULT_LAT_TEXT.encode())),
+                    ("lon", param(form, "lon", DEFAULT_LON_TEXT.encode())),
+                    ("zone", param(form, "zone", DEFAULT_TIMEZONE.encode())),
+                    ("location", param(form, "location")),
+                    ("rise_off", param(form, "rise_off", b"0")),
+                    ("set_off", param(form, "set_off", b"0")),
+                    ("desc", param(form, "description")),
+                ]
+                params += [(kind, b"1") for kind in ("civil", "nautical", "astro", "daynight") if kind in form]
+                https = environ.get("HTTPS", "") == "on" or environ.get("HTTP_X_FORWARDED_PROTO", "") == "https"
+                host = public_host(environ)
+                subscription_url = ("https" if https else "http") + "://" + host + "/?" + http_build_query(params)
+                webcal_url = re.sub(r"^https?://", "webcal://", subscription_url, count=1)
 
-        page = render_page(now, timezone_identifiers(), error, subscription_url, webcal_url)
+        page = render_page(now, timezone_identifiers(), subscription_url, webcal_url)
         return respond("200 OK", page.encode("utf-8"), [("Content-Type", HTML), NO_STORE])
 
     return app

@@ -64,11 +64,10 @@ def json_encode_strings(values: dict[str, str]) -> str:
 def render_page(
     now: int,
     timezones: list[str],
-    error: str | None = None,
     subscription_url: str | None = None,
     webcal_url: str | None = None,
 ) -> str:
-    """The page, with today's times in Rome, an optional error and the generated URLs."""
+    """The page, with today's times in Rome and the generated URLs."""
     cache.reset()
     with default_timezone_set(DEFAULT_TIMEZONE), frozen_time(now):
         today = sun_events(LocalDate.today(zone(DEFAULT_TIMEZONE), now), DEFAULT_LAT, DEFAULT_LON)
@@ -105,12 +104,6 @@ def render_page(
         "\n"
         "        "
     ]
-    if error is not None:
-        out.append(
-            '            <div class="error-box">\n'
-            f"                <strong>{e(_W['error'])}</strong> {e(error)}            </div>\n"
-            "        "
-        )
     out.append("\n        ")
     if subscription_url is not None and webcal_url is not None:
         link = '<a href="https://calendar.google.com" target="_blank">' + e(_W["google_link"]) + "</a>"
@@ -158,10 +151,6 @@ def render_page(
     )
     out.append(
         "\n"
-        '        <div class="warning-box">\n'
-        f"            <strong>{e(_W['auth_heading'])}</strong><br>\n"
-        f"            {e(_W['auth_text'])}        </div>\n"
-        "\n"
         '        <div class="button-row">\n'
         f'            <button id="use-location" class="secondary">{e(_W["use_location"])}</button>\n'
         f'            <button id="show-address-search" class="secondary">{e(_W["search_address"])}</button>\n'
@@ -179,13 +168,6 @@ def render_page(
         "        </div>\n"
         "\n"
         '        <form method="post" id="feed-form">\n'
-        "            <hr>\n"
-        "\n"
-        '            <div class="form-group">\n'
-        f'                <label for="password">{e(_W["password"])} <span class="required">*</span></label>\n'
-        '                <input type="password" name="password" id="password" required>\n'
-        "            </div>\n"
-        "\n"
         "            <hr>\n"
         "\n"
         '            <div class="form-group">\n'

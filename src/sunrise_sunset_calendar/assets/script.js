@@ -135,12 +135,6 @@ function validateForm() {
         return false;
     }
 
-    const password = document.getElementById('password').value;
-    if (!password) {
-        alert(STRINGS.enter_password);
-        return false;
-    }
-
     return true;
 }
 

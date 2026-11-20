@@ -78,6 +78,8 @@ def test_health_head_has_no_body(config: Config) -> None:
 
 def test_the_old_health_query_is_just_the_page(config: Config) -> None:
     status, headers, body = call(config, query="health")
+    assert status == "403 Forbidden", "The page needs the token"
+    status, headers, body = call(config, query="health&token=app-test-token")
     assert status == "200 OK"
     assert ("Content-Type", "text/html; charset=UTF-8") in headers
     assert b"<!DOCTYPE html>" in body
@@ -103,8 +105,16 @@ def test_feed_rejects_bad_tokens(config: Config, query: str) -> None:
     assert headers[:6] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8"), NO_STORE]
 
 
+@pytest.mark.parametrize("query", ["", "token=wrong", "token[]=app-test-token"])
+def test_page_needs_the_token(config: Config, query: str) -> None:
+    status, headers, body = call(config, query=query)
+    assert status == "403 Forbidden"
+    assert body == b"Invalid authentication token"
+    assert headers[:6] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8"), NO_STORE]
+
+
 def test_page(config: Config) -> None:
-    status, headers, body = call(config, "/")
+    status, headers, body = call(config, "/", query="token=app-test-token")
     assert status == "200 OK"
     assert headers[:6] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8"), NO_STORE]
     assert b'<option value="Europe/Rome" selected>Europe/Rome</option>' in body
@@ -112,6 +122,7 @@ def test_page(config: Config) -> None:
     assert b"<script>" not in body
     assert b"onclick" not in body and b"onchange" not in body and b"onsubmit" not in body
     assert b"style=" not in body
+    assert b"password" not in body, "The token is in the URL already"
 
 
 @pytest.mark.parametrize("path", ["/sunrise-sunset-calendar.php", "/sunrise-sunset-calendar.php/extra"])
@@ -122,7 +133,7 @@ def test_the_php_path_is_gone(config: Config, path: str) -> None:
 
 
 def test_head_has_no_body(config: Config) -> None:
-    status, headers, body = call(config, method="HEAD")
+    status, headers, body = call(config, method="HEAD", query="token=app-test-token")
     assert status == "200 OK"
     assert body == b""
     assert int(dict(headers)["Content-Length"]) > 1000
@@ -147,12 +158,15 @@ def test_other_paths_are_not_found(config: Config, path: str) -> None:
     assert headers[:4] == SECURITY
 
 
-def form_post(config: Config, body: bytes, content_type: str, **extra: str) -> tuple[str, list[tuple[str, str]], bytes]:
-    return call(config, method="POST", body=body, CONTENT_TYPE=content_type, **extra)
+def form_post(
+    config: Config, body: bytes, content_type: str, query: str = "token=app-test-token", **extra: str
+) -> tuple[str, list[tuple[str, str]], bytes]:
+    """The form posts back to the page's own URL, which holds the token."""
+    return call(config, query=query, method="POST", body=body, CONTENT_TYPE=content_type, **extra)
 
 
 def test_form_generates_urls(config: Config) -> None:
-    body = b"generate_url=1&password=app-test-token&lat=1&lon=2&zone=UTC&location=A+%26+B&civil=on&daynight=on"
+    body = b"generate_url=1&lat=1&lon=2&zone=UTC&location=A+%26+B&civil=on&daynight=on"
     _, _, page = form_post(config, body, "application/x-www-form-urlencoded", HTTP_X_FORWARDED_PROTO="https")
     url = (
         "https://calendar.example/?feed=1&amp;token=app-test-token&amp;lat=1&amp;lon=2"
@@ -163,18 +177,16 @@ def test_form_generates_urls(config: Config) -> None:
 
 
 def test_form_over_plain_http(config: Config) -> None:
-    _, _, page = form_post(config, b"generate_url=1&password=app-test-token", "application/x-www-form-urlencoded")
+    _, _, page = form_post(config, b"generate_url=1", "application/x-www-form-urlencoded")
     assert b"http://calendar.example/?feed=1&amp;" in page
-    _, _, page = form_post(
-        config, b"generate_url=1&password=app-test-token", "application/x-www-form-urlencoded", HTTPS="on"
-    )
+    _, _, page = form_post(config, b"generate_url=1", "application/x-www-form-urlencoded", HTTPS="on")
     assert b"https://calendar.example/?feed=1&amp;" in page
 
 
 def test_form_behind_a_proxy(config: Config) -> None:
     _, _, page = form_post(
         config,
-        b"generate_url=1&password=app-test-token",
+        b"generate_url=1",
         "application/x-www-form-urlencoded",
         HTTP_X_FORWARDED_PROTO="https",
         HTTP_X_FORWARDED_HOST="calendar.proxy.example",
@@ -191,21 +203,20 @@ def test_form_behind_a_proxy(config: Config) -> None:
     ],
 )
 def test_form_ignores_malformed_forwarded_headers(config: Config, forwarded: dict, expected: bytes) -> None:
-    _, _, page = form_post(
-        config, b"generate_url=1&password=app-test-token", "application/x-www-form-urlencoded", **forwarded
-    )
+    _, _, page = form_post(config, b"generate_url=1", "application/x-www-form-urlencoded", **forwarded)
     assert expected in page
 
 
-def test_form_rejects_a_wrong_password(config: Config) -> None:
-    _, _, page = form_post(config, b"generate_url=1&password=nope", "application/x-www-form-urlencoded")
-    assert b"<strong>Error:</strong> Invalid password" in page
-    assert b"subscription-url" not in page.split(b"<form")[0]
+@pytest.mark.parametrize("query", ["", "token=nope"])
+def test_form_needs_the_token(config: Config, query: str) -> None:
+    status, _, page = form_post(config, b"generate_url=1", "application/x-www-form-urlencoded", query=query)
+    assert status == "403 Forbidden"
+    assert b"feed=1" not in page
 
 
 def test_multipart_form(config: Config) -> None:
     boundary = "XyZ"
-    parts = [("generate_url", "1"), ("password", "app-test-token"), ("location", "Côte"), ("astro", "on")]
+    parts = [("generate_url", "1"), ("location", "Côte"), ("astro", "on")]
     body = "".join(
         f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n' for name, value in parts
     )
@@ -217,7 +228,7 @@ def test_multipart_form(config: Config) -> None:
 
 
 def test_post_without_a_form_body_shows_the_page(config: Config) -> None:
-    _, _, page = form_post(config, b"generate_url=1&password=app-test-token", "text/plain", CONTENT_LENGTH="x")
+    _, _, page = form_post(config, b"generate_url=1", "text/plain", CONTENT_LENGTH="x")
     assert b"success-box" not in page
 
 

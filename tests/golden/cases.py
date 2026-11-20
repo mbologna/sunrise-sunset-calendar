@@ -253,29 +253,31 @@ def _cases() -> list[Case]:
     for tag, query in others.items():
         cases.append(Case(f"http-{tag}", "http", query))
 
-    # F. The web page, on three days, and its form
+    # F. The web page, on three days, and its form: the page needs the token too
+    page = f"token={TOKEN}"
     for moment in ("2026-03-29 10:00:00", "2026-06-21 03:00:00", "2026-12-21 23:30:00"):
-        cases.append(Case(f"page-{moment[:10]}", "page", "", now=moment))
+        cases.append(Case(f"page-{moment[:10]}", "page", page, now=moment))
     form = (
-        "generate_url=Generate&password=golden-token&lat=45.4642&lon=9.19&zone=Europe%2FRome"
+        "generate_url=Generate&lat=45.4642&lon=9.19&zone=Europe%2FRome"
         "&location=Mil%C3%A0n+%26+co+%3Cb%3E&rise_off=5&set_off=-5&description=hi+there&civil=on&daynight=on"
     )
     cases += [
-        Case("page-post-ok", "page", "", body=form),
-        Case("page-post-ok-https", "page", "", body=form, https=True),
-        Case("page-post-ok-host", "page", "", body=form, host="sun.example.org:8443"),
-        Case("page-post-wrong-password", "page", "", body=form.replace("golden-token", "nope")),
-        Case("page-post-no-password", "page", "", body="generate_url=1&lat=1"),
-        Case("page-post-defaults", "page", "", body="generate_url=1&password=golden-token"),
+        Case("page-no-token", "page", ""),
+        Case("page-wrong-token", "page", "token=nope"),
+        Case("page-post-ok", "page", page, body=form),
+        Case("page-post-ok-https", "page", page, body=form, https=True),
+        Case("page-post-ok-host", "page", page, body=form, host="sun.example.org:8443"),
+        Case("page-post-no-token", "page", "", body=form),
+        Case("page-post-defaults", "page", page, body="generate_url=1"),
         Case(
             "page-post-every-type",
             "page",
-            "",
-            body="generate_url=1&password=golden-token&nautical=&astro=x&civil[]=1&daynight=on&zone=Asia%2FTokyo"
+            page,
+            body="generate_url=1&nautical=&astro=x&civil[]=1&daynight=on&zone=Asia%2FTokyo"
             "&location=~tilde+%2A+%21&description=a%0Ab",
         ),
-        Case("page-post-no-submit", "page", "", body="password=golden-token&lat=1"),
-        Case("page-get-generate", "page", "generate_url=1&password=golden-token"),
+        Case("page-post-no-submit", "page", page, body="lat=1"),
+        Case("page-get-generate", "page", f"{page}&generate_url=1"),
     ]
     return cases
 
