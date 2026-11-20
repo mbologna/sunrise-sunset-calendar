@@ -205,8 +205,23 @@ def test_api_now_at_a_moment(config: Config, at: str, expected: str) -> None:
     assert json.loads(body)["at"] == expected
 
 
-def test_api_needs_the_token(config: Config) -> None:
-    assert call(config, "/api/v1/now", query="lat=1&lon=2&zone=UTC")[0] == "403 Forbidden"
+@pytest.mark.parametrize("authorization", ["", "Bearer wrong", f"Basic {TOKEN.decode()}"])
+def test_api_needs_the_token(config: Config, authorization: str) -> None:
+    status, headers, body = call(config, "/api/v1/now", query="lat=1&lon=2&zone=UTC", HTTP_AUTHORIZATION=authorization)
+    assert status == "401 Unauthorized"
+    assert headers[:7] == [*SECURITY, ("Content-Type", "application/json"), NO_STORE, ("WWW-Authenticate", "Bearer")]
+    assert json.loads(body) == {"error": "Invalid authentication token"}
+
+
+@pytest.mark.parametrize("authorization", [f"Bearer {TOKEN.decode()}", f"bearer  {TOKEN.decode()} "])
+def test_api_takes_the_token_from_a_bearer_header(config: Config, authorization: str) -> None:
+    query = "lat=41.9028&lon=12.4964&zone=Europe%2FRome"
+    assert call(config, "/api/v1/now", query=query, HTTP_AUTHORIZATION=authorization)[0] == "200 OK"
+
+
+def test_a_bearer_header_wins_over_the_query(config: Config) -> None:
+    status = call(config, "/api/v1/now", query=API, HTTP_AUTHORIZATION="Bearer wrong")[0]
+    assert status == "401 Unauthorized"
 
 
 @pytest.mark.parametrize(

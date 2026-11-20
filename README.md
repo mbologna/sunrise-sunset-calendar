@@ -64,7 +64,7 @@ All settings are environment variables.
 |------|----------|
 | `/?token=…` | The web page that builds subscription URLs; without the token, 403 |
 | `/?feed=1&…` | The feed (parameters below) |
-| `/api/v1/now?token=…&lat=…&lon=…&zone=…` | The sun and the moon at a moment, as JSON (see [JSON](#json)) |
+| `/api/v1/now?lat=…&lon=…&zone=…` | The sun and the moon at a moment, as JSON (see [JSON](#json)); the token in `?token=` or an `Authorization: Bearer` header |
 | `/assets/` | The page's CSS and JavaScript; its address search calls [Nominatim](https://nominatim.org/) from the browser |
 | `/health` | `{"status":"ok","years":[2000,2148]}`, the years the ephemeris serves; 503 with `"status":"down"` and the problem when `CALENDAR_PAST_DAYS` or `CALENDAR_WINDOW_DAYS` reach outside them |
 
@@ -100,7 +100,8 @@ Every other path returns 404. Every response carries `X-Content-Type-Options`, `
 - `altitude` is the centre of the body above the horizon, in degrees and without refraction; `azimuth` is in degrees from north. `up` follows the feed's rules: the sun's centre above −0.8333°, the moon's upper limb above the horizon.
 - `period` is where the sun is: `daylight`, `civil_twilight`, `nautical_twilight`, `astronomical_twilight` or `night`.
 - `today` holds the local date's events; an event that doesn't happen (polar day or night) is `null`, and `polar` is `"day"`, `"night"` or `null`. `day_length` is in seconds.
-- Without a token, 403. Input it can't read gets a 400 with `{"error": "…"}`, unlike the feed, which falls back to defaults. Responses are `no-store`.
+- The token can come in an `Authorization: Bearer TOKEN` header instead of `?token=`, which keeps it out of request logs and shell history: `curl -H "Authorization: Bearer $TOKEN" 'https://example.com/api/v1/now?lat=41.9028&lon=12.4964&zone=Europe/Rome'`. The header wins when both are given.
+- Without a valid token, 401 with `{"error": "Invalid authentication token"}` and `WWW-Authenticate: Bearer`. Input it can't read gets a 400 with `{"error": "…"}`, unlike the feed, which falls back to defaults. Responses are `no-store`.
 
 ## Feed URL parameters
 
