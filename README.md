@@ -44,8 +44,6 @@ docker run -p 8080:8080 -e AUTH_TOKEN="$(openssl rand -hex 32)" sunrise-sunset-c
 
 The server is [waitress](https://docs.pylonsproject.org/projects/waitress/): one process with no C extensions, small enough for a 128 MiB [Cloud Run](https://cloud.google.com/run) instance. The image runs as an unprivileged user, has no pip and listens on `$PORT`. Images are tagged `latest` and `sha-<commit>` only and carry no version number. Each push to `main` that changes the image deploys it to Cloud Run by its digest.
 
-Releases are a changelog. Every Monday at 06:00 UTC the auto-release job reads the [Conventional Commits](https://www.conventionalcommits.org/) subjects merged since the last tag; if one is a `feat`, `fix`, `perf`, `revert` or breaking change, it tags `vX.Y.Z` and publishes a GitHub Release listing them. A week with only dependency updates gets a maintenance release. The tags build no image and deploy nothing.
-
 ## Configuration
 
 All settings are environment variables.
@@ -156,6 +154,10 @@ Up to v2 the calendar was written in PHP. The Python version produces the same f
 - `tests/golden/` holds 1004 responses recorded from the last PHP release: 46 locations (polar day and night, both hemispheres, the equator, the date line, every kind of DST rule, including changes at midnight), the full default window, extra dates (DST changes, New Year, a leap day), every combination of event types, offsets, notes, malformed input, environment settings, the web page and its form. `test_golden.py` replays every request against the Python app and compares the bytes. `make_corpus.py` records the corpus again from the PHP image (needs Docker), and `http_parity.py` compares the two images' status codes and headers over HTTP.
 
 The sunrise and sunset times come from a line-by-line port of [sun-position-spa-php](https://github.com/abbadon1334/sun-position-spa-php), the library the PHP version used. Its interpolation of rise and set times differs slightly from other SPA implementations, and the feeds keep their times to the second.
+
+## Versioning
+
+`main` is what runs: each push to it that changes the image deploys it to Cloud Run ([Running it](#running-it)). Releases follow SemVer as a changelog: every Monday at 06:00 UTC [auto-release](https://github.com/mbologna/auto-release) tags `vX.Y.Z` from the [Conventional Commit](https://www.conventionalcommits.org/) types merged since the last tag (`feat` minor; `fix`, `perf`, `revert` patch; a breaking change major), or cuts a maintenance release for a week of only dependency updates. The tag builds no image and deploys nothing; its [GitHub Release](https://github.com/mbologna/sunrise-sunset-calendar/releases) lists the changes. See the [versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
 
 ## Licence
 
