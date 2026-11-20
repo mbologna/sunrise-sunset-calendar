@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import io
 import json
 import re
@@ -118,13 +119,14 @@ def test_feed_headers(config: Config) -> None:
     status, headers, body = call(config, query=f"feed=1&token={TOKEN.decode()}&daynight=1")
     assert status == "200 OK"
     etag = dict(headers)["ETag"]
-    assert headers[:7] == [
+    assert headers[:8] == [
         *SECURITY,
         ("Content-Type", "text/calendar; charset=utf-8"),
         ("ETag", etag),
         ("Cache-Control", "private, max-age=7200"),
+        ("Vary", "Accept-Encoding"),
     ]
-    assert re.fullmatch(r'"[0-9a-f]{20}"', etag)
+    assert re.fullmatch(r'W/"[0-9a-f]{20}"', etag)
     assert body.startswith(b"BEGIN:VCALENDAR\r\n")
     assert b"REFRESH-INTERVAL;VALUE=DURATION:PT2H\r\n" in body
 
@@ -139,12 +141,14 @@ def test_an_unchanged_feed_is_a_304(config: Config, monkeypatch: pytest.MonkeyPa
         raise AssertionError("A 304 builds no feed")
 
     monkeypatch.setattr(app_module, "render_feed", no_feed)
-    for header in (etag, f"W/{etag}", f'"other", {etag}', "*"):
+    bare = etag.removeprefix("W/")
+    for header in (etag, bare, f'"other", {bare}', "*"):
         status, headers, body = call(config, query=FEED, HTTP_IF_NONE_MATCH=header)
         assert status == "304 Not Modified", header
         assert body == b""
         assert ("ETag", etag) in headers
         assert ("Cache-Control", "private, max-age=7200") in headers
+        assert ("Vary", "Accept-Encoding") in headers
 
 
 def test_the_etag_follows_what_the_feed_depends_on(config: Config, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -408,3 +412,31 @@ def test_main_serves_on_port(monkeypatch: pytest.MonkeyPatch) -> None:
     assert served["port"] == 9999
     assert served["host"] == "0.0.0.0"  # noqa: S104
     assert callable(served["app"])
+
+
+@pytest.mark.parametrize("accept", ["gzip", "br, gzip;q=0.8", "*", "deflate, x-gzip"])
+def test_text_is_gzipped_for_clients_that_accept_it(config: Config, accept: str) -> None:
+    plain_status, plain_headers, plain = call(config, query=FEED)
+    status, headers, body = call(config, query=FEED, HTTP_ACCEPT_ENCODING=accept)
+    assert status == plain_status == "200 OK"
+    assert ("Content-Encoding", "gzip") in headers and ("Vary", "Accept-Encoding") in headers
+    assert gzip.decompress(body) == plain
+    assert dict(headers)["Content-Length"] == str(len(body)) and len(body) < len(plain) / 4
+    assert dict(headers)["ETag"] == dict(plain_headers)["ETag"]
+    head = call(config, query=FEED, method="HEAD", HTTP_ACCEPT_ENCODING=accept)
+    assert head[2] == b"" and dict(head[1])["Content-Length"] == str(len(body))
+
+
+@pytest.mark.parametrize("accept", ["", "identity", "br", "gzip;q=0", "*, gzip;q=0", "gzip;q=x"])
+def test_text_stays_plain_otherwise(config: Config, accept: str) -> None:
+    _, headers, body = call(config, query=FEED, HTTP_ACCEPT_ENCODING=accept)
+    assert "Content-Encoding" not in dict(headers) and ("Vary", "Accept-Encoding") in headers
+    assert body.startswith(b"BEGIN:VCALENDAR")
+
+
+def test_small_responses_and_errors_stay_plain(config: Config) -> None:
+    for path, query in (("/health", ""), ("/api/v1/now", "lat=1&lon=2&zone=UTC"), ("/nowhere", "")):
+        _, headers, _ = call(config, path, query=query, HTTP_ACCEPT_ENCODING="gzip")
+        assert "Content-Encoding" not in dict(headers) and "Vary" not in dict(headers), path
+    _, headers, body = call(config, "/assets/script.js", HTTP_ACCEPT_ENCODING="gzip")
+    assert ("Content-Encoding", "gzip") in headers and gzip.decompress(body)
