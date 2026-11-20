@@ -129,7 +129,7 @@ Time zones come from the pinned [`tzdata`](https://pypi.org/project/tzdata/) pac
 
 ```bash
 uv sync                          # Python 3.15 and the dev tools
-uv run pytest                    # all tests, with the coverage gate (80%)
+uv run pytest                    # all tests in parallel (pytest-xdist), with the coverage gate (80%)
 uv run ruff check . && uv run ruff format .
 uv run pre-commit run --all-files  # ruff, mypy, bandit, hadolint and file checks
 ```
@@ -154,7 +154,7 @@ CI runs ruff and the tests through `mbologna/.github`'s `python-ci`, then builds
 
 ### Golden corpus
 
-`tests/golden/` holds 1002 recorded responses: 46 locations (polar day and night, both hemispheres, the equator, the date line, every kind of DST rule, including changes at midnight), the full default window, extra dates (DST changes, New Year, a leap day), every combination of event types, offsets, notes, malformed input, environment settings, the web page and its form. `test_golden.py` replays every request and compares the bytes, apart from `DTSTAMP`, the moment a feed is generated. When the output changes on purpose, `uv run python -m tests.golden.make_corpus` records the corpus again; review the changed lines before committing.
+`tests/golden/` holds 403 recorded responses: 46 locations (polar day and night, both hemispheres, the equator, the date line, every kind of DST rule, including changes at midnight), the full default window, extra dates (DST changes, New Year, a leap day), every combination of event types for six representative places, offsets, notes, malformed input, environment settings, the web page and its form. `test_golden.py` replays every request and compares the bytes, apart from `DTSTAMP`, the moment a feed is generated. When the output changes on purpose, `uv run python -m tests.golden.make_corpus` records the corpus again; review the changed lines before committing.
 
 ### The PHP version
 

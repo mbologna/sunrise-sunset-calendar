@@ -61,7 +61,13 @@ def request(case: Case) -> tuple[int, list[tuple[str, str]], bytes]:
     return int(status.split()[0]), headers, output
 
 
-@pytest.mark.parametrize("case", CASES, ids=[c.id for c in CASES])
+def place(case: Case) -> str:
+    """The case's coordinates: with pytest-xdist, one worker replays a place's cases with its caches warm."""
+    match = re.search(r"lat=([^&]*)&lon=([^&]*)", case.query)
+    return match.expand(r"\1,\2") if match else "other"
+
+
+@pytest.mark.parametrize("case", [pytest.param(c, id=c.id, marks=pytest.mark.xdist_group(place(c))) for c in CASES])
 def test_matches_corpus(case: Case) -> None:
     # The corpus keeps bodies only: test_app.py covers status codes and headers
     _, _, body = request(case)

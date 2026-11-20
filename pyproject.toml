@@ -34,6 +34,7 @@ dev = [
     "pre-commit>=4.5.1",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.17.0",
 ]
 
@@ -86,7 +87,8 @@ mypy_path = "src"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --strict-markers"
+# In parallel; tests/golden groups its cases by place, so a worker keeps that place's searches cached
+addopts = "-v --strict-markers -n auto --dist loadgroup"
 
 [tool.bandit]
 exclude_dirs = ["tests"]

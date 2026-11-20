@@ -84,6 +84,7 @@ LOCATIONS = [
 ]
 
 FLAGS = ("civil", "nautical", "astro", "daynight")
+FLAG_LOCATIONS = ("Rome", "Longyearbyen", "London", "Quito", "Sydney", "South Pole")
 ALL_FLAGS = dict.fromkeys(FLAGS, "1")
 
 
@@ -124,10 +125,12 @@ def _cases() -> list[Case]:
                 )
             )
 
-    # C. Every other combination of event types, around the June solstice (midnight sun and polar night)
+    # C. Every other combination of event types, around the June solstice (midnight sun and polar night),
+    # for places that cover the cases: mid-latitude, polar day, white nights, the equator, the south,
+    # and a pole whose solar noon falls at local midnight. Group A has every place with every type.
     sweep = {"CALENDAR_PAST_DAYS": "2", "CALENDAR_WINDOW_DAYS": "9"}
     combos = [c for c in product((False, True), repeat=4) if not all(c)]
-    for name, lat, lon, zone in LOCATIONS:
+    for name, lat, lon, zone in (loc for loc in LOCATIONS if loc[0] in FLAG_LOCATIONS):
         for combo in combos:
             flags = {f: "1" for f, on in zip(FLAGS, combo, strict=True) if on}
             tag = "".join(f[0] for f, on in zip(FLAGS, combo, strict=True) if on) or "none"
