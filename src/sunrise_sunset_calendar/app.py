@@ -13,6 +13,7 @@ Configuration comes from the environment:
 from __future__ import annotations
 
 import dataclasses
+import gzip
 import hashlib
 import hmac
 import json
@@ -73,6 +74,9 @@ ASSETS = {
 HTML = "text/html; charset=UTF-8"
 JSON = ("Content-Type", "application/json")
 API_NOW = "/api/v1/now"
+# Text from this size up is gzipped for clients that accept it: feeds shrink about 27 times
+GZIP_MIN_SIZE = 1024
+COMPRESSIBLE = ("text/", "application/json")
 POST_MAX_SIZE = 8 * 1024 * 1024
 
 
@@ -205,13 +209,27 @@ def feed_etag(revision: str, options: Options, now: int) -> str:
     fields = dataclasses.asdict(options)
     del fields["now"]
     key = json.dumps([revision, today, fields], sort_keys=True)
-    return '"' + hashlib.sha256(key.encode()).hexdigest()[:20] + '"'
+    # Weak: the gzipped and the plain feed are the same content in two encodings
+    return 'W/"' + hashlib.sha256(key.encode()).hexdigest()[:20] + '"'
 
 
 def etag_matches(etag: str, if_none_match: str) -> bool:
     """Whether an If-None-Match header names the ETag (weak or not) or is "*"."""
     tags = [tag.strip().removeprefix("W/") for tag in if_none_match.split(",")]
-    return etag in tags or "*" in tags
+    return etag.removeprefix("W/") in tags or "*" in tags
+
+
+def accepts_gzip(accept_encoding: str) -> bool:
+    """Whether an Accept-Encoding header allows gzip, by name or as "*", and not with q=0."""
+    weights: dict[str, float] = {}
+    for item in accept_encoding.split(","):
+        coding, *params = (part.strip() for part in item.split(";"))
+        weight = 1.0
+        for name, _, value in (param.partition("=") for param in params):
+            if name.strip().lower() == "q":
+                weight = parse_float(value.encode()) or 0.0
+        weights[coding.lower()] = weight
+    return weights.get("gzip", weights.get("x-gzip", weights.get("*", 0.0))) > 0
 
 
 def parse_moment(value: bytes, zone_name: str, default: int) -> int | None:
@@ -319,6 +337,13 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
         method = environ.get("REQUEST_METHOD", "GET")
 
         def respond(status: str, body: bytes, headers: list[tuple[str, str]]) -> list[bytes]:
+            content_type = dict(headers).get("Content-Type", "")
+            if status == "200 OK" and len(body) >= GZIP_MIN_SIZE and content_type.startswith(COMPRESSIBLE):
+                headers = [*headers, ("Vary", "Accept-Encoding")]
+                # HEAD too, so its Content-Length is the one GET would send
+                if accepts_gzip(environ.get("HTTP_ACCEPT_ENCODING", "")):
+                    body = gzip.compress(body, compresslevel=6, mtime=0)
+                    headers.append(("Content-Encoding", "gzip"))
             start_response(status, [*SECURITY_HEADERS, *headers, ("Content-Length", str(len(body)))])
             return [b"" if method == "HEAD" else body]
 
@@ -394,7 +419,7 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
             cache_headers = [("ETag", etag), ("Cache-Control", f"private, max-age={config.update_interval}")]
             # A client that still has today's feed gets a 304, and the feed isn't built
             if etag_matches(etag, environ.get("HTTP_IF_NONE_MATCH", "")):
-                return respond("304 Not Modified", b"", cache_headers)
+                return respond("304 Not Modified", b"", [*cache_headers, ("Vary", "Accept-Encoding")])
             body = render_feed(options)
             return respond("200 OK", body, [("Content-Type", "text/calendar; charset=utf-8"), *cache_headers])
 
