@@ -1,19 +1,17 @@
 """Comprehensive solar calculations test suite.
 
-Tests high-precision NREL SPA-inspired solar calculations.
+Tests the skyfield (JPL DE442) solar calculations.
 
 Coverage:
 - Solar position calculations
 - Sunrise/sunset calculations for various latitudes
 - Twilight calculations (civil, nautical, astronomical)
 - Edge cases (polar regions, equator, solstices, equinoxes)
-- Hour angle calculations
 - Leap year handling
 """
 
 from __future__ import annotations
 
-from sunrise_sunset_calendar.astronomy import sunrise_hour_angle
 from sunrise_sunset_calendar.php import mktime
 from tests.helpers import (
     assert_float_equals,
@@ -22,34 +20,6 @@ from tests.helpers import (
     calculate_sun_times,
     fraction_to_timestamp,
 )
-
-
-def test_sunrise_hour_angle_for_sunrise() -> None:
-    # Test sunrise hour angle for typical location (45°N)
-    lat = 45.0
-    decl = 0.0  # Equinox
-    angle = -0.833  # Standard sunrise/sunset
-
-    ha = sunrise_hour_angle(lat, decl, angle)
-    assert ha is not None
-
-    # At equinox, sunrise should be around 6 hours before noon (90°)
-    # Hour angle in degrees should be close to 90°
-    assert_in_range(ha, 85.0, 95.0, "Hour angle at equinox for 45°N")
-
-
-def test_sunrise_hour_angle_for_twilight() -> None:
-    # Civil twilight has larger hour angle (earlier start)
-    lat = 45.0
-    decl = 0.0
-
-    ha_sunrise = sunrise_hour_angle(lat, decl, -0.833)
-    ha_civil = sunrise_hour_angle(lat, decl, -6.0)
-    assert ha_sunrise is not None
-    assert ha_civil is not None
-
-    # Civil twilight starts before sunrise (larger hour angle)
-    assert ha_civil > ha_sunrise, "Civil twilight hour angle > sunrise hour angle"
 
 
 def test_rome_sunrise_sunset() -> None:

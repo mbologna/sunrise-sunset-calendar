@@ -85,22 +85,26 @@ def solar_spans(ev: dict, nxt: dict) -> dict[str, Span | None]:
     that bound it: (start, end, start instant, end instant).
     """
     noon = ev["solar_noon"]
+    # At a pole the year's one sunrise or sunset can come on the other side of noon: it bounds the
+    # day's daylight, but not civil twilight, which keeps to its side
+    sunrise = ev["sunrise"] if ev["sunrise"] is not None and ev["sunrise"] <= noon else None
+    sunset = ev["sunset"] if ev["sunset"] is not None and ev["sunset"] >= noon else None
     crossings = (
         (-18.0, ev["astro_begin"], ev["astro_end"], "astronomical_dawn", "astronomical_dusk"),
         (-12.0, ev["nautical_begin"], ev["nautical_end"], "nautical_dawn", "nautical_dusk"),
         (-6.0, ev["civil_begin"], ev["civil_end"], "civil_dawn", "civil_dusk"),
-        (0.0, ev["sunrise"], ev["sunset"], "sunrise", "sunset"),
+        (0.0, sunrise, sunset, "sunrise", "sunset"),
     )
 
     spans: dict[str, Span | None] = {}
     for i, band in enumerate(("astronomical", "nautical", "civil")):
         low_alt, low_rise, low_set, low_dawn, low_dusk = crossings[i]
         high_alt, high_rise, high_set, high_dawn, high_dusk = crossings[i + 1]
+        # A half-day that crosses neither altitude has the sun inside the band throughout, or never.
+        # The halves are separate: the day a polar day or night starts or ends, only one crosses.
+        in_band = ev["midnight_elevation"] > low_alt and ev["noon_elevation"] < high_alt
         if low_rise is None and high_rise is None:
-            # Neither altitude crossed: the sun is inside the band all day, or never
-            in_band = ev["midnight_elevation"] > low_alt and ev["noon_elevation"] < high_alt
             spans[f"morning_{band}"] = (noon - 43200, noon, "solar_midnight", "solar_noon") if in_band else None
-            spans[f"evening_{band}"] = (noon, noon + 43200, "solar_noon", "solar_midnight") if in_band else None
         else:
             spans[f"morning_{band}"] = (
                 low_rise if low_rise is not None else noon - 43200,
@@ -108,6 +112,9 @@ def solar_spans(ev: dict, nxt: dict) -> dict[str, Span | None]:
                 "solar_midnight" if low_rise is None else low_dawn,
                 "solar_noon" if high_rise is None else high_dawn,
             )
+        if high_set is None and low_set is None:
+            spans[f"evening_{band}"] = (noon, noon + 43200, "solar_noon", "solar_midnight") if in_band else None
+        else:
             spans[f"evening_{band}"] = (
                 high_set if high_set is not None else noon,
                 low_set if low_set is not None else noon + 43200,
@@ -116,8 +123,14 @@ def solar_spans(ev: dict, nxt: dict) -> dict[str, Span | None]:
             )
 
     daylight: Span | None = None
-    if ev["sunrise"] is not None and ev["sunset"] is not None:
-        daylight = (ev["sunrise"], ev["sunset"], "sunrise", "sunset")
+    if ev["sunrise"] is not None or ev["sunset"] is not None:
+        # Without a sunrise (or a sunset) the sun is up from (or until) solar midnight
+        daylight = (
+            ev["sunrise"] if ev["sunrise"] is not None else noon - 43200,
+            ev["sunset"] if ev["sunset"] is not None else noon + 43200,
+            "sunrise" if ev["sunrise"] is not None else "solar_midnight",
+            "sunset" if ev["sunset"] is not None else "solar_midnight",
+        )
     elif ev["polar"] == "day":
         daylight = (noon - 43200, noon + 43200, "solar_midnight", "solar_midnight")
 
@@ -250,12 +263,13 @@ def _render(o: Options, now: int) -> bytes:
         def clock(ts: int) -> int:
             return ts - LocalDate.from_timestamp(ts, tz).set_time(0, 0).ts
 
+        def shift(today: int, yesterday: int) -> int:
+            """How far a clock time moved, the short way round midnight: 23:44 to 00:12 is 28 minutes later."""
+            return (clock(today) - clock(yesterday) + 43200) % 86400 - 43200
+
         clock_shifts: tuple[int, int] | tuple[None, None]
         if ev["sunrise"] and ev["sunset"] and prev["sunrise"] and prev["sunset"]:
-            clock_shifts = (
-                clock(ev["sunrise"]) - clock(prev["sunrise"]),
-                clock(ev["sunset"]) - clock(prev["sunset"]),
-            )
+            clock_shifts = (shift(ev["sunrise"], prev["sunrise"]), shift(ev["sunset"], prev["sunset"]))
         else:
             clock_shifts = (None, None)
 

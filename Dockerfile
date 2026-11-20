@@ -18,7 +18,6 @@ WORKDIR /tmp/build
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-editable --no-install-project
 COPY README.md LICENSE ./
-COPY LICENSES/ LICENSES/
 COPY src/ src/
 RUN uv sync --locked --no-dev --no-editable
 
@@ -27,8 +26,8 @@ FROM python:3.15.2-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc
 # release tags are a changelog and build nothing, so no .version
 # (pyproject.toml's is a placeholder).
 LABEL org.opencontainers.image.title="sunrise-sunset-calendar" \
-      org.opencontainers.image.description="iCalendar feed of sunrise, sunset, twilight and moon phases for any location, computed with the NREL Solar Position Algorithm" \
-      org.opencontainers.image.licenses="MIT AND GPL-3.0-only"
+      org.opencontainers.image.description="iCalendar feed of sunrise, sunset, twilight and moon phases for any location, computed from the JPL DE442 ephemeris" \
+      org.opencontainers.image.licenses="MIT"
 COPY --from=build /opt/venv /opt/venv
 # Run-time writes go to /tmp (HOME too), so the root filesystem can be
 # read-only.
@@ -36,6 +35,11 @@ ENV PATH=/opt/venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 HOME=/
 # PORT: where the server listens. Cloud Run and most container runtimes set
 # it; 8080 otherwise.
 ENV PORT=8080
+# One malloc arena: each waitress thread (THREADS) otherwise keeps its own,
+# holding the memory freed after skyfield's searches: about 40 MB more with
+# the default two threads, against a 128 MiB instance. The GIL serialises the
+# work anyway.
+ENV MALLOC_ARENA_MAX=1
 # The base image's pip (with the packages it vendors) and ensurepip's
 # bundled pip wheel are never used at run time; removing them keeps their
 # CVEs out of the image.

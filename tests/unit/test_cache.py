@@ -37,23 +37,6 @@ def test_solar_calc_cache_miss() -> None:
     assert result is None
 
 
-def test_moon_phase_cache_hit() -> None:
-    store = cache.get().moon_phase
-
-    key = "2026-02"
-    data = [{"phase": "new_moon", "timestamp": 1707000000}]
-
-    store[key] = data
-    result = cache.get().moon_phase.get(key)
-
-    assert result == data
-
-
-def test_moon_phase_cache_miss() -> None:
-    result = cache.get().moon_phase.get("2026-13")
-    assert result is None
-
-
 def test_week_summary_is_cached() -> None:
     week_start = php.mktime(0, 0, 0, 2, 1, 2026)
 

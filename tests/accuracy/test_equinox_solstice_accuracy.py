@@ -1,16 +1,16 @@
 """Equinox and solstice accuracy tests.
 
-Tests the Meeus algorithm implementation against authoritative reference data
-from timeanddate.com and USNO.
+Tests the skyfield (JPL DE442) equinoxes and solstices against authoritative
+reference data from timeanddate.com and USNO.
 
-Requirement: ±1 minute accuracy (60 seconds tolerance)
+Requirement: within the references' own resolution, one minute (60 seconds).
 """
 
 from __future__ import annotations
 
 import pytest
 
-from sunrise_sunset_calendar.astronomy import calculate_equinox_solstice, jde_to_unix
+from sunrise_sunset_calendar.astronomy import calculate_equinox_solstice
 from sunrise_sunset_calendar.php import php_date
 from tests.fixtures.astronomical_reference_data import date_to_timestamp, get_equinoxes_solstices
 from tests.helpers import utc
@@ -28,7 +28,6 @@ def equinox_solstice_cases() -> list[tuple[int, str, str]]:
 @pytest.mark.parametrize(("year", "event", "expected_datestring"), equinox_solstice_cases())
 def test_equinox_solstice_accuracy(year: int, event: str, expected_datestring: str) -> None:
     """Accuracy for all equinoxes and solstices 2024-2030."""
-    # Calculate using Meeus algorithm
     calculated = calculate_equinox_solstice(year)
 
     # Get expected timestamp from reference data
@@ -38,13 +37,12 @@ def test_equinox_solstice_accuracy(year: int, event: str, expected_datestring: s
     # Calculate difference in seconds
     difference = abs(calculated_timestamp - expected_timestamp)
 
-    # Assert accuracy within ±70 seconds (~1 minute)
-    # Note: Meeus algorithm typically achieves ±1 min, some cases may be slightly over
-    assert difference <= 70, (
+    # The references give the minute
+    assert difference <= 60, (
         f"{year} {event}: Expected {php_date('Y-m-d H:i:s', expected_timestamp)} UTC, "
         f"got {php_date('Y-m-d H:i:s', calculated_timestamp)} UTC (difference: {difference} seconds)\n"
         "Reference: timeanddate.com\n"
-        "Algorithm: Meeus Chapter 27"
+        "Algorithm: skyfield, JPL DE442"
     )
 
 
@@ -56,7 +54,7 @@ def test_2026_march_equinox() -> None:
     expected = utc("2026-03-20 14:46:00")
     actual = result["march_equinox"]
 
-    assert abs(expected - actual) <= 70, (  # ±70 seconds (~1 minute)
+    assert abs(expected - actual) <= 60, (
         f"March Equinox 2026 should be March 20, 14:46 UTC\nCalculated: {php_date('M j, H:i', actual)} UTC"
     )
 
@@ -70,7 +68,7 @@ def test_2026_june_solstice() -> None:
     expected = utc("2026-06-21 08:24:00")
     actual = result["june_solstice"]
 
-    assert abs(expected - actual) <= 70, (  # ±70 seconds (~1 minute)
+    assert abs(expected - actual) <= 60, (
         f"June Solstice 2026 should be June 21, 08:24 UTC (not Jun 20!)\nCalculated: {php_date('M j, H:i', actual)} UTC"
     )
 
@@ -95,7 +93,7 @@ def test_2026_december_solstice() -> None:
     expected = utc("2026-12-21 20:50:00")
     actual = result["december_solstice"]
 
-    assert abs(expected - actual) <= 70, (  # ±70 seconds (~1 minute)
+    assert abs(expected - actual) <= 60, (
         "December Solstice 2026 should be December 21, 20:50 UTC (not 12:19!)\n"
         f"Calculated: {php_date('M j, H:i', actual)} UTC\n"
         "Error in old code: 8h 30m off!"
@@ -119,23 +117,11 @@ def test_all_years_within_tolerance() -> None:
                 max_error = difference
                 worst_case = f"{year} {event}: {difference} seconds off"
 
-    assert max_error <= 70, (
+    assert max_error <= 60, (
         f"Maximum error across all test cases: {max_error} seconds\n"
         f"Worst case: {worst_case}\n"
-        "Requirement: ±70 seconds (~1 minute)"
+        "Requirement: ±60 seconds (the references give the minute)"
     )
-
-
-def test_jde_to_unix_conversion() -> None:
-    """Helper functions."""
-    # Test known JDE value
-    # JDE 2451545.0 = 2000-01-01 12:00:00 UTC (J2000.0 epoch)
-    jde = 2451545.0
-    timestamp = jde_to_unix(jde)
-
-    expected = utc("2000-01-01 12:00:00")
-
-    assert abs(expected - timestamp) <= 1, "JDE to Unix conversion should be accurate"  # ±1 second
 
 
 def test_leap_year_handling() -> None:
@@ -155,9 +141,8 @@ def test_leap_year_handling() -> None:
 
 
 def test_century_boundaries() -> None:
-    """Century boundaries."""
-    # Test years near century boundaries where formulas change
-    years = [2000, 2050, 2100]
+    """Years across the ephemeris excerpt, which serves feeds up to 2148."""
+    years = [2000, 2025, 2050, 2100, 2148]
 
     for year in years:
         result = calculate_equinox_solstice(year)

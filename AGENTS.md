@@ -1,14 +1,15 @@
 # AGENTS.md — sunrise-sunset-calendar
 
-iCalendar feed of sunrise, sunset, twilight and moon phases for any location, computed with the NREL Solar Position Algorithm. User-facing docs: `README.md`.
+iCalendar feed of sunrise, sunset, twilight and moon phases for any location, computed from the JPL DE442 ephemeris with skyfield. User-facing docs: `README.md`.
 
 ## Layout
 
 - `src/sunrise_sunset_calendar/`: the package. `app.main()` is the console
   script `sunrise-sunset-calendar`, the image's entry point: a web service
   that serves the page and the feed with waitress on `$PORT` (8080).
-- `tests/`: pytest. `tests/golden/` replays a corpus of responses recorded
-  from the PHP release and compares the bytes (README, "Development").
+- `tests/`: pytest. `tests/golden/` replays a corpus of recorded responses
+  and compares the bytes; `make_corpus.py` records it again when the output
+  changes on purpose (README, "Development").
 - `Dockerfile`: two stages, `uv sync --locked` into `/opt/venv`
   (dependencies first, then the app), then a runtime without pip.
 - CI builds the image, pushes it to ghcr.io on every main build, and

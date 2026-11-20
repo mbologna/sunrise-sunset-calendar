@@ -458,8 +458,81 @@ def test_polar_transitions_get_their_own_days() -> None:
     begins = events_of_type(ics, "polar-night-begins")[0]
     ends = events_of_type(ics, "polar-night-ends")[0]
     assert begins["DTSTART"] == "20261128"
-    assert ends["DTSTART"] == "20270116", "The first day the sun rises: 11:15 on Jan 16, 2027"
+    # timeanddate.com: down all day on Jan 14, up 11:34-12:13 on Jan 15
+    assert ends["DTSTART"] == "20270115", "The first day the sun rises: 11:35 on Jan 15, 2027"
     assert re.search(r"^The first sunrise after about 4\d days of polar night\.$", ends["DESCRIPTION"])
+
+
+def test_midnight_sun_runs_to_the_last_date_without_a_sunset() -> None:
+    """timeanddate.com: the sun stays up from Apr 19 to Aug 24, 2026; it first sets at 00:28 on Aug 25.
+
+    That sunset belongs to the solar day of Aug 24, which runs to solar midnight, about 01:00.
+    """
+    ics = feed(lat=78.2232, lon=15.6267, timezone="Arctic/Longyearbyen", today="2026-04-01", window_days=160)
+
+    assert events_of_type(ics, "midnight-sun-begins")[0]["DTSTART"] == "20260419"
+    ends = events_of_type(ics, "midnight-sun-ends")[0]
+    assert ends["DTSTART"] == "20260825"
+    assert ends["DESCRIPTION"] == "The first sunset after about 128 days of midnight sun."
+    assert "Midnight sun from Apr 19 to Aug 24." in ics.replace("\r\n ", "")
+
+
+def test_a_sunset_that_crosses_midnight_moves_the_short_way() -> None:
+    """Longyearbyen's sunset moves from 23:44 on Apr 16, 2026 to 00:12 the next night: 28 minutes later."""
+    ics = feed(lat=78.2232, lon=15.6267, timezone="Arctic/Longyearbyen", today="2026-04-17", window_days=0)
+
+    daylight = events_of_type(ics, "daylight")[0]
+    assert text(daylight).startswith("48m 16s longer than yesterday: sunrise 20m 21s earlier, sunset 27m 55s later")
+
+
+def test_a_sun_that_only_skims_the_horizon_says_so() -> None:
+    """Refraction keeps the sun in view with its centre a little below the horizon: no "-1° up"."""
+    ics = feed(lat=78.2232, lon=15.6267, timezone="Arctic/Longyearbyen", today="2026-04-19", window_days=0)
+    assert "lowest at 00:56, skimming the horizon" in text(events_of_type(ics, "daylight")[0])
+
+    pole = feed(lat=90.0, lon=0.0, timezone="UTC", today="2026-03-19", window_days=0)
+    assert "The sun circles the sky skimming the horizon all day" in text(events_of_type(pole, "daylight")[0])
+
+
+def test_a_day_with_one_sunrise_or_sunset_keeps_it() -> None:
+    """The sun rises at 01:39 on Apr 18, 2026 and stays up; on Aug 24 it sets at 00:29 the next morning."""
+    ics = feed(lat=78.2232, lon=15.6267, timezone="Arctic/Longyearbyen", today="2026-04-17", window_days=130)
+    daylight = {e["DTSTART"]: e for e in events_of_type(ics, "daylight")}
+
+    last_sunrise = daylight["20260417T233922Z"]
+    assert last_sunrise["DTEND"] == "20260418T225649Z", "Up until solar midnight"
+    assert last_sunrise["SUMMARY"] == "☀️ Daylight · 23h 17m"
+    first_sunset = next(e for e in daylight.values() if e["DTEND"] == "20260824T222904Z")
+    assert first_sunset["SUMMARY"] == "☀️ Daylight · 23h 29m", "Up since solar midnight"
+    assert [e["DTSTART"] for e in events_of_type(ics, "evening-civil-twilight") if e["DTSTART"].startswith("20260824")]
+
+
+def test_the_last_fully_dark_night_is_kept() -> None:
+    """On Mar 4, 2026 the sun rises through -18° just after midnight, and does not sink below it again."""
+    ics = feed(lat=78.2232, lon=15.6267, timezone="Arctic/Longyearbyen", today="2026-03-03", window_days=2)
+
+    nights = events_of_type(ics, "night")
+    assert [(n["DTSTART"], n["DTEND"]) for n in nights][-1] == ("20260303T221613Z", "20260304T000001Z")
+    assert events_of_type(ics, "white-nights-begins")[0]["DTSTART"] == "20260304"
+
+
+def test_the_sun_rises_once_a_year_at_the_north_pole() -> None:
+    """It rises at 12:21 UTC on Mar 18, 2026, after that day's solar noon (12:07): the day keeps it."""
+    ics = feed(lat=90.0, lon=0.0, timezone="UTC", today="2026-03-17", window_days=3)
+
+    assert events_of_type(ics, "polar-night-ends")[0]["DTSTART"] == "20260318"
+    assert events_of_type(ics, "midnight-sun-begins")[0]["DTSTART"] == "20260319"
+    assert any(e["DTSTART"] == "20260318T122104Z" for e in events_of_type(ics, "daylight"))
+
+
+@pytest.mark.parametrize(("lat", "zone"), [(90.0, "UTC"), (-90.0, "Antarctica/McMurdo")])
+def test_no_event_at_a_pole_ends_before_it_starts(lat: float, zone: str) -> None:
+    """The year's one sunrise or sunset can fall after solar noon there; twilight keeps to its side of noon."""
+    ics = feed(lat=lat, lon=0.0, timezone=zone, today="2026-01-01", window_days=365)
+
+    timed = [e for e in events(ics) if e["DTSTART"].endswith("Z")]
+    assert timed
+    assert all(e["DTSTART"] < e["DTEND"] for e in timed)
 
 
 def test_no_meteorological_seasons_in_the_tropics() -> None:
@@ -483,8 +556,8 @@ def test_night_gives_the_moonless_window() -> None:
     def night(today: str) -> str:
         return events_of_type(feed(today=today, window_days=0), "night")[0]["DESCRIPTION"]
 
-    # The moon sets at 21:45 (USNO) and the night ends at astronomical dawn
-    assert re.search(r"Moonless sky: 21:45–05:2\d \(7h \d\dm\)", night("2026-11-15"))
+    # The moon sets at 21:44:50 (USNO rounds it to 21:45) and the night ends at astronomical dawn
+    assert re.search(r"Moonless sky: 21:44–05:2\d \(7h \d\dm\)", night("2026-11-15"))
     # The Dec 24 full moon at 02:28 falls in the night of Dec 23
     assert "· Full Moon at 02:28" in night("2026-12-23")
     assert "Next:" not in night("2026-11-15")
@@ -589,18 +662,21 @@ def test_offsets_are_explained() -> None:
 
 
 def test_deep_polar_night_lasts_around_the_clock() -> None:
-    # At 88°S the noon sun stays more than 18° below the horizon from May 21
+    # At 88°S the noon sun stays more than 18° below the horizon from May 21 (UTC). Solar noon falls
+    # at local midnight in New Zealand time: each date takes the one at 23:56 the evening before.
     ics = feed(lat=-88.0, lon=0.0, timezone="Antarctica/McMurdo", today="2027-05-19", window_days=4)
     nights = events_of_type(ics, "night")
 
     assert len(nights) == 5
-    # From May 20's night on, solar noon joins each night to the next
-    for i in range(2, len(nights)):
+    assert nights[1]["DTEND"] == "20270520T113327Z", "The sun climbs past 18° below for 38 minutes"
+    assert nights[2]["DTSTART"] == "20270520T121155Z"
+    # From then on, solar noon joins each night to the next
+    for i in range(3, len(nights)):
         assert nights[i - 1]["DTEND"] == nights[i]["DTSTART"], "Nights join up without gaps"
-    assert r"all day tomorrow\, so this night lasts until solar noon." in nights[1]["DESCRIPTION"]
-    assert nights[2]["DESCRIPTION"].startswith("Polar night: the sun stays more than 18° below the horizon all day")
-    assert "this year's nights" not in nights[2]["DESCRIPTION"]
-    assert " Night · 24h 00m" in nights[3]["SUMMARY"]
+    assert r"all day tomorrow\, so this night lasts until solar noon." in nights[2]["DESCRIPTION"]
+    assert nights[3]["DESCRIPTION"].startswith("Polar night: the sun stays more than 18° below the horizon all day")
+    assert "this year's nights" not in nights[3]["DESCRIPTION"]
+    assert " Night · 24h 00m" in nights[4]["SUMMARY"]
 
 
 def test_night_length_sits_between_the_years_shortest_and_longest() -> None:

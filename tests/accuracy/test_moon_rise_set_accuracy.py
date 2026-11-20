@@ -1,7 +1,7 @@
 """Moonrise and moonset against the US Naval Observatory (aa.usno.navy.mil).
 
-The low-precision lunar position is good to about 0.3°, so times are
-required within 3 minutes.
+USNO gives each time rounded to the minute, so times are required within
+30 seconds of it.
 """
 
 from __future__ import annotations
@@ -53,4 +53,4 @@ def test_rise_set_matches_usno(lat: float, lon: float, zone: str, date: str, exp
 
         assert [e[0] for e in events] == [e[0] for e in expected], f"Events on {date}"
         for i, (kind, time) in enumerate(expected):
-            assert abs(local_timestamp(date, time) - events[i][1]) <= 180, f"{kind} on {date}"
+            assert abs(local_timestamp(date, time) - events[i][1]) <= 30, f"{kind} on {date}"

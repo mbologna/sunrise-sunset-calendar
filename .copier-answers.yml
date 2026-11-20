@@ -11,13 +11,13 @@ cloud_run: service
 codecov: false
 coverage_fail_under: 80
 description: iCalendar feed of sunrise, sunset, twilight and moon phases for any location,
-    computed with the NREL Solar Position Algorithm
+    computed from the JPL DE442 ephemeris
 entrypoint: entrypoint
 forge: github
 image_uid: 1000
 image_user: appuser
 license: other
-license_expression: MIT AND GPL-3.0-only
+license_expression: MIT
 main_module: true
 notifications: false
 owned_files: []

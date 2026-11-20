@@ -16,6 +16,7 @@ from .php import (
     PHP_INT_MIN,
     LocalDate,
     default_timezone,
+    gmmktime,
     intdiv,
     lcfirst,
     mktime,
@@ -289,7 +290,10 @@ def moonless_windows(rise_set: dict, start: int, stop: int) -> list[list[int]]:
 
 
 def get_year_profile(lat: float, lon: float, year: int, utc_offset: float) -> list[dict]:
-    """Solar calculations for every day of a year at one fixed UTC offset, with each day's local noon."""
+    """Solar calculations for every day of a year at one fixed UTC offset.
+
+    Each day also has its local noon ("timestamp") and the instant its fractions count from ("midnight").
+    """
     from .astronomy import calculate_sun_times
 
     key = f"{lat:.4f}:{lon:.4f}:{year}:{utc_offset:.2f}"
@@ -299,8 +303,11 @@ def get_year_profile(lat: float, lon: float, year: int, utc_offset: float) -> li
         days_in_year = 366 if _is_leap(year) else 365
         for day in range(1, days_in_year + 1):
             timestamp = mktime(12, 0, 0, 1, day, year)
-            parts = _local_parts(timestamp)
-            profile.append({"timestamp": timestamp} | calculate_sun_times(*parts, lat, lon, utc_offset))
+            y, m, d = _local_parts(timestamp)
+            midnight = gmmktime(0, 0, 0, m, d, y) - round_int(utc_offset * 3600)
+            profile.append(
+                {"timestamp": timestamp, "midnight": midnight} | calculate_sun_times(y, m, d, lat, lon, utc_offset)
+            )
         store[key] = profile
     return store[key]
 
@@ -406,6 +413,19 @@ def _pick_first(values: list[float], target: float) -> int:
     raise ValueError(target)
 
 
+def _sunlit_all_date(day: dict) -> bool:
+    """Whether a day's one sunrise or sunset falls on another date, leaving the sun up all its date.
+
+    A solar day runs from solar midnight to solar midnight, so the first sunset after the
+    midnight sun can come after local midnight: the calendar date before it has no sunset.
+    """
+    rise, set_ = day["sunrise_frac"], day["sunset_frac"]
+    if (rise is None) == (set_ is None):
+        return False
+    instant = day["midnight"] + round_int((set_ if rise is None else rise) * 86400)
+    return php_date("Y-m-d", instant) != php_date("Y-m-d", day["timestamp"])
+
+
 def year_summary(lat: float, lon: float, year: int, utc_offset: float) -> dict:
     """Facts about a location's year, derived from its year profile."""
     memo = cache.get().year_summary
@@ -421,7 +441,7 @@ def year_summary(lat: float, lon: float, year: int, utc_offset: float) -> dict:
         i = _pick_first(values, choose(values))
         return [values[i], timestamps[i]]
 
-    polar_day = [d["polar"] == "day" for d in days]
+    polar_day = [d["polar"] == "day" or _sunlit_all_date(d) for d in days]
     polar_night = [d["polar"] == "night" for d in days]
     # No astronomical night: the sun never crosses -18° because it stays above it at midnight
     white_nights = [d["astro_begin_frac"] is None and abs(lat + d["declination_deg"]) - 90 > -18 for d in days]
@@ -731,17 +751,18 @@ def light_periods(ev: dict) -> list[tuple[str, int | None, int | None]]:
     if ev["civil_begin"] is not None and ev["minus4_begin"] is not None:
         periods.append(("blue", ev["civil_begin"], ev["minus4_begin"]))
 
-    sun_below_six_all_day = ev["plus6_begin"] is None and ev["noon_elevation"] < 6
-    sun_above_minus_four_all_day = ev["minus4_begin"] is None and ev["midnight_elevation"] > -4
-    if sun_below_six_all_day:
+    if ev["plus6_begin"] is None and ev["plus6_end"] is None and ev["noon_elevation"] < 6:
         # The sun never climbs past 6°: one golden period around noon, if it gets above -4° at all
-        if ev["minus4_begin"] is not None:
+        if ev["minus4_begin"] is not None or ev["minus4_end"] is not None:
             periods.append(("golden", ev["minus4_begin"], ev["minus4_end"]))
-        elif sun_above_minus_four_all_day:
+        elif ev["midnight_elevation"] > -4:
             periods.append(("golden", None, None))
-    elif ev["plus6_begin"] is not None:
-        periods.append(("golden", ev["minus4_begin"], ev["plus6_begin"]))
-        periods.append(("golden", ev["plus6_end"], ev["minus4_end"]))
+    else:
+        # Morning and evening apart: the day the sun starts or stops staying above 6°, only one exists
+        if ev["plus6_begin"] is not None:
+            periods.append(("golden", ev["minus4_begin"], ev["plus6_begin"]))
+        if ev["plus6_end"] is not None:
+            periods.append(("golden", ev["plus6_end"], ev["minus4_end"]))
 
     if ev["minus4_end"] is not None and ev["civil_end"] is not None:
         periods.append(("blue", ev["minus4_end"], ev["civil_end"]))
@@ -827,12 +848,14 @@ def twilight_path(key: str, span: Span, ev: dict) -> str | None:
     midnight = round_int(abs(ev["midnight_elevation"]))
     civil = band["high"] == 0
 
+    def at(key: str, angle: int) -> str:
+        """A path's end at solar noon or midnight: "just below the horizon" where the angle rounds to 0°."""
+        return texts[f"{key}_skimming"] if angle == 0 else sprintf(texts[key], angle)
+
     if band["morning"]:
-        start = (
-            sprintf(texts["from_midnight"], midnight) if deep_missing else sprintf(texts["from_angle"], band["deep"])
-        )
+        start = at("from_midnight", midnight) if deep_missing else sprintf(texts["from_angle"], band["deep"])
         if high_missing:
-            end = sprintf(texts["to_noon"], noon)
+            end = at("to_noon", noon)
         elif civil:
             end = S["instants"]["sunrise"]
         else:
@@ -840,12 +863,12 @@ def twilight_path(key: str, span: Span, ev: dict) -> str | None:
         path = sprintf(texts["path_morning"], start, end)
     else:
         if high_missing:
-            start = sprintf(texts["from_noon"], noon)
+            start = at("from_noon", noon)
         elif civil:
             start = S["instants"]["sunset"]
         else:
             start = sprintf(texts["from_angle"], band["high"])
-        end = sprintf(texts["to_midnight"], midnight) if deep_missing else sprintf(texts["to_angle"], band["deep"])
+        end = at("to_midnight", midnight) if deep_missing else sprintf(texts["to_angle"], band["deep"])
         path = sprintf(texts["path_evening"], start, end)
 
     # A civil twilight that never reaches the horizon means the sun does not rise
@@ -884,18 +907,27 @@ def daylight_details(c: DayContext, with_clock: bool = True) -> str:
     if with_clock and d["sunrise_shift"] is not None and d["sunset_shift"] is not None:
         trend += sprintf(labels["clock"], format_clock_shift(d["sunrise_shift"]), format_clock_shift(d["sunset_shift"]))
     lines.append(trend)
-    if ev["polar"] == "day":
+    # Refraction keeps the sun in sight with its centre just below the horizon: an angle that rounds
+    # to 0° or below reads as skimming the horizon, not "-1° up"
+    noon = round_int(ev["noon_elevation"])
+    midnight = round_int(ev["midnight_elevation"])
+    if ev["polar"] == "day" and noon <= 0:
+        lines.append(labels["sun_skimming_all_day"])
+    elif ev["polar"] == "day":
+        lowest = sprintf(labels["sun_low_up"], midnight) if midnight > 0 else labels["sun_low_skimming"]
         lines.append(
             sprintf(
                 labels["sun_peak_midnight_sun"],
                 format_local(ev["solar_noon"]),
-                round_int(ev["noon_elevation"]),
+                noon,
                 format_local(ev["solar_noon"] + 43200),
-                round_int(ev["midnight_elevation"]),
+                lowest,
             )
         )
+    elif noon <= 0:
+        lines.append(sprintf(labels["sun_peak_skimming"], format_local(ev["solar_noon"])))
     else:
-        lines.append(sprintf(labels["sun_peak"], format_local(ev["solar_noon"]), round_int(ev["noon_elevation"])))
+        lines.append(sprintf(labels["sun_peak"], format_local(ev["solar_noon"]), noon))
 
     shortest = (round_int(year["daylight_min"][0] * 3600), year["daylight_min"][1])
     longest = (round_int(year["daylight_max"][0] * 3600), year["daylight_max"][1])

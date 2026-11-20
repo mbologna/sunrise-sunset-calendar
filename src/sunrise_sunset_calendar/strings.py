@@ -184,9 +184,8 @@ STRINGS: Strings = {
     # Calendar metadata
     "calendar_prodid": "-//Sun & Twilight Calendar//EN",
     "calendar_name_format": "🌅 %s · Sun & Twilight",  # %s = location name, or coordinates
-    "calendar_description_format": "Sunrise, sunset and twilight for %1$s, times in %2$s. Sunrise and "
-    "sunset computed with the NREL Solar Position Algorithm; twilight and the moon with standard "
-    "astronomical formulas.",  # %1$s = place, %2$s = time zone
+    "calendar_description_format": "Sunrise, sunset and twilight for %1$s, times in %2$s. The sun and "
+    "the moon computed from the JPL DE442 ephemeris.",  # %1$s = place, %2$s = time zone
     "place_named": "%1$s (%2$s, %3$s)",  # name, latitude, longitude
     "place_coordinates": "%2$s, %3$s",
     # Date and time formats (PHP date())
@@ -287,7 +286,11 @@ STRINGS: Strings = {
         "sunrise_shift": "Sunrise at %s, %s",
         "sunset_shift": "Sunset at %s, %s",
         "sun_peak": "Sun highest at %s, %d° above the horizon",
-        "sun_peak_midnight_sun": "Sun highest at %s, %d° up; lowest at %s, still %d° up",
+        "sun_peak_midnight_sun": "Sun highest at %s, %d° up; lowest at %s, %s",
+        "sun_low_up": "still %d° up",
+        "sun_low_skimming": "skimming the horizon",
+        "sun_peak_skimming": "Sun highest at %s, skimming the horizon",
+        "sun_skimming_all_day": "The sun circles the sky skimming the horizon all day",
         "midnight_sun": "Midnight sun: the sun does not set today.",
         "night_all_day": "Polar night: the sun stays more than 18° below the horizon all day, so night lasts "
         "around the clock.",
@@ -412,10 +415,14 @@ STRINGS: Strings = {
         "path_evening": "Today the sun sinks from %s to %s.",
         "from_angle": "%d° below the horizon",
         "from_noon": "%d° below the horizon at solar noon, its highest today,",
+        "from_noon_skimming": "just below the horizon at solar noon, its highest today,",
         "from_midnight": "%d° below the horizon at solar midnight, its lowest,",
+        "from_midnight_skimming": "just below the horizon at solar midnight, its lowest,",
         "to_angle": "%d° below",
         "to_noon": "%d° below at solar noon, its highest today",
+        "to_noon_skimming": "just below the horizon at solar noon, its highest today",
         "to_midnight": "%d° below at solar midnight, its lowest tonight",
+        "to_midnight_skimming": "just below the horizon at solar midnight, its lowest tonight",
         "polar_night": "Polar night: ",
         # What the photo-light times mean
         "light": "Blue hour (sun 6° to 4° below) and golden hour (4° below to 6° above) are photographers' "
@@ -679,8 +686,8 @@ STRINGS: Strings = {
         "footer": [
             (
                 "How it is calculated",
-                "Sunrise and sunset come from the NREL Solar Position Algorithm, which allows "
-                "for refraction; twilight and the moon from standard astronomical formulas.",
+                "The sun and the moon come from NASA JPL's DE442 ephemeris, through the skyfield "
+                "library. Sunrise, sunset, moonrise and moonset allow for refraction.",
             ),
             (
                 "Twilight",

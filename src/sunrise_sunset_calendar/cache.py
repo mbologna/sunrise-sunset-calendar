@@ -16,7 +16,6 @@ class Cache:
         self.solar_calc: dict[str, dict] = {}
         self.year_profile: dict[str, list[dict]] = {}
         self.week_summary: dict[str, dict] = {}
-        self.moon_phase: dict[str, list[dict]] = {}
         self.year_summary: dict[str, dict] = {}
 
 

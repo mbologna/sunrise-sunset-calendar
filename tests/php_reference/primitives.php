@@ -100,8 +100,6 @@ foreach ($zones as $zone) {
                 mktime(23, 59, 59, (int) $day->format('n') + 1, 0, (int) $day->format('Y')),
                 mktime(2, 30, 0, (int) $day->format('n'), (int) $day->format('j'), (int) $day->format('Y')),
                 strtotime('+3 days', $ts + $d * 86400),
-                strtotime('first day of this month', $ts + $d * 86400),
-                strtotime('+1 month', strtotime('first day of this month', $ts + $d * 86400)),
                 date('D, M j, H:i', $ts + $d * 86400), date('l, F j, Y w', $ts + $d * 86400),
             ];
         }

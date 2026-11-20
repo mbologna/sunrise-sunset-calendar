@@ -1,11 +1,10 @@
 """Moon phase accuracy tests.
 
-Tests the Meeus Chapter 49 algorithm implementation against authoritative
-reference data from timeanddate.com and USNO.
+Tests the skyfield (JPL DE442) moon phases against authoritative reference
+data from timeanddate.com and USNO.
 
-Requirement: ±3 minutes accuracy (180 seconds tolerance)
-Note: Moon phase calculations are inherently less precise than solar due to
-lunar orbital perturbations. Meeus algorithm achieves ±2-3 min typical accuracy.
+Requirement: within the references' own resolution, one minute (60 seconds):
+they give the minute, truncated.
 """
 
 from __future__ import annotations
@@ -13,14 +12,20 @@ from __future__ import annotations
 import pytest
 
 from sunrise_sunset_calendar.astronomy import (
-    calculate_moon_phases_for_month,
     get_accurate_moon_phase,
     moon_illumination,
     moon_phases_between,
 )
-from sunrise_sunset_calendar.php import PHP_INT_MAX, gmdate, local, php_date
+from sunrise_sunset_calendar.php import PHP_INT_MAX, gmdate, local, mktime, php_date
 from tests.fixtures.astronomical_reference_data import date_to_timestamp, get_moon_phases_2026, normalize_phase_name
 from tests.helpers import utc
+
+
+def phases_around_month(year: int, month: int) -> list[dict]:
+    """Principal phases from 15 days before a month to 15 days after it."""
+    start = mktime(0, 0, 0, month, 1, year) - 15 * 86400
+    stop = mktime(0, 0, 0, month + 1, 1, year) + 15 * 86400
+    return moon_phases_between(start, stop)
 
 
 def moon_phase_2026_cases() -> list[tuple[str, str]]:
@@ -36,14 +41,14 @@ def test_moon_phase_2026_accuracy(expected_phase: str, expected_datestring: str)
     date_parts = local(expected_timestamp)
 
     # Calculate phases for this month
-    phases = calculate_moon_phases_for_month(date_parts.year, date_parts.month)
+    phases = phases_around_month(date_parts.year, date_parts.month)
 
     # Find the phase closest to expected
     closest_phase = None
     min_difference = PHP_INT_MAX
 
     for phase in phases:
-        phase_name_normalized = normalize_phase_name(phase["phase_name"])
+        phase_name_normalized = normalize_phase_name(phase["name"])
         expected_normalized = normalize_phase_name(expected_phase)
 
         if phase_name_normalized == expected_normalized:
@@ -54,12 +59,12 @@ def test_moon_phase_2026_accuracy(expected_phase: str, expected_datestring: str)
 
     assert closest_phase is not None, f"Could not find calculated {expected_phase} near {expected_datestring}"
 
-    # Assert accuracy within ±180 seconds (3 minutes)
-    assert min_difference <= 180, (
+    # The references give the minute
+    assert min_difference <= 60, (
         f"{expected_phase}: Expected {php_date('Y-m-d H:i:s', expected_timestamp)} UTC, "
         f"got {php_date('Y-m-d H:i:s', closest_phase['timestamp'])} UTC (difference: {min_difference} seconds)\n"
         "Reference: timeanddate.com\n"
-        "Algorithm: Meeus Chapter 49"
+        "Algorithm: skyfield, JPL DE442"
     )
 
 
@@ -78,7 +83,7 @@ def test_february_2026_phases() -> None:
     # - Feb 17: New Moon 12:01
     # - Feb 24: First Quarter 12:27
 
-    phases = calculate_moon_phases_for_month(2026, 2)
+    phases = phases_around_month(2026, 2)
 
     # Find each major phase
     full_moon = None
@@ -94,19 +99,19 @@ def test_february_2026_phases() -> None:
         if int(php_date("n", ts)) != 2:
             continue
 
-        if phase["phase_name"] == "Full Moon" and day == 1:
+        if phase["name"] == "Full Moon" and day == 1:
             full_moon = phase
-        elif phase["phase_name"] == "Last Quarter" and day == 9:
+        elif phase["name"] == "Last Quarter" and day == 9:
             last_quarter = phase
-        elif phase["phase_name"] == "New Moon" and day == 17:
+        elif phase["name"] == "New Moon" and day == 17:
             new_moon = phase
-        elif phase["phase_name"] == "First Quarter" and day == 24:
+        elif phase["name"] == "First Quarter" and day == 24:
             first_quarter = phase
 
     # Test Full Moon: Feb 1, 22:09 UTC
     assert full_moon is not None, "Should find Full Moon on Feb 1"
     expected_full = utc("2026-02-01 22:09:00")
-    assert abs(expected_full - full_moon["timestamp"]) <= 180, (
+    assert abs(expected_full - full_moon["timestamp"]) <= 60, (
         "Full Moon Feb 1 should be 22:09 UTC, not 10:12!\n"
         f"Calculated: {php_date('Y-m-d H:i', full_moon['timestamp'])} UTC"
     )
@@ -114,21 +119,21 @@ def test_february_2026_phases() -> None:
     # Test Last Quarter: Feb 9, 12:43 UTC
     assert last_quarter is not None, "Should find Last Quarter on Feb 9"
     expected_last = utc("2026-02-09 12:43:00")
-    assert abs(expected_last - last_quarter["timestamp"]) <= 180, (
+    assert abs(expected_last - last_quarter["timestamp"]) <= 60, (
         f"Last Quarter Feb 9 should be 12:43 UTC\nCalculated: {php_date('Y-m-d H:i', last_quarter['timestamp'])} UTC"
     )
 
     # Test New Moon: Feb 17, 12:01 UTC
     assert new_moon is not None, "Should find New Moon on Feb 17"
     expected_new = utc("2026-02-17 12:01:00")
-    assert abs(expected_new - new_moon["timestamp"]) <= 180, (
+    assert abs(expected_new - new_moon["timestamp"]) <= 60, (
         f"New Moon Feb 17 should be 12:01 UTC\nCalculated: {php_date('Y-m-d H:i', new_moon['timestamp'])} UTC"
     )
 
     # Test First Quarter: Feb 24, 12:27 UTC
     assert first_quarter is not None, "Should find First Quarter on Feb 24"
     expected_first = utc("2026-02-24 12:27:00")
-    assert abs(expected_first - first_quarter["timestamp"]) <= 180, (
+    assert abs(expected_first - first_quarter["timestamp"]) <= 60, (
         f"First Quarter Feb 24 should be 12:27 UTC\nCalculated: {php_date('Y-m-d H:i', first_quarter['timestamp'])} UTC"
     )
 
@@ -212,12 +217,12 @@ def test_all_2026_phases_within_tolerance() -> None:
         expected_timestamp = date_to_timestamp(ref["date"])
         date_parts = local(expected_timestamp)
 
-        calculated_phases = calculate_moon_phases_for_month(date_parts.year, date_parts.month)
+        calculated_phases = phases_around_month(date_parts.year, date_parts.month)
 
         # Find matching phase
         found = False
         for calc in calculated_phases:
-            phase_match = normalize_phase_name(calc["phase_name"]) == normalize_phase_name(ref["phase"])
+            phase_match = normalize_phase_name(calc["name"]) == normalize_phase_name(ref["phase"])
 
             if phase_match:
                 difference = abs(calc["timestamp"] - expected_timestamp)
@@ -235,10 +240,10 @@ def test_all_2026_phases_within_tolerance() -> None:
 
     assert tested_count > 40, "Should test all moon phases for 2026"
 
-    assert max_error <= 180, (
+    assert max_error <= 60, (
         f"Maximum error across all 2026 phases: {max_error} seconds\n"
         f"Worst case: {worst_case}\n"
-        "Requirement: ±180 seconds (3 minutes)"
+        "Requirement: ±60 seconds (the references give the minute)"
     )
 
 
@@ -247,11 +252,11 @@ def test_month_boundary_phases() -> None:
     # Test phases that occur near month boundaries
     # December 30, 2026: Last Quarter at 18:59 UTC (updated from timeanddate.com)
 
-    phases = calculate_moon_phases_for_month(2026, 12)
+    phases = phases_around_month(2026, 12)
 
     found_dec30 = False
     for phase in phases:
-        if phase["phase_name"] == "Last Quarter":
+        if phase["name"] == "Last Quarter":
             day = int(php_date("j", phase["timestamp"]))
             month = int(php_date("n", phase["timestamp"]))
 
@@ -259,14 +264,14 @@ def test_month_boundary_phases() -> None:
                 found_dec30 = True
 
                 expected = utc("2026-12-30 18:59:00")
-                assert abs(expected - phase["timestamp"]) <= 180, "Should correctly handle phase near end of year"
+                assert abs(expected - phase["timestamp"]) <= 60, "Should correctly handle phase near end of year"
 
     assert found_dec30, "Should find Last Quarter on Dec 30, 2026"
 
 
 def test_phases_chronological_order() -> None:
     """Phases are in chronological order."""
-    phases = calculate_moon_phases_for_month(2026, 2)
+    phases = phases_around_month(2026, 2)
 
     prev_timestamp = 0
     for phase in phases:
@@ -280,10 +285,10 @@ def test_synodic_month_variation() -> None:
     new_moons = []
 
     for month in range(1, 7):
-        phases = calculate_moon_phases_for_month(2026, month)
+        phases = phases_around_month(2026, month)
 
         for phase in phases:
-            if phase["phase_name"] == "New Moon" and int(php_date("n", phase["timestamp"])) == month:
+            if phase["name"] == "New Moon" and int(php_date("n", phase["timestamp"])) == month:
                 new_moons.append(phase["timestamp"])
                 break
 

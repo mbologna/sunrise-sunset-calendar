@@ -100,8 +100,6 @@ def test_wall_clock(path: Path) -> None:
             month_end,
             two_thirty,
             plus3,
-            first,
-            next_month,
             fmt1,
             fmt2,
         ) = row
@@ -119,7 +117,5 @@ def test_wall_clock(path: Path) -> None:
             assert php.mktime(23, 59, 59, day.month + 1, 0, day.year) == month_end, row
             assert php.mktime(2, 30, 0, day.month, day.day, day.year) == two_thirty, row
             assert php.strtotime_days(3, ts) == plus3, row
-            assert php.first_of_month(ts) == first, row
-            assert php.add_month(first) == next_month, row
             assert php.php_date("D, M j, H:i", ts) == fmt1, row
             assert php.php_date("l, F j, Y w", ts) == fmt2, row
