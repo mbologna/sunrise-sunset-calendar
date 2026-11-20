@@ -48,7 +48,9 @@ Release of the commit subjects, per the
   `fix`, `perf`, `revert` patch; `!` or a `BREAKING CHANGE:` footer major)
   every Monday at 06:00 UTC, and cuts a maintenance release when only
   dependency updates landed.
-- Write Conventional Commit subjects; they decide the next version.
+- Write Conventional Commit subjects; they decide the next version. The
+  "Release preview" job summary on each pull request and push to main shows
+  the version and notes the next Monday run would tag.
 - `version` in `pyproject.toml` is a placeholder that stays `0.0.0`.
 
 ## Template
