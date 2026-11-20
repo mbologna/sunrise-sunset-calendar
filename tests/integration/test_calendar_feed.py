@@ -477,6 +477,14 @@ def test_midnight_sun_runs_to_the_last_date_without_a_sunset() -> None:
     assert "Midnight sun from Apr 19 to Aug 24." in ics.replace("\r\n ", "")
 
 
+def test_a_sunset_that_crosses_midnight_moves_the_short_way() -> None:
+    """Longyearbyen's sunset moves from 23:44 on Apr 16, 2026 to 00:12 the next night: 28 minutes later."""
+    ics = feed(lat=78.2232, lon=15.6267, timezone="Arctic/Longyearbyen", today="2026-04-17", window_days=0)
+
+    daylight = events_of_type(ics, "daylight")[0]
+    assert text(daylight).startswith("48m 16s longer than yesterday: sunrise 20m 21s earlier, sunset 27m 55s later")
+
+
 def test_a_day_with_one_sunrise_or_sunset_keeps_it() -> None:
     """The sun rises at 01:39 on Apr 18, 2026 and stays up; on Aug 24 it sets at 00:29 the next morning."""
     ics = feed(lat=78.2232, lon=15.6267, timezone="Arctic/Longyearbyen", today="2026-04-17", window_days=130)

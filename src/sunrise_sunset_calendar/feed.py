@@ -263,12 +263,13 @@ def _render(o: Options, now: int) -> bytes:
         def clock(ts: int) -> int:
             return ts - LocalDate.from_timestamp(ts, tz).set_time(0, 0).ts
 
+        def shift(today: int, yesterday: int) -> int:
+            """How far a clock time moved, the short way round midnight: 23:44 to 00:12 is 28 minutes later."""
+            return (clock(today) - clock(yesterday) + 43200) % 86400 - 43200
+
         clock_shifts: tuple[int, int] | tuple[None, None]
         if ev["sunrise"] and ev["sunset"] and prev["sunrise"] and prev["sunset"]:
-            clock_shifts = (
-                clock(ev["sunrise"]) - clock(prev["sunrise"]),
-                clock(ev["sunset"]) - clock(prev["sunset"]),
-            )
+            clock_shifts = (shift(ev["sunrise"], prev["sunrise"]), shift(ev["sunset"], prev["sunset"]))
         else:
             clock_shifts = (None, None)
 
