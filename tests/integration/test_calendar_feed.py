@@ -485,6 +485,15 @@ def test_a_sunset_that_crosses_midnight_moves_the_short_way() -> None:
     assert text(daylight).startswith("48m 16s longer than yesterday: sunrise 20m 21s earlier, sunset 27m 55s later")
 
 
+def test_a_sun_that_only_skims_the_horizon_says_so() -> None:
+    """Refraction keeps the sun in view with its centre a little below the horizon: no "-1° up"."""
+    ics = feed(lat=78.2232, lon=15.6267, timezone="Arctic/Longyearbyen", today="2026-04-19", window_days=0)
+    assert "lowest at 00:56, skimming the horizon" in text(events_of_type(ics, "daylight")[0])
+
+    pole = feed(lat=90.0, lon=0.0, timezone="UTC", today="2026-03-19", window_days=0)
+    assert "The sun circles the sky skimming the horizon all day" in text(events_of_type(pole, "daylight")[0])
+
+
 def test_a_day_with_one_sunrise_or_sunset_keeps_it() -> None:
     """The sun rises at 01:39 on Apr 18, 2026 and stays up; on Aug 24 it sets at 00:29 the next morning."""
     ics = feed(lat=78.2232, lon=15.6267, timezone="Arctic/Longyearbyen", today="2026-04-17", window_days=130)

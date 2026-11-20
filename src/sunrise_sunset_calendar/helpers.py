@@ -848,12 +848,14 @@ def twilight_path(key: str, span: Span, ev: dict) -> str | None:
     midnight = round_int(abs(ev["midnight_elevation"]))
     civil = band["high"] == 0
 
+    def at(key: str, angle: int) -> str:
+        """A path's end at solar noon or midnight: "just below the horizon" where the angle rounds to 0°."""
+        return texts[f"{key}_skimming"] if angle == 0 else sprintf(texts[key], angle)
+
     if band["morning"]:
-        start = (
-            sprintf(texts["from_midnight"], midnight) if deep_missing else sprintf(texts["from_angle"], band["deep"])
-        )
+        start = at("from_midnight", midnight) if deep_missing else sprintf(texts["from_angle"], band["deep"])
         if high_missing:
-            end = sprintf(texts["to_noon"], noon)
+            end = at("to_noon", noon)
         elif civil:
             end = S["instants"]["sunrise"]
         else:
@@ -861,12 +863,12 @@ def twilight_path(key: str, span: Span, ev: dict) -> str | None:
         path = sprintf(texts["path_morning"], start, end)
     else:
         if high_missing:
-            start = sprintf(texts["from_noon"], noon)
+            start = at("from_noon", noon)
         elif civil:
             start = S["instants"]["sunset"]
         else:
             start = sprintf(texts["from_angle"], band["high"])
-        end = sprintf(texts["to_midnight"], midnight) if deep_missing else sprintf(texts["to_angle"], band["deep"])
+        end = at("to_midnight", midnight) if deep_missing else sprintf(texts["to_angle"], band["deep"])
         path = sprintf(texts["path_evening"], start, end)
 
     # A civil twilight that never reaches the horizon means the sun does not rise
@@ -905,18 +907,27 @@ def daylight_details(c: DayContext, with_clock: bool = True) -> str:
     if with_clock and d["sunrise_shift"] is not None and d["sunset_shift"] is not None:
         trend += sprintf(labels["clock"], format_clock_shift(d["sunrise_shift"]), format_clock_shift(d["sunset_shift"]))
     lines.append(trend)
-    if ev["polar"] == "day":
+    # Refraction keeps the sun in sight with its centre just below the horizon: an angle that rounds
+    # to 0° or below reads as skimming the horizon, not "-1° up"
+    noon = round_int(ev["noon_elevation"])
+    midnight = round_int(ev["midnight_elevation"])
+    if ev["polar"] == "day" and noon <= 0:
+        lines.append(labels["sun_skimming_all_day"])
+    elif ev["polar"] == "day":
+        lowest = sprintf(labels["sun_low_up"], midnight) if midnight > 0 else labels["sun_low_skimming"]
         lines.append(
             sprintf(
                 labels["sun_peak_midnight_sun"],
                 format_local(ev["solar_noon"]),
-                round_int(ev["noon_elevation"]),
+                noon,
                 format_local(ev["solar_noon"] + 43200),
-                round_int(ev["midnight_elevation"]),
+                lowest,
             )
         )
+    elif noon <= 0:
+        lines.append(sprintf(labels["sun_peak_skimming"], format_local(ev["solar_noon"])))
     else:
-        lines.append(sprintf(labels["sun_peak"], format_local(ev["solar_noon"]), round_int(ev["noon_elevation"])))
+        lines.append(sprintf(labels["sun_peak"], format_local(ev["solar_noon"]), noon))
 
     shortest = (round_int(year["daylight_min"][0] * 3600), year["daylight_min"][1])
     longest = (round_int(year["daylight_max"][0] * 3600), year["daylight_max"][1])

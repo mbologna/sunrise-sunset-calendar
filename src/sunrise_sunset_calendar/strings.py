@@ -286,7 +286,11 @@ STRINGS: Strings = {
         "sunrise_shift": "Sunrise at %s, %s",
         "sunset_shift": "Sunset at %s, %s",
         "sun_peak": "Sun highest at %s, %d° above the horizon",
-        "sun_peak_midnight_sun": "Sun highest at %s, %d° up; lowest at %s, still %d° up",
+        "sun_peak_midnight_sun": "Sun highest at %s, %d° up; lowest at %s, %s",
+        "sun_low_up": "still %d° up",
+        "sun_low_skimming": "skimming the horizon",
+        "sun_peak_skimming": "Sun highest at %s, skimming the horizon",
+        "sun_skimming_all_day": "The sun circles the sky skimming the horizon all day",
         "midnight_sun": "Midnight sun: the sun does not set today.",
         "night_all_day": "Polar night: the sun stays more than 18° below the horizon all day, so night lasts "
         "around the clock.",
@@ -411,10 +415,14 @@ STRINGS: Strings = {
         "path_evening": "Today the sun sinks from %s to %s.",
         "from_angle": "%d° below the horizon",
         "from_noon": "%d° below the horizon at solar noon, its highest today,",
+        "from_noon_skimming": "just below the horizon at solar noon, its highest today,",
         "from_midnight": "%d° below the horizon at solar midnight, its lowest,",
+        "from_midnight_skimming": "just below the horizon at solar midnight, its lowest,",
         "to_angle": "%d° below",
         "to_noon": "%d° below at solar noon, its highest today",
+        "to_noon_skimming": "just below the horizon at solar noon, its highest today",
         "to_midnight": "%d° below at solar midnight, its lowest tonight",
+        "to_midnight_skimming": "just below the horizon at solar midnight, its lowest tonight",
         "polar_night": "Polar night: ",
         # What the photo-light times mean
         "light": "Blue hour (sun 6° to 4° below) and golden hour (4° below to 6° above) are photographers' "
