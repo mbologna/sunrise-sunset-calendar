@@ -47,7 +47,6 @@ from .php import (
     intdiv,
     php_date,
     round_int,
-    sprintf,
     zone,
 )
 from .strings import STRINGS as S
@@ -210,15 +209,17 @@ def _render(o: Options, now: int) -> bytes:
     def offset_note(start: int, end: int) -> str:
         if start == 0 and end == 0:
             return ""
-        return "\n\n" + sprintf(S["labels"]["offset_note"], format_signed_duration(start), format_signed_duration(end))
+        return "\n\n" + S["labels"]["offset_note"].format(format_signed_duration(start), format_signed_duration(end))
 
     custom_note = "\n\n" + o.description if o.description != "" else ""
 
     today = LocalDate.parse(o.today, tz) if o.today is not None else LocalDate.today(tz, now)
     today_year = year_summary(lat, lon, today.year, today.set_time(12, 0).offset() / 3600)
-    place = sprintf(S["place_named"] if o.location != "" else S["place_coordinates"], o.location, lat, lon)
+    place = (S["place_named"] if o.location != "" else S["place_coordinates"]).format(
+        o.location, float_to_str(lat), float_to_str(lon)
+    )
     calendar_description = " ".join(
-        [sprintf(S["calendar_description_format"], place, o.timezone), *location_facts(today_year)]
+        [S["calendar_description_format"].format(place, o.timezone), *location_facts(today_year)]
     )
     # PHP's ?: treats "0" as empty too
     name = o.location if o.location not in ("", "0") else f"{float_to_str(lat)}, {float_to_str(lon)}"
@@ -227,7 +228,7 @@ def _render(o: Options, now: int) -> bytes:
     out.extend(
         [
             f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:{S['calendar_prodid']}\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n",
-            ical_text_property("X-WR-CALNAME", sprintf(S["calendar_name_format"], name)),
+            ical_text_property("X-WR-CALNAME", S["calendar_name_format"].format(name)),
             ical_text_property("X-WR-CALDESC", calendar_description),
             f"X-WR-TIMEZONE:{o.timezone}\r\n",
             f"X-PUBLISHED-TTL:{refresh}\r\nREFRESH-INTERVAL;VALUE=DURATION:{refresh}\r\n",
@@ -318,8 +319,7 @@ def _render(o: Options, now: int) -> bytes:
         if enabled["daylight"] and day.format("w") == "0":
             week = get_week_summary(day.ts, lat, lon, ev["utc_offset"])
             phases = [
-                sprintf(
-                    S["moon"]["phase_at"],
+                S["moon"]["phase_at"].format(
                     get_moon_phase_emoji(p["name"], lat),
                     moon_phase_name(p["name"]),
                     format_local(p["timestamp"], "datetime"),
@@ -331,10 +331,8 @@ def _render(o: Options, now: int) -> bytes:
                 phases = [get_moon_phase_emoji(phase_name, lat) + " " + moon_phase_name(phase_name)]
 
             desc = (
-                sprintf(
-                    S["labels"]["week_daylight"],
-                    format_duration(round_int(week["start_length"])),
-                    format_duration(round_int(week["end_length"])),
+                S["labels"]["week_daylight"].format(
+                    format_duration(round_int(week["start_length"])), format_duration(round_int(week["end_length"]))
                 )
                 + "\n"
             )
@@ -342,8 +340,7 @@ def _render(o: Options, now: int) -> bytes:
             saturday = sun_events(day.add_days(6), lat, lon)
             if None not in (ev["sunrise"], ev["sunset"], saturday["sunrise"], saturday["sunset"]):
                 desc += (
-                    sprintf(
-                        S["labels"]["week_sun"],
+                    S["labels"]["week_sun"].format(
                         format_local(ev["sunrise"]),
                         format_local(saturday["sunrise"]),
                         format_local(ev["sunset"]),
@@ -351,9 +348,9 @@ def _render(o: Options, now: int) -> bytes:
                     )
                     + "\n"
                 )
-            desc += sprintf(S["labels"]["week_moon"], "; ".join(phases))
+            desc += S["labels"]["week_moon"].format("; ".join(phases))
 
-            summary = sprintf(S["week_titles"][week["trend"]], format_duration(round_int(week["total_change"])))
+            summary = (S["week_titles"][week["trend"]]).format(format_duration(round_int(week["total_change"])))
             out.append(ical_event(f"week-{date_str}-{uid_suffix}", all_day(day, 7), summary, desc, dtstamp))
 
         # Days when something changes: all day, so they show without opening anything
@@ -393,16 +390,12 @@ def _render(o: Options, now: int) -> bytes:
             # sunset says how that moved
             clock_line = None
             if not enabled["daylight"] and key == "morning_civil" and c["daylight"]["sunrise_shift"] is not None:
-                clock_line = sprintf(
-                    S["labels"]["sunrise_shift"],
-                    format_local(ev["sunrise"]),
-                    _clock_shift_alone(c["daylight"]["sunrise_shift"]),
+                clock_line = S["labels"]["sunrise_shift"].format(
+                    format_local(ev["sunrise"]), _clock_shift_alone(c["daylight"]["sunrise_shift"])
                 )
             if not enabled["daylight"] and key == "evening_civil" and c["daylight"]["sunset_shift"] is not None:
-                clock_line = sprintf(
-                    S["labels"]["sunset_shift"],
-                    format_local(ev["sunset"]),
-                    _clock_shift_alone(c["daylight"]["sunset_shift"]),
+                clock_line = S["labels"]["sunset_shift"].format(
+                    format_local(ev["sunset"]), _clock_shift_alone(c["daylight"]["sunset_shift"])
                 )
 
             # Data first, then the rest of today's schedule, then the explanation
@@ -440,7 +433,7 @@ def _render(o: Options, now: int) -> bytes:
                 ical_event(
                     f"daylight-{date_str}-{uid_suffix}",
                     timed(start + o.rise_offset, end + o.set_offset),
-                    sprintf(S["summaries"]["daylight"], format_duration(daylight_seconds)),
+                    S["summaries"]["daylight"].format(format_duration(daylight_seconds)),
                     desc,
                     dtstamp,
                 )
@@ -465,10 +458,8 @@ def _render(o: Options, now: int) -> bytes:
                 ical_event(
                     f"night-{date_str}-{uid_suffix}",
                     timed(start + o.set_offset, end + o.rise_offset),
-                    sprintf(
-                        S["summaries"]["night"],
-                        get_moon_phase_emoji(moon["phase_name"], lat),
-                        format_duration(night_seconds),
+                    S["summaries"]["night"].format(
+                        get_moon_phase_emoji(moon["phase_name"], lat), format_duration(night_seconds)
                     ),
                     desc,
                     dtstamp,

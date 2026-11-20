@@ -6,7 +6,7 @@ and end times), and explain each name through the period itself rather than
 through the instants that bound it.
 
 Edit this file to customise event text without touching the main code. The
-placeholders follow PHP's sprintf(): %s, %d, %02d, %% and positional %1$s;
+placeholders are str.format() fields ({}, {:d}, {:02d}, positional {0});
 date and time formats follow PHP's date() (see php.format_datetime()).
 """
 
@@ -179,11 +179,11 @@ class Strings(TypedDict):
 STRINGS: Strings = {
     # Calendar metadata
     "calendar_prodid": "-//Sun & Twilight Calendar//EN",
-    "calendar_name_format": "🌅 %s · Sun & Twilight",  # %s = location name, or coordinates
-    "calendar_description_format": "Sunrise, sunset and twilight for %1$s, times in %2$s. The sun and "
-    "the moon computed from the JPL DE442 ephemeris.",  # %1$s = place, %2$s = time zone
-    "place_named": "%1$s (%2$s, %3$s)",  # name, latitude, longitude
-    "place_coordinates": "%2$s, %3$s",
+    "calendar_name_format": "🌅 {} · Sun & Twilight",  # {} = location name, or coordinates
+    "calendar_description_format": "Sunrise, sunset and twilight for {0}, times in {1}. The sun and "
+    "the moon computed from the JPL DE442 ephemeris.",  # {0} = place, {1} = time zone
+    "place_named": "{0} ({1}, {2})",  # name, latitude, longitude
+    "place_coordinates": "{1}, {2}",
     # Date and time formats (PHP date())
     "formats": {
         "time": "H:i",
@@ -193,12 +193,12 @@ STRINGS: Strings = {
     "none": "—",  # a time that does not occur today
     # Duration units: "9h 05m", "32m", "2m 05s", "45s"
     "units": {
-        "hours_minutes": "%dh %02dm",
-        "minutes": "%dm",
-        "minutes_seconds": "%dm %02ds",
-        "seconds": "%ds",
+        "hours_minutes": "{:d}h {:02d}m",
+        "minutes": "{:d}m",
+        "minutes_seconds": "{:d}m {:02d}s",
+        "seconds": "{:d}s",
     },
-    "date_range": "%s to %s",
+    "date_range": "{} to {}",
     "range_join": " and from ",
     # Event titles
     "summaries": {
@@ -210,13 +210,13 @@ STRINGS: Strings = {
         "evening_civil": "🌇 Evening Civil Twilight",
         "evening_nautical": "⚓ Evening Nautical Twilight",
         "evening_astronomical": "🌌 Evening Astronomical Twilight",
-        "daylight": "☀️ Daylight · %s",  # %s = length
-        "night": "%s Night · %s",  # %s = moon phase emoji, length
+        "daylight": "☀️ Daylight · {}",  # {} = length
+        "night": "{} Night · {}",  # {} = moon phase emoji, length
     },
-    # Weekly summary titles, by daylight trend (%s = change over the week)
+    # Weekly summary titles, by daylight trend ({} = change over the week)
     "week_titles": {
-        "increasing": "📈 %s more daylight this week",
-        "decreasing": "📉 %s less daylight this week",
+        "increasing": "📈 {} more daylight this week",
+        "decreasing": "📉 {} less daylight this week",
         "stable": "➡️ Day length steady this week",
     },
     # Period names in running text ("About morning civil twilight")
@@ -251,8 +251,8 @@ STRINGS: Strings = {
     },
     # Section headers
     "headers": {
-        "about": "ℹ️ About %s",
-        "moon": "%s Moon",  # %s = moon phase emoji
+        "about": "ℹ️ About {}",
+        "moon": "{} Moon",  # {} = moon phase emoji
         # Schedules (times only, in time order) carry 🕒; details sections carry their period's emoji
         "today": "🕒 Today",  # on the morning twilight carrying the daylight
         "tonight": "🕒 This evening",  # on the evening twilights
@@ -266,69 +266,69 @@ STRINGS: Strings = {
     },
     # Schedule entries: "06:49–07:01 📷 Blue hour (12m)", then an optional indented note
     "schedule": {
-        "entry": "%s %s",  # time range, label
-        "length": " (%s)",
-        "until": "until %s",
-        "from": "from %s",
+        "entry": "{} {}",  # time range, label
+        "length": " ({})",
+        "until": "until {}",
+        "from": "from {}",
         "all_day": "All day",
     },
     # Data lines
     "labels": {
-        "length": "Length: %s",
-        "length_range": "Length: %s · over the year: %s",  # today, range bar
-        "over_year": "Over the year: %s",  # range bar
-        "clock": ": sunrise %s, sunset %s",  # appended to the change since yesterday
+        "length": "Length: {}",
+        "length_range": "Length: {} · over the year: {}",  # today, range bar
+        "over_year": "Over the year: {}",  # range bar
+        "clock": ": sunrise {}, sunset {}",  # appended to the change since yesterday
         # On the civil twilight that ends at sunrise or starts at sunset, when there is no Daylight event
-        "sunrise_shift": "Sunrise at %s, %s",
-        "sunset_shift": "Sunset at %s, %s",
-        "sun_peak": "Sun highest at %s, %d° above the horizon",
-        "sun_peak_midnight_sun": "Sun highest at %s, %d° up; lowest at %s, %s",
-        "sun_low_up": "still %d° up",
+        "sunrise_shift": "Sunrise at {}, {}",
+        "sunset_shift": "Sunset at {}, {}",
+        "sun_peak": "Sun highest at {}, {:d}° above the horizon",
+        "sun_peak_midnight_sun": "Sun highest at {}, {:d}° up; lowest at {}, {}",
+        "sun_low_up": "still {:d}° up",
         "sun_low_skimming": "skimming the horizon",
-        "sun_peak_skimming": "Sun highest at %s, skimming the horizon",
+        "sun_peak_skimming": "Sun highest at {}, skimming the horizon",
         "sun_skimming_all_day": "The sun circles the sky skimming the horizon all day",
         "midnight_sun": "Midnight sun: the sun does not set today.",
         "night_all_day": "Polar night: the sun stays more than 18° below the horizon all day, so night lasts "
         "around the clock.",
-        "week_daylight": "Daylight: %s on Sunday → %s on Saturday",
-        "week_sun": "Sunrise %s → %s · Sunset %s → %s",  # Sunday → Saturday
-        "week_moon": "Moon: %s",
-        "offset_note": "Calendar times shifted from the actual times: start %s, end %s.",
-        "good_for": "Good for: %s",
+        "week_daylight": "Daylight: {} on Sunday → {} on Saturday",
+        "week_sun": "Sunrise {} → {} · Sunset {} → {}",  # Sunday → Saturday
+        "week_moon": "Moon: {}",
+        "offset_note": "Calendar times shifted from the actual times: start {}, end {}.",
+        "good_for": "Good for: {}",
     },
     # How far sunrise or sunset moved on the clock since yesterday
     "clock": {
-        "later": "%s later",
-        "earlier": "%s earlier",
+        "later": "{} later",
+        "earlier": "{} earlier",
         "same": "unchanged",
         # Standing alone, in the sunrise_shift and sunset_shift lines
-        "later_alone": "%s later than yesterday",
-        "earlier_alone": "%s earlier than yesterday",
+        "later_alone": "{} later than yesterday",
+        "earlier_alone": "{} earlier than yesterday",
         "same_alone": "the same time as yesterday",
     },
     # Today between the year's shortest and longest day or night (lengths, dates)
     "year": {
         "daylight": {
-            "between": "%s more than the shortest day (%s), %s less than the longest (%s)",
-            "is_shortest": "The shortest day of the year: %s less than the longest (%s)",
-            "is_longest": "The longest day of the year: %s more than the shortest (%s)",
+            "between": "{} more than the shortest day ({}), {} less than the longest ({})",
+            "is_shortest": "The shortest day of the year: {} less than the longest ({})",
+            "is_longest": "The longest day of the year: {} more than the shortest ({})",
         },
         "night": {
-            "between": "%s more than the shortest night (%s), %s less than the longest (%s)",
-            "is_shortest": "The shortest night of the year: %s less than the longest (%s)",
-            "is_longest": "The longest night of the year: %s more than the shortest (%s)",
+            "between": "{} more than the shortest night ({}), {} less than the longest ({})",
+            "is_shortest": "The shortest night of the year: {} less than the longest ({})",
+            "is_longest": "The longest night of the year: {} more than the shortest ({})",
         },
     },
     # Blue hour (sun 6° to 4° below) and golden hour (4° below to 6° above), on the Daylight event
     "light": {
-        "morning": "📷 Morning: %s",
-        "midday": "📷 Around noon: %s",
-        "evening": "📷 Evening: %s",
-        "item": "%s %s",  # name, time
+        "morning": "📷 Morning: {}",
+        "midday": "📷 Around noon: {}",
+        "evening": "📷 Evening: {}",
+        "item": "{} {}",  # name, time
         "blue": "blue hour",
         "golden": "golden hour",
-        "until": "until %s",
-        "from": "from %s",
+        "until": "until {}",
+        "from": "from {}",
         "all_day": "📷 Golden hour all day: the sun stays between 4° below and 6° above the horizon",
         # As schedule entries, on calendars without a Daylight event
         "blue_entry": "📷 Blue hour",
@@ -336,9 +336,9 @@ STRINGS: Strings = {
     },
     # Length comparisons: "2m 07s shorter than yesterday"
     "comparisons": {
-        "longer": "%s longer than %s",
-        "shorter": "%s shorter than %s",
-        "same": "Same length as %s",
+        "longer": "{} longer than {}",
+        "shorter": "{} shorter than {}",
+        "same": "Same length as {}",
         "yesterday": "yesterday",
         "last_night": "last night",
     },
@@ -407,17 +407,17 @@ STRINGS: Strings = {
     # Sentences that depend on the day
     "about_dynamic": {
         # The sun's path on a day when solar noon or midnight bounds the twilight
-        "path_morning": "Today the sun climbs from %s to %s.",
-        "path_evening": "Today the sun sinks from %s to %s.",
-        "from_angle": "%d° below the horizon",
-        "from_noon": "%d° below the horizon at solar noon, its highest today,",
+        "path_morning": "Today the sun climbs from {} to {}.",
+        "path_evening": "Today the sun sinks from {} to {}.",
+        "from_angle": "{:d}° below the horizon",
+        "from_noon": "{:d}° below the horizon at solar noon, its highest today,",
         "from_noon_skimming": "just below the horizon at solar noon, its highest today,",
-        "from_midnight": "%d° below the horizon at solar midnight, its lowest,",
+        "from_midnight": "{:d}° below the horizon at solar midnight, its lowest,",
         "from_midnight_skimming": "just below the horizon at solar midnight, its lowest,",
-        "to_angle": "%d° below",
-        "to_noon": "%d° below at solar noon, its highest today",
+        "to_angle": "{:d}° below",
+        "to_noon": "{:d}° below at solar noon, its highest today",
         "to_noon_skimming": "just below the horizon at solar noon, its highest today",
-        "to_midnight": "%d° below at solar midnight, its lowest tonight",
+        "to_midnight": "{:d}° below at solar midnight, its lowest tonight",
         "to_midnight_skimming": "just below the horizon at solar midnight, its lowest tonight",
         "polar_night": "Polar night: ",
         # What the photo-light times mean
@@ -466,8 +466,8 @@ STRINGS: Strings = {
     "moon_phase_unknown": ("🌙", "🌙", "Moon"),
     # Moon
     "moon": {
-        "current": "%s, %d%% lit",  # phase name, illumination
-        "moonless": "Moonless sky: %s",  # time windows
+        "current": "{}, {:d}% lit",  # phase name, illumination
+        "moonless": "Moonless sky: {}",  # time windows
         "moonless_all": "Moonless sky: all night",
         "moonless_none": "Moonless sky: none, the moon is up all night",
         # How much the moon brightens the sky while up, by illumination (under 25%, up to 75%, above)
@@ -476,8 +476,8 @@ STRINGS: Strings = {
             "partial": "While up, its light washes out the faintest stars and galaxies.",
             "bright": "While up, it washes out all but the brighter stars: a good night to look at the moon itself.",
         },
-        "exact": "%s at %s",  # phase name, time: on the night a principal phase happens
-        "phase_at": "%s %s, %s",  # emoji, phase name, date (weekly summary)
+        "exact": "{} at {}",  # phase name, time: on the night a principal phase happens
+        "phase_at": "{} {}, {}",  # emoji, phase name, date (weekly summary)
     },
     # Equinoxes and solstices, named by the season they start at the feed's location
     "seasons": {
@@ -487,7 +487,7 @@ STRINGS: Strings = {
         "winter_solstice": {"title": "❄️ Winter Solstice", "season": "Winter"},
     },
     "season_text": {
-        "moment": "The %s is at %s.",  # event name, local time
+        "moment": "The {} is at {}.",  # event name, local time
         "moment_names": {
             "march_equinox": "March equinox",
             "june_solstice": "June solstice",
@@ -500,38 +500,38 @@ STRINGS: Strings = {
             "september_equinox": "The sun is directly over the equator, heading south.",
             "december_solstice": "The sun is directly over the Tropic of Capricorn, its farthest point south.",
         },
-        "begins": "Astronomical %s begins.",  # season, lowercase
+        "begins": "Astronomical {} begins.",  # season, lowercase
         "east_west": "The sun rises almost due east and sets almost due west.",
-        "daylight": "Daylight here: %s.",
+        "daylight": "Daylight here: {}.",
         "near_12": "A few minutes over 12 hours, so day and night are not quite equal today: sunrise and "
         "sunset count the sun's top edge, and the air bends its light over the horizon.",
-        "longest_day": "The longest day of the year: %s of daylight.",
-        "shortest_day": "The shortest day of the year: %s of daylight.",
-        "noon_highest": "The noon sun is at its highest of the year: %d° above the horizon.",
-        "noon_lowest": "The noon sun is at its lowest of the year: %d° above the horizon.",
-        "noon_tropics": "Noon sun: %d°. In the tropics the sun is highest on two other days of the year, "
+        "longest_day": "The longest day of the year: {} of daylight.",
+        "shortest_day": "The shortest day of the year: {} of daylight.",
+        "noon_highest": "The noon sun is at its highest of the year: {:d}° above the horizon.",
+        "noon_lowest": "The noon sun is at its lowest of the year: {:d}° above the horizon.",
+        "noon_tropics": "Noon sun: {:d}°. In the tropics the sun is highest on two other days of the year, "
         "when it passes straight overhead.",
-        "noon_below": "The sun stays %d° below the horizon even at noon.",
+        "noon_below": "The sun stays {:d}° below the horizon even at noon.",
     },
     # All-day events for days when something changes, each told on its own day
     "day_facts": {
         "sunrise_latest": {
             "title": "🌅 Sunrises start getting earlier",
-            "lead": "Sunrise at %s is the latest it gets for months: from tomorrow, sunrises slowly get earlier.",
+            "lead": "Sunrise at {} is the latest it gets for months: from tomorrow, sunrises slowly get earlier.",
         },
         "sunrise_earliest": {
             "title": "🌅 Sunrises start getting later",
-            "lead": "Sunrise at %s is the earliest it gets for months: from tomorrow, sunrises slowly get later.",
+            "lead": "Sunrise at {} is the earliest it gets for months: from tomorrow, sunrises slowly get later.",
         },
         "sunset_earliest": {
             "title": "🌇 Sunsets start getting later",
-            "lead": "Sunset at %s is the earliest it gets for months: from tomorrow, sunsets slowly get later.",
+            "lead": "Sunset at {} is the earliest it gets for months: from tomorrow, sunsets slowly get later.",
         },
         "sunset_latest": {
             "title": "🌇 Sunsets start getting earlier",
-            "lead": "Sunset at %s is the latest it gets for months: from tomorrow, sunsets slowly get earlier.",
+            "lead": "Sunset at {} is the latest it gets for months: from tomorrow, sunsets slowly get earlier.",
         },
-        "stable": "It moves by less than a minute over about %d days around today, so the change is slow at first.",
+        "stable": "It moves by less than a minute over about {:d} days around today, so the change is slow at first.",
         # What the day length is doing meanwhile, when it moves against the clock times (turning point, trend)
         "trend": {
             "sunset_earliest": "The days still get shorter for a while: sunrises are getting later faster "
@@ -545,46 +545,46 @@ STRINGS: Strings = {
         "drifts by up to about a quarter of an hour over the year, which shifts both.",
         "twelve_hours_rising": {
             "title": "⚖️ 12 hours of daylight",
-            "lead": "Daylight is %s today, the closest it gets to 12 hours, and the days are getting longer. "
+            "lead": "Daylight is {} today, the closest it gets to 12 hours, and the days are getting longer. "
             "This happens before the spring equinox, not on it: sunrise and sunset count the sun's top edge, "
             "and the air bends its light over the horizon, which adds a few minutes of daylight.",
         },
         "twelve_hours_falling": {
             "title": "⚖️ 12 hours of daylight",
-            "lead": "Daylight is %s today, the closest it gets to 12 hours, and the days are getting shorter. "
+            "lead": "Daylight is {} today, the closest it gets to 12 hours, and the days are getting shorter. "
             "This happens after the autumn equinox, not on it: sunrise and sunset count the sun's top edge, "
             "and the air bends its light over the horizon, which adds a few minutes of daylight.",
         },
         "midnight_sun_begins": {
             "title": "☀️ Midnight sun begins",
-            "lead": "The sun stays above the horizon around the clock, for about %d days.",
+            "lead": "The sun stays above the horizon around the clock, for about {:d} days.",
         },
         "midnight_sun_ends": {
             "title": "🌇 The sun sets again",
-            "lead": "The first sunset after about %d days of midnight sun.",
+            "lead": "The first sunset after about {:d} days of midnight sun.",
         },
         "polar_night_begins": {
             "title": "🌑 Polar night begins",
-            "lead": "The sun stays below the horizon all day, for about %d days.",
+            "lead": "The sun stays below the horizon all day, for about {:d} days.",
         },
         "polar_night_ends": {
             "title": "🌅 The sun rises again",
-            "lead": "The first sunrise after about %d days of polar night.",
+            "lead": "The first sunrise after about {:d} days of polar night.",
         },
         "white_nights_begins": {
             "title": "🌌 Nights stop getting fully dark",
             "lead": "From tonight the sun doesn't get 18° below the horizon even at midnight, so the sky never "
-            "gets fully dark and there are no Night events, for about %d nights.",
+            "gets fully dark and there are no Night events, for about {:d} nights.",
         },
         "white_nights_ends": {
             "title": "🌌 Fully dark nights return",
-            "lead": "Tonight the sun gets 18° below the horizon again, for the first time in about %d nights: "
+            "lead": "Tonight the sun gets 18° below the horizon again, for the first time in about {:d} nights: "
             "astronomical night, and the Night events, are back.",
         },
         "meteorological": {
-            "title": "🌡️ Meteorological %s begins",  # season, lowercase
-            "lead": "Meteorologists count %1$s as %2$s: whole months that follow the year's temperature cycle "
-            "and keep seasonal statistics comparable. Astronomical %1$s, set by the sun, begins at the %3$s.",
+            "title": "🌡️ Meteorological {} begins",  # season, lowercase
+            "lead": "Meteorologists count {0} as {1}: whole months that follow the year's temperature cycle "
+            "and keep seasonal statistics comparable. Astronomical {0}, set by the sun, begins at the {2}.",
             # Northern-hemisphere season starting on the 1st of each month (south: the opposite season)
             "seasons": {3: "spring", 6: "summer", 9: "autumn", 12: "winter"},
             "opposite": {"spring": "autumn", "summer": "winter", "autumn": "spring", "winter": "summer"},
@@ -599,10 +599,10 @@ STRINGS: Strings = {
     },
     # Facts about the location, in the calendar description
     "location_facts": {
-        "range": "Daylight here ranges from %s (%s) to %s (%s) over the year.",
-        "midnight_sun": "Midnight sun from %s.",
-        "polar_night": "Polar night from %s.",
-        "white_nights": "From %s the sun never gets 18° below the horizon, so there is no "
+        "range": "Daylight here ranges from {} ({}) to {} ({}) over the year.",
+        "midnight_sun": "Midnight sun from {}.",
+        "polar_night": "Polar night from {}.",
+        "white_nights": "From {} the sun never gets 18° below the horizon, so there is no "
         "astronomical night and the calendar has no Night events.",
     },
     # Responses of the HTTP entry point
@@ -615,7 +615,7 @@ STRINGS: Strings = {
         "title": "Sun & Twilight Calendar",
         "heading": "🌅 Sun & Twilight Calendar",
         "today_heading": "Today in Rome",
-        "today_date": "Date: %s",
+        "today_date": "Date: {}",
         "today_date_format": "l, F j, Y",
         "today_times": {
             "astro_begin": "Astronomical dawn",
@@ -628,7 +628,7 @@ STRINGS: Strings = {
             "nautical_end": "Nautical dusk",
             "astro_end": "Astronomical dusk",
         },
-        "day_length": "Day length: %s",
+        "day_length": "Day length: {}",
         "generated": "✅ Subscription URL generated",
         "subscription_url": "Your calendar subscription URL:",
         "copy_url": "📋 Copy URL",
@@ -638,7 +638,7 @@ STRINGS: Strings = {
         "google_link": "Google Calendar",
         "google_steps": [
             "Copy the webcal URL above.",
-            "Open %s.",  # %s = link to Google Calendar
+            "Open {}.",  # {} = link to Google Calendar
             'Click + next to "Other calendars".',
             'Choose "From URL".',
             "Paste the URL.",

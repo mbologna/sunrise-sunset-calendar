@@ -13,7 +13,7 @@ from importlib import resources
 from . import cache
 from .astronomy import sun_events
 from .helpers import format_duration, format_time
-from .php import LocalDate, default_timezone_set, frozen_time, htmlspecialchars, php_date, round_int, sprintf, zone
+from .php import LocalDate, default_timezone_set, frozen_time, htmlspecialchars, php_date, round_int, zone
 from .strings import STRINGS
 
 DEFAULT_LAT = 41.9028
@@ -87,7 +87,7 @@ def render_page(
     with default_timezone_set(DEFAULT_TIMEZONE), frozen_time(now):
         today = sun_events(LocalDate.today(zone(DEFAULT_TIMEZONE), now), DEFAULT_LAT, DEFAULT_LON)
         daylight_seconds = round_int(today["daylength_h"] * 3600)
-        date_line = sprintf(_W["today_date"], php_date(_W["today_date_format"], now))
+        date_line = _W["today_date"].format(php_date(_W["today_date_format"], now))
         times = "".join(
             f"                    {e(label)}: {e(format_time(today[key]))}<br>\n                "
             for key, label in _W["today_times"].items()
@@ -113,7 +113,7 @@ def render_page(
         f"            {e(date_line)}<br>\n"
         '            <span id="time-display">\n'
         "                " + times + "                <strong>"
-        f"{e(sprintf(_W['day_length'], format_duration(daylight_seconds)))}</strong>\n"
+        f"{e(_W['day_length'].format(format_duration(daylight_seconds)))}</strong>\n"
         "            </span>\n"
         "        </div>\n"
         "\n"
@@ -123,7 +123,7 @@ def render_page(
     if subscription_url is not None and webcal_url is not None:
         link = '<a href="https://calendar.google.com" target="_blank">' + e(_W["google_link"]) + "</a>"
         steps = "".join(
-            f"                        <li>{e(step).replace('%s', link)}</li>\n                    "
+            f"                        <li>{e(step).replace('{}', link)}</li>\n                    "
             for step in _W["google_steps"]
         )
         out.append(
