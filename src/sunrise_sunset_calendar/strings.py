@@ -287,6 +287,10 @@ STRINGS: Strings = {
         "sun_low_skimming": "skimming the horizon",
         "sun_peak_skimming": "Sun highest at {}, skimming the horizon",
         "sun_skimming_all_day": "The sun circles the sky skimming the horizon all day",
+        # First and last light in the military sense: the start and end of nautical twilight
+        "first_last_light": "First light {}, last light {} (sun 12° below the horizon)",
+        "first_light_only": "First light {} (sun 12° below the horizon)",
+        "last_light_only": "Last light {} (sun 12° below the horizon)",
         "midnight_sun": "Midnight sun: the sun does not set today.",
         "night_all_day": "Polar night: the sun stays more than 18° below the horizon all day, so night lasts "
         "around the clock.",
@@ -360,7 +364,8 @@ STRINGS: Strings = {
             "fingers, at arm's length).",
             "text": "It is named for navigation at sea: the horizon becomes visible while bright stars are "
             "still out, so sailors could measure star altitudes with a sextant. On land, trees and "
-            "buildings show as silhouettes against a deep blue sky, but most tasks still need a light.",
+            "buildings show as silhouettes against a deep blue sky, but most tasks still need a light. "
+            "In military use its start is called first light.",
             "good_for": "bright stars and planets against a blue sky; silhouette photos.",
         },
         "morning_civil": {
@@ -383,7 +388,7 @@ STRINGS: Strings = {
             "text": "It is named for navigation at sea: the horizon is still visible while bright stars are "
             "out, so sailors could take star sights with a sextant. Most tasks now need a light. "
             "Satellites, including the International Space Station, are often visible: they are still "
-            "sunlit high overhead.",
+            "sunlit high overhead. In military use its end is called last light.",
             "good_for": "bright stars and planets; spotting satellites.",
         },
         "evening_astronomical": {
