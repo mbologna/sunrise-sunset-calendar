@@ -458,7 +458,8 @@ def test_polar_transitions_get_their_own_days() -> None:
     begins = events_of_type(ics, "polar-night-begins")[0]
     ends = events_of_type(ics, "polar-night-ends")[0]
     assert begins["DTSTART"] == "20261128"
-    assert ends["DTSTART"] == "20270116", "The first day the sun rises: 11:15 on Jan 16, 2027"
+    # timeanddate.com: down all day on Jan 14, up 11:34-12:13 on Jan 15
+    assert ends["DTSTART"] == "20270115", "The first day the sun rises: 11:35 on Jan 15, 2027"
     assert re.search(r"^The first sunrise after about 4\d days of polar night\.$", ends["DESCRIPTION"])
 
 
@@ -483,8 +484,8 @@ def test_night_gives_the_moonless_window() -> None:
     def night(today: str) -> str:
         return events_of_type(feed(today=today, window_days=0), "night")[0]["DESCRIPTION"]
 
-    # The moon sets at 21:45 (USNO) and the night ends at astronomical dawn
-    assert re.search(r"Moonless sky: 21:45–05:2\d \(7h \d\dm\)", night("2026-11-15"))
+    # The moon sets at 21:44:50 (USNO rounds it to 21:45) and the night ends at astronomical dawn
+    assert re.search(r"Moonless sky: 21:44–05:2\d \(7h \d\dm\)", night("2026-11-15"))
     # The Dec 24 full moon at 02:28 falls in the night of Dec 23
     assert "· Full Moon at 02:28" in night("2026-12-23")
     assert "Next:" not in night("2026-11-15")

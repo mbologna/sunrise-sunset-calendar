@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/mbologna/sunrise-sunset-calendar/actions/workflows/ci.yml/badge.svg)](https://github.com/mbologna/sunrise-sunset-calendar/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.15-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT%20%2B%20GPL--3.0-green.svg)](#licence)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](#licence)
 
-An [iCalendar](https://en.wikipedia.org/wiki/ICalendar) feed of sunrise, sunset, twilight and moon phases for any location, computed with the [NREL Solar Position Algorithm](https://midcdmz.nrel.gov/spa/). Google Calendar, Apple Calendar and Outlook can subscribe to it, and a web page builds the subscription URL.
+An [iCalendar](https://en.wikipedia.org/wiki/ICalendar) feed of sunrise, sunset, twilight and moon phases for any location, computed from NASA JPL's [DE442 ephemeris](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de442_tech-comments.txt) with [skyfield](https://rhodesmill.org/skyfield/). Google Calendar, Apple Calendar and Outlook can subscribe to it, and a web page builds the subscription URL.
 
 ## What the feed contains
 
@@ -42,7 +42,7 @@ docker build -t sunrise-sunset-calendar .
 docker run -p 8080:8080 -e AUTH_TOKEN="$(openssl rand -hex 32)" sunrise-sunset-calendar
 ```
 
-The server is [waitress](https://docs.pylonsproject.org/projects/waitress/): one process with no C extensions, small enough for a 128 MiB [Cloud Run](https://cloud.google.com/run) instance. The image runs as an unprivileged user, has no pip and listens on `$PORT`. Images are tagged `latest` and `sha-<commit>` only and carry no version number. Each push to `main` that changes the image deploys it to Cloud Run by its digest.
+The server is [waitress](https://docs.pylonsproject.org/projects/waitress/), one process, small enough for a 128 MiB [Cloud Run](https://cloud.google.com/run) instance: about 30 MiB idle, and at most about 70 MiB with the default two threads (80 MiB with four) while new places are searched. A place's first feed takes about a second (up to two above 60° of latitude) while skyfield searches its years, one search at a time; later feeds reuse them. The image runs as an unprivileged user, has no pip and listens on `$PORT`. Images are tagged `latest` and `sha-<commit>` only and carry no version number. Each push to `main` that changes the image deploys it to Cloud Run by its digest.
 
 ## Configuration
 
@@ -51,11 +51,11 @@ All settings are environment variables.
 | Setting | Default | Meaning |
 |---------|---------|---------|
 | `AUTH_TOKEN` | none (required) | Secret embedded in feed URLs and used as the web form password. Without it every request gets a 500. |
-| `CALENDAR_WINDOW_DAYS` | `400` | Days of future events in the feed |
+| `CALENDAR_WINDOW_DAYS` | `400` | Days of future events in the feed; the ephemeris ends in 2150, so no feed can reach past 2148 |
 | `CALENDAR_PAST_DAYS` | `30` | Days of past events in the feed |
 | `UPDATE_INTERVAL` | `86400` | Refresh interval suggested to calendar apps, in seconds |
 | `PORT` | `8080` | Port the server listens on |
-| `THREADS` | `2` | Requests served at once; each full feed takes about 15 MB while it is built |
+| `THREADS` | `2` | Requests served at once; each full feed takes about 15 MB while it is built, and skyfield's searches run one at a time |
 
 ## Endpoints
 
@@ -110,11 +110,18 @@ When the sun never crosses a boundary, an event runs to or from solar noon or so
 
 ## Accuracy
 
-Solar positions come from the NREL SPA (Reda & Andreas, 2008), specified to ±0.0003°. The tests check:
+The sun and the moon come from NASA JPL's DE442 ephemeris (2024), the latest, through [skyfield](https://rhodesmill.org/skyfield/), with ΔT and leap seconds from skyfield's built-in IERS tables. The package ships a 12 MB excerpt of it, `data/de442-1999-2150.bsp`: the Sun, the Earth and the Moon, and Jupiter and Saturn, whose gravity bends light, from 1999 to 2150, enough for feeds up to 2148. Nothing is downloaded at run time; `astronomy.py` says how to make the excerpt again.
 
-- sunrise against PHP's `date_sun_info()` algorithm every day for a year in Rome, New York and Sydney, within 2 minutes;
-- twilight times for Mapello, Italy, against published reference times, within 1 to 2 minutes;
-- equinoxes, solstices and moon phases (Meeus, *Astronomical Algorithms*) against published dates, moon illumination at each phase within 1%, and moonrise and moonset against the US Naval Observatory within 3 minutes.
+- Sunrise and sunset are the moments the sun's centre is 0.8333° below the horizon: 34′ of refraction plus its 16′ radius, the US Naval Observatory's definition. Twilight, blue hour and golden hour use the sun's centre at -18°, -12°, -6°, -4° and +6°, without refraction.
+- A date's events belong to the solar day whose transit (solar noon) falls nearest the date's local noon; the day runs from the solar midnight before it to the one after, so each crossing belongs to one day.
+- skyfield's rise and set search misses crossings that skim the horizon: the moon's from about 70° of latitude, the sun's from about 88°. From 60° for the moon and 85° for the sun, the altitude is sampled every 10 minutes instead and each crossing refined; where both methods work they agree to a millisecond.
+- Each search covers a UTC year for a place and stays cached across requests (about 50 kB a year and place).
+
+Real times can still differ by a minute or more near the horizon: refraction changes with the weather, and the feed assumes a flat horizon at sea level. The tests check:
+
+- sunrise against PHP's `date_sun_info()` algorithm, an independent solar model, every day for a year in Rome, New York and Sydney, within 2 minutes;
+- twilight times for Mapello, Italy, against published reference times, within a minute;
+- equinoxes, solstices and moon phases against published times, which give the minute, within 60 seconds; moon illumination at each phase within 1%; and moonrise and moonset against the US Naval Observatory within 30 seconds (its tables round to the minute).
 
 Time zones come from the pinned [`tzdata`](https://pypi.org/project/tzdata/) package, never the host.
 
@@ -134,14 +141,14 @@ CI runs ruff and the tests through `mbologna/.github`'s `python-ci`, then builds
 │   ├── app.py          # WSGI app: configuration, routing, headers, input sanitisation; main() serves it
 │   ├── feed.py         # generate_calendar(): builds the VCALENDAR
 │   ├── helpers.py      # iCalendar escaping and folding, descriptions, year statistics
-│   ├── astronomy.py    # sun_events(), twilight, equinoxes and solstices, moon phases, moonrise and moonset
-│   ├── spa.py          # NREL Solar Position Algorithm: solar position, sunrise, transit and sunset
+│   ├── astronomy.py    # skyfield: sun_events(), twilight, equinoxes and solstices, moon phases, moonrise and moonset
 │   ├── php.py          # the PHP behaviours the output depends on (see below)
 │   ├── web.py          # the web page
 │   ├── strings.py      # all user-facing text
 │   ├── timezones.py    # accepted time zones (the tz database's zone.tab, plus UTC)
 │   ├── cache.py        # per-request memoisation
-│   └── assets/         # the page's CSS and JavaScript
+│   ├── assets/         # the page's CSS and JavaScript
+│   └── data/           # the JPL DE442 excerpt (see astronomy.py)
 └── tests/              # unit, integration, reference and accuracy suites, the golden corpus, PHP references
 ```
 
@@ -149,14 +156,12 @@ CI runs ruff and the tests through `mbologna/.github`'s `python-ci`, then builds
 
 `tests/golden/` holds 1002 recorded responses: 46 locations (polar day and night, both hemispheres, the equator, the date line, every kind of DST rule, including changes at midnight), the full default window, extra dates (DST changes, New Year, a leap day), every combination of event types, offsets, notes, malformed input, environment settings, the web page and its form. `test_golden.py` replays every request and compares the bytes, apart from `DTSTAMP`, the moment a feed is generated. When the output changes on purpose, `uv run python -m tests.golden.make_corpus` records the corpus again; review the changed lines before committing.
 
-### Parity with the PHP version
+### The PHP version
 
-Up to v2 the calendar was written in PHP. The Python version produced the same feeds byte for byte, apart from `DTSTAMP`, so existing subscriptions, URLs, parameters and tokens work unchanged. The PHP version's `/sunrise-sunset-calendar.php` path and `/?health` check are gone.
+Up to v2 the calendar was written in PHP. Its subscriptions, URLs, parameters and tokens still work; its `/sunrise-sunset-calendar.php` path and `/?health` check are gone. The times now come from skyfield instead of the PHP version's solar position algorithm, so they differ from it by seconds, a few minutes near the poles, and the first or last day of polar day, polar night or white nights can move by one.
 
 - `php.py` reproduces the PHP 8.5 primitives whose results reach the output: rounding, float-to-string conversion, input filters, `strip_tags()`, multibyte truncation, date formatting and wall-clock time zone arithmetic. Each follows php-src's C code, so edge cases match too.
 - `tests/php_reference/` records what PHP returns for those primitives (`record.sh`, with the last PHP release's image; needs Docker), and `test_php.py` checks `php.py` against it.
-
-The sunrise and sunset times come from a line-by-line port of [sun-position-spa-php](https://github.com/abbadon1334/sun-position-spa-php), the library the PHP version used. Its interpolation of rise and set times differs slightly from other SPA implementations, and the feeds keep their times to the second.
 
 ## Versioning
 
@@ -164,6 +169,4 @@ The sunrise and sunset times come from a line-by-line port of [sun-position-spa-
 
 ## Licence
 
-The code is MIT ([LICENSE](LICENSE)), except `src/sunrise_sunset_calendar/spa.py`, which is GPL-3.0 ([LICENSES/GPL-3.0-only.txt](LICENSES/GPL-3.0-only.txt)).
-
-`spa.py` is a port of [sun-position-spa-php](https://github.com/abbadon1334/sun-position-spa-php) by Francesco Danti. That project declares MIT in its source headers and package metadata, but the LICENSE file it ships is the GNU GPL version 3. To satisfy either reading, `spa.py` is distributed under the GPL version 3 with the upstream MIT notice kept. Because the application and its container image include `spa.py`, they are distributed under the GPL's terms as a whole; the MIT-licensed files can still be reused on their own under MIT.
+The code is MIT ([LICENSE](LICENSE)). skyfield is MIT too, and the DE442 ephemeris is a work of NASA JPL.

@@ -184,9 +184,8 @@ STRINGS: Strings = {
     # Calendar metadata
     "calendar_prodid": "-//Sun & Twilight Calendar//EN",
     "calendar_name_format": "🌅 %s · Sun & Twilight",  # %s = location name, or coordinates
-    "calendar_description_format": "Sunrise, sunset and twilight for %1$s, times in %2$s. Sunrise and "
-    "sunset computed with the NREL Solar Position Algorithm; twilight and the moon with standard "
-    "astronomical formulas.",  # %1$s = place, %2$s = time zone
+    "calendar_description_format": "Sunrise, sunset and twilight for %1$s, times in %2$s. The sun and "
+    "the moon computed from the JPL DE442 ephemeris.",  # %1$s = place, %2$s = time zone
     "place_named": "%1$s (%2$s, %3$s)",  # name, latitude, longitude
     "place_coordinates": "%2$s, %3$s",
     # Date and time formats (PHP date())
@@ -679,8 +678,8 @@ STRINGS: Strings = {
         "footer": [
             (
                 "How it is calculated",
-                "Sunrise and sunset come from the NREL Solar Position Algorithm, which allows "
-                "for refraction; twilight and the moon from standard astronomical formulas.",
+                "The sun and the moon come from NASA JPL's DE442 ephemeris, through the skyfield "
+                "library. Sunrise, sunset, moonrise and moonset allow for refraction.",
             ),
             (
                 "Twilight",

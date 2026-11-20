@@ -1,8 +1,8 @@
 """The PHP behaviours the feed's output depends on, reproduced exactly.
 
-The calendar was first written in PHP, and its feeds are byte-for-byte
-golden-mastered against that version. These helpers mirror the PHP 8.5
-primitives whose results reach the output: rounding, float-to-string
+The calendar was first written in PHP, and its output keeps that version's
+formatting and input handling. These helpers mirror the PHP 8.5 primitives
+whose results reach the output: rounding, float-to-string
 conversion, input filters, strip_tags(), multibyte truncation, date
 formatting, and wall-clock time zone arithmetic. Each follows the C source
 of php-src 8.5 rather than the manual, so edge cases match too.
@@ -14,7 +14,7 @@ import calendar as _calendar
 import math
 import re
 import time as _time
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, date, datetime, timedelta
@@ -27,16 +27,6 @@ PHP_INT_MAX = 2**63 - 1
 # ============================================================================
 # MATH
 # ============================================================================
-
-
-def deg2rad(deg: float) -> float:
-    """PHP deg2rad(): (deg / 180.0) * M_PI, which rounds differently from math.radians()."""
-    return (deg / 180.0) * math.pi
-
-
-def rad2deg(rad: float) -> float:
-    """PHP rad2deg(): (rad / M_PI) * 180."""
-    return (rad / math.pi) * 180
 
 
 def php_round(value: float, places: int = 0) -> float:
@@ -75,14 +65,6 @@ def intdiv(a: int, b: int) -> int:
     """PHP intdiv(): truncates toward zero."""
     q = abs(a) // abs(b)
     return q if (a >= 0) == (b >= 0) else -q
-
-
-def array_sum(values: Iterable[float]) -> float:
-    """PHP array_sum(): plain left-to-right addition (Python's sum() compensates)."""
-    total: float = 0
-    for v in values:
-        total = total + v
-    return total
 
 
 # ============================================================================
@@ -912,17 +894,3 @@ def strtotime_days(days: int, base: int) -> int:
     """strtotime("+N days", $base) in the default time zone."""
     tz = _tz()
     return resolve(wall_clock(base, tz) + timedelta(days=days), tz)
-
-
-def first_of_month(ts: int) -> int:
-    """strtotime('first day of this month', $ts): day 1, same time of day."""
-    tz = _tz()
-    return resolve(wall_clock(ts, tz).replace(day=1), tz)
-
-
-def add_month(ts: int) -> int:
-    """strtotime('+1 month', $ts) for a timestamp on the 1st of a month."""
-    tz = _tz()
-    w = wall_clock(ts, tz)
-    year, month = (w.year + 1, 1) if w.month == 12 else (w.year, w.month + 1)
-    return resolve(w.replace(year=year, month=month), tz)

@@ -1,8 +1,10 @@
 # Auto detect text files and normalize line endings
 * text=auto eol=lf
 
-# The golden corpus: compressed responses of the PHP release, compared byte for byte
+# The golden corpus: compressed responses, compared byte for byte
 *.tar.xz binary
+# The JPL ephemeris excerpt
+*.bsp binary
 tests/php_reference/*.json -diff
 
 # Exclude from exports

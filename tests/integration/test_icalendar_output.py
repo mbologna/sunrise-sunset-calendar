@@ -23,7 +23,6 @@ def test_calculate_sun_times_return_structure() -> None:
 
     expected_keys = [
         "declination_deg",
-        "equation_of_time_min",
         "sunrise_frac",
         "sunset_frac",
         "solar_noon_frac",

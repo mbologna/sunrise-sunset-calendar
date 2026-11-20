@@ -1,6 +1,6 @@
 # AGENTS.md — sunrise-sunset-calendar
 
-iCalendar feed of sunrise, sunset, twilight and moon phases for any location, computed with the NREL Solar Position Algorithm. User-facing docs: `README.md`.
+iCalendar feed of sunrise, sunset, twilight and moon phases for any location, computed from the JPL DE442 ephemeris with skyfield. User-facing docs: `README.md`.
 
 ## Layout
 
