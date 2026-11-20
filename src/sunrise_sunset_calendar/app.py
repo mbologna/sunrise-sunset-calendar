@@ -2,7 +2,7 @@
 
 Configuration comes from the environment:
 
-- AUTH_TOKEN (required): the secret in feed URLs, and the page's password
+- AUTH_TOKEN (required): the secret in feed URLs and in the page's
 - CALENDAR_WINDOW_DAYS (400): days of future events in a feed
 - CALENDAR_PAST_DAYS (30): days of past events
 - UPDATE_INTERVAL (86400): refresh interval suggested to calendar apps, in seconds
@@ -14,16 +14,17 @@ from __future__ import annotations
 import hmac
 import json
 import os
-import platform
 import re
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from email.parser import BytesParser
 from email.policy import HTTP
 from importlib import resources
 from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
 
+from .astronomy import FIRST_YEAR, LAST_YEAR
 from .feed import Options, render_feed
 from .php import ARRAY, env_int, filter_validate_float, filter_validate_int, http_build_query, mb_substr, parse_query
 from .php import strip_tags as php_strip_tags
@@ -47,11 +48,19 @@ def public_host(environ: dict) -> str:
 
 
 PLACEHOLDER_TOKEN = b"CHANGE_ME_TO_A_RANDOM_STRING"
+# The page runs only its own script and stylesheet, and looks addresses up on Nominatim
+CONTENT_SECURITY_POLICY = (
+    "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; "
+    "connect-src https://nominatim.openstreetmap.org; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+)
 SECURITY_HEADERS = [
     ("X-Content-Type-Options", "nosniff"),
     ("X-Frame-Options", "DENY"),
     ("Referrer-Policy", "no-referrer"),
+    ("Content-Security-Policy", CONTENT_SECURITY_POLICY),
 ]
+# Responses that carry the token (the page after the form, the feed's URL) stay out of shared caches
+NO_STORE = ("Cache-Control", "no-store")
 ASSETS = {
     "/assets/styles.css": ("styles.css", "text/css"),
     "/assets/script.js": ("script.js", "text/javascript"),
@@ -179,45 +188,48 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
         path = environ.get("PATH_INFO", "") or "/"
         method = environ.get("REQUEST_METHOD", "GET")
 
+        def respond(status: str, body: bytes, headers: list[tuple[str, str]]) -> list[bytes]:
+            start_response(status, [*SECURITY_HEADERS, *headers, ("Content-Length", str(len(body)))])
+            return [b"" if method == "HEAD" else body]
+
         if path in ASSETS:
             filename, content_type = ASSETS[path]
             body = resources.files(__package__).joinpath("assets", filename).read_bytes()
-            start_response("200 OK", [("Content-Type", content_type), ("Content-Length", str(len(body)))])
-            return [b"" if method == "HEAD" else body]
+            return respond("200 OK", body, [("Content-Type", content_type)])
         # The page and feed at /, the health check at /health. The PHP release's
         # /sunrise-sunset-calendar.php and /?health are gone (2026-11-19).
         if path not in ("/", "/health"):
-            body = b"Not Found"
-            start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8")])
-            return [body]
-
-        def respond(status: str, body: bytes, headers: list[tuple[str, str]]) -> list[bytes]:
-            start_response(status, [*headers, ("Content-Length", str(len(body)))])
-            return [b"" if method == "HEAD" else body]
+            return respond("404 Not Found", b"Not Found", [("Content-Type", "text/plain; charset=utf-8"), NO_STORE])
 
         token = config.auth_token
         if token is None or token in (b"", PLACEHOLDER_TOKEN):
             return respond(
-                "500 Internal Server Error", strings["errors"]["missing_token"].encode(), [("Content-Type", HTML)]
+                "500 Internal Server Error",
+                strings["errors"]["missing_token"].encode(),
+                [("Content-Type", HTML), NO_STORE],
             )
 
         query = parse_query(environ.get("QUERY_STRING", "").encode("latin-1"))
         now = int(clock())
 
         if path == "/health":
-            body = json.dumps(
-                {"status": "ok", "python": platform.python_version(), "timestamp": now}, separators=(",", ":")
-            ).encode()
-            headers = [*SECURITY_HEADERS, ("Content-Type", "application/json"), ("Cache-Control", "no-store")]
-            return respond("200 OK", body, headers)
+            # Down when the feed window reaches years the ephemeris can't serve
+            first = datetime.fromtimestamp(now - config.past_days * 86400, UTC).year
+            last = datetime.fromtimestamp(now + config.window_days * 86400, UTC).year
+            health: dict = {"status": "ok", "years": [FIRST_YEAR, LAST_YEAR]}
+            if first < FIRST_YEAR or last > LAST_YEAR:
+                health |= {"status": "down", "problems": [f"feeds reach {first} to {last}, outside the ephemeris"]}
+            body = json.dumps(health, separators=(",", ":")).encode()
+            status = "200 OK" if health["status"] == "ok" else "503 Service Unavailable"
+            return respond(status, body, [("Content-Type", "application/json"), NO_STORE])
+
+        # The feed and the page that builds its URL both need the token; only /health doesn't
+        if not verify_token(config, param(query, "token")):
+            return respond(
+                "403 Forbidden", strings["errors"]["invalid_token"].encode(), [("Content-Type", HTML), NO_STORE]
+            )
 
         if "feed" in query:
-            if not verify_token(config, param(query, "token")):
-                return respond(
-                    "403 Forbidden",
-                    strings["errors"]["invalid_token"].encode(),
-                    [*SECURITY_HEADERS, ("Content-Type", HTML)],
-                )
 
             def flag(key: str) -> bool:
                 return param(query, key) == b"1"
@@ -246,38 +258,36 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
                 "200 OK",
                 body,
                 [
-                    *SECURITY_HEADERS,
                     ("Content-Type", "text/calendar; charset=utf-8"),
-                    ("Cache-Control", f"max-age={config.update_interval}"),
+                    # Calendar apps may keep it; shared caches must not, as its URL holds the token
+                    ("Cache-Control", f"private, max-age={config.update_interval}"),
                 ],
             )
 
-        error = subscription_url = webcal_url = None
+        # The form posts back to the page's own URL, token and all
+        subscription_url = webcal_url = None
         if method == "POST":
             form = _form(environ)
             if "generate_url" in form:
-                if not verify_token(config, param(form, "password")):
-                    error = strings["errors"]["invalid_password"]
-                else:
-                    params = [
-                        ("feed", b"1"),
-                        ("token", token),
-                        ("lat", param(form, "lat", DEFAULT_LAT_TEXT.encode())),
-                        ("lon", param(form, "lon", DEFAULT_LON_TEXT.encode())),
-                        ("zone", param(form, "zone", DEFAULT_TIMEZONE.encode())),
-                        ("location", param(form, "location")),
-                        ("rise_off", param(form, "rise_off", b"0")),
-                        ("set_off", param(form, "set_off", b"0")),
-                        ("desc", param(form, "description")),
-                    ]
-                    params += [(kind, b"1") for kind in ("civil", "nautical", "astro", "daynight") if kind in form]
-                    https = environ.get("HTTPS", "") == "on" or environ.get("HTTP_X_FORWARDED_PROTO", "") == "https"
-                    host = public_host(environ)
-                    subscription_url = ("https" if https else "http") + "://" + host + "/?" + http_build_query(params)
-                    webcal_url = re.sub(r"^https?://", "webcal://", subscription_url, count=1)
+                params = [
+                    ("feed", b"1"),
+                    ("token", token),
+                    ("lat", param(form, "lat", DEFAULT_LAT_TEXT.encode())),
+                    ("lon", param(form, "lon", DEFAULT_LON_TEXT.encode())),
+                    ("zone", param(form, "zone", DEFAULT_TIMEZONE.encode())),
+                    ("location", param(form, "location")),
+                    ("rise_off", param(form, "rise_off", b"0")),
+                    ("set_off", param(form, "set_off", b"0")),
+                    ("desc", param(form, "description")),
+                ]
+                params += [(kind, b"1") for kind in ("civil", "nautical", "astro", "daynight") if kind in form]
+                https = environ.get("HTTPS", "") == "on" or environ.get("HTTP_X_FORWARDED_PROTO", "") == "https"
+                host = public_host(environ)
+                subscription_url = ("https" if https else "http") + "://" + host + "/?" + http_build_query(params)
+                webcal_url = re.sub(r"^https?://", "webcal://", subscription_url, count=1)
 
-        page = render_page(now, timezone_identifiers(), error, subscription_url, webcal_url)
-        return respond("200 OK", page.encode("utf-8"), [*SECURITY_HEADERS, ("Content-Type", HTML)])
+        page = render_page(now, timezone_identifiers(), subscription_url, webcal_url)
+        return respond("200 OK", page.encode("utf-8"), [("Content-Type", HTML), NO_STORE])
 
     return app
 

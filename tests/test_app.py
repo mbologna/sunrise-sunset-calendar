@@ -1,4 +1,4 @@
-"""The HTTP layer: status codes, headers, routing and configuration, as the PHP entry point had them."""
+"""The HTTP layer: status codes, headers, routing and configuration."""
 
 from __future__ import annotations
 
@@ -13,7 +13,13 @@ from tests.helpers import StartResponse
 
 TOKEN = b"app-test-token"
 NOW = 1774778400  # 2026-03-29 10:00 UTC
-SECURITY = [("X-Content-Type-Options", "nosniff"), ("X-Frame-Options", "DENY"), ("Referrer-Policy", "no-referrer")]
+SECURITY = [
+    ("X-Content-Type-Options", "nosniff"),
+    ("X-Frame-Options", "DENY"),
+    ("Referrer-Policy", "no-referrer"),
+    ("Content-Security-Policy", app_module.CONTENT_SECURITY_POLICY),
+]
+NO_STORE = ("Cache-Control", "no-store")
 
 
 def call(
@@ -44,20 +50,24 @@ def config() -> Config:
 def test_without_a_token_every_request_fails(token: bytes | None) -> None:
     status, headers, body = call(Config(auth_token=token), "/health")
     assert status == "500 Internal Server Error"
-    assert body == b"Error: Please set AUTH_TOKEN via environment variable or config/config.php"
-    # PHP exits before it sets the security headers
-    assert headers[0] == ("Content-Type", "text/html; charset=UTF-8")
-    assert not any(name.startswith("X-") for name, _ in headers)
+    assert body == b"Error: set the AUTH_TOKEN environment variable"
+    assert headers[:6] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8"), NO_STORE]
 
 
 def test_health(config: Config) -> None:
     status, headers, body = call(config, "/health")
     assert status == "200 OK"
-    assert headers[:5] == [*SECURITY, ("Content-Type", "application/json"), ("Cache-Control", "no-store")]
+    assert headers[:6] == [*SECURITY, ("Content-Type", "application/json"), NO_STORE]
+    assert json.loads(body) == {"status": "ok", "years": [2000, 2148]}
+
+
+@pytest.mark.parametrize(("past", "window"), [(30, 50000), (10000, 400)])
+def test_health_is_down_when_feeds_reach_past_the_ephemeris(past: int, window: int) -> None:
+    status, _, body = call(Config(auth_token=TOKEN, past_days=past, window_days=window), "/health")
+    assert status == "503 Service Unavailable"
     data = json.loads(body)
-    assert data["status"] == "ok"
-    assert data["timestamp"] == NOW
-    assert "python" in data
+    assert data["status"] == "down"
+    assert data["problems"][0].endswith("outside the ephemeris")
 
 
 def test_health_head_has_no_body(config: Config) -> None:
@@ -68,6 +78,8 @@ def test_health_head_has_no_body(config: Config) -> None:
 
 def test_the_old_health_query_is_just_the_page(config: Config) -> None:
     status, headers, body = call(config, query="health")
+    assert status == "403 Forbidden", "The page needs the token"
+    status, headers, body = call(config, query="health&token=app-test-token")
     assert status == "200 OK"
     assert ("Content-Type", "text/html; charset=UTF-8") in headers
     assert b"<!DOCTYPE html>" in body
@@ -76,10 +88,10 @@ def test_the_old_health_query_is_just_the_page(config: Config) -> None:
 def test_feed_headers(config: Config) -> None:
     status, headers, body = call(config, query=f"feed=1&token={TOKEN.decode()}&daynight=1")
     assert status == "200 OK"
-    assert headers[:5] == [
+    assert headers[:6] == [
         *SECURITY,
         ("Content-Type", "text/calendar; charset=utf-8"),
-        ("Cache-Control", "max-age=7200"),
+        ("Cache-Control", "private, max-age=7200"),
     ]
     assert body.startswith(b"BEGIN:VCALENDAR\r\n")
     assert b"REFRESH-INTERVAL;VALUE=DURATION:PT2H\r\n" in body
@@ -90,14 +102,27 @@ def test_feed_rejects_bad_tokens(config: Config, query: str) -> None:
     status, headers, body = call(config, query=query)
     assert status == "403 Forbidden"
     assert body == b"Invalid authentication token"
-    assert headers[:4] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8")]
+    assert headers[:6] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8"), NO_STORE]
+
+
+@pytest.mark.parametrize("query", ["", "token=wrong", "token[]=app-test-token"])
+def test_page_needs_the_token(config: Config, query: str) -> None:
+    status, headers, body = call(config, query=query)
+    assert status == "403 Forbidden"
+    assert body == b"Invalid authentication token"
+    assert headers[:6] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8"), NO_STORE]
 
 
 def test_page(config: Config) -> None:
-    status, headers, body = call(config, "/")
+    status, headers, body = call(config, "/", query="token=app-test-token")
     assert status == "200 OK"
-    assert headers[:4] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8")]
+    assert headers[:6] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8"), NO_STORE]
     assert b'<option value="Europe/Rome" selected>Europe/Rome</option>' in body
+    # Nothing inline for the Content-Security-Policy to block
+    assert b"<script>" not in body
+    assert b"onclick" not in body and b"onchange" not in body and b"onsubmit" not in body
+    assert b"style=" not in body
+    assert b"password" not in body, "The token is in the URL already"
 
 
 @pytest.mark.parametrize("path", ["/sunrise-sunset-calendar.php", "/sunrise-sunset-calendar.php/extra"])
@@ -108,7 +133,7 @@ def test_the_php_path_is_gone(config: Config, path: str) -> None:
 
 
 def test_head_has_no_body(config: Config) -> None:
-    status, headers, body = call(config, method="HEAD")
+    status, headers, body = call(config, method="HEAD", query="token=app-test-token")
     assert status == "200 OK"
     assert body == b""
     assert int(dict(headers)["Content-Length"]) > 1000
@@ -120,6 +145,7 @@ def test_head_has_no_body(config: Config) -> None:
 def test_assets(config: Config, path: str, content_type: str) -> None:
     status, headers, body = call(config, path)
     assert status == "200 OK"
+    assert headers[:4] == SECURITY
     assert dict(headers)["Content-Type"] == content_type
     assert len(body) == int(dict(headers)["Content-Length"]) > 100
     assert call(config, path, method="HEAD")[2] == b""
@@ -127,15 +153,20 @@ def test_assets(config: Config, path: str, content_type: str) -> None:
 
 @pytest.mark.parametrize("path", ["/index.php", "/src/app.py", "/assets/", "/favicon.ico"])
 def test_other_paths_are_not_found(config: Config, path: str) -> None:
-    assert call(config, path)[0] == "404 Not Found"
+    status, headers, _ = call(config, path)
+    assert status == "404 Not Found"
+    assert headers[:4] == SECURITY
 
 
-def form_post(config: Config, body: bytes, content_type: str, **extra: str) -> tuple[str, list[tuple[str, str]], bytes]:
-    return call(config, method="POST", body=body, CONTENT_TYPE=content_type, **extra)
+def form_post(
+    config: Config, body: bytes, content_type: str, query: str = "token=app-test-token", **extra: str
+) -> tuple[str, list[tuple[str, str]], bytes]:
+    """The form posts back to the page's own URL, which holds the token."""
+    return call(config, query=query, method="POST", body=body, CONTENT_TYPE=content_type, **extra)
 
 
 def test_form_generates_urls(config: Config) -> None:
-    body = b"generate_url=1&password=app-test-token&lat=1&lon=2&zone=UTC&location=A+%26+B&civil=on&daynight=on"
+    body = b"generate_url=1&lat=1&lon=2&zone=UTC&location=A+%26+B&civil=on&daynight=on"
     _, _, page = form_post(config, body, "application/x-www-form-urlencoded", HTTP_X_FORWARDED_PROTO="https")
     url = (
         "https://calendar.example/?feed=1&amp;token=app-test-token&amp;lat=1&amp;lon=2"
@@ -146,18 +177,16 @@ def test_form_generates_urls(config: Config) -> None:
 
 
 def test_form_over_plain_http(config: Config) -> None:
-    _, _, page = form_post(config, b"generate_url=1&password=app-test-token", "application/x-www-form-urlencoded")
+    _, _, page = form_post(config, b"generate_url=1", "application/x-www-form-urlencoded")
     assert b"http://calendar.example/?feed=1&amp;" in page
-    _, _, page = form_post(
-        config, b"generate_url=1&password=app-test-token", "application/x-www-form-urlencoded", HTTPS="on"
-    )
+    _, _, page = form_post(config, b"generate_url=1", "application/x-www-form-urlencoded", HTTPS="on")
     assert b"https://calendar.example/?feed=1&amp;" in page
 
 
 def test_form_behind_a_proxy(config: Config) -> None:
     _, _, page = form_post(
         config,
-        b"generate_url=1&password=app-test-token",
+        b"generate_url=1",
         "application/x-www-form-urlencoded",
         HTTP_X_FORWARDED_PROTO="https",
         HTTP_X_FORWARDED_HOST="calendar.proxy.example",
@@ -174,21 +203,20 @@ def test_form_behind_a_proxy(config: Config) -> None:
     ],
 )
 def test_form_ignores_malformed_forwarded_headers(config: Config, forwarded: dict, expected: bytes) -> None:
-    _, _, page = form_post(
-        config, b"generate_url=1&password=app-test-token", "application/x-www-form-urlencoded", **forwarded
-    )
+    _, _, page = form_post(config, b"generate_url=1", "application/x-www-form-urlencoded", **forwarded)
     assert expected in page
 
 
-def test_form_rejects_a_wrong_password(config: Config) -> None:
-    _, _, page = form_post(config, b"generate_url=1&password=nope", "application/x-www-form-urlencoded")
-    assert b"<strong>Error:</strong> Invalid password" in page
-    assert b"subscription-url" not in page.split(b"<form")[0]
+@pytest.mark.parametrize("query", ["", "token=nope"])
+def test_form_needs_the_token(config: Config, query: str) -> None:
+    status, _, page = form_post(config, b"generate_url=1", "application/x-www-form-urlencoded", query=query)
+    assert status == "403 Forbidden"
+    assert b"feed=1" not in page
 
 
 def test_multipart_form(config: Config) -> None:
     boundary = "XyZ"
-    parts = [("generate_url", "1"), ("password", "app-test-token"), ("location", "Côte"), ("astro", "on")]
+    parts = [("generate_url", "1"), ("location", "Côte"), ("astro", "on")]
     body = "".join(
         f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n' for name, value in parts
     )
@@ -200,7 +228,7 @@ def test_multipart_form(config: Config) -> None:
 
 
 def test_post_without_a_form_body_shows_the_page(config: Config) -> None:
-    _, _, page = form_post(config, b"generate_url=1&password=app-test-token", "text/plain", CONTENT_LENGTH="x")
+    _, _, page = form_post(config, b"generate_url=1", "text/plain", CONTENT_LENGTH="x")
     assert b"success-box" not in page
 
 

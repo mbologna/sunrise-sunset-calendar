@@ -31,7 +31,7 @@ uv sync
 AUTH_TOKEN="$(openssl rand -hex 32)" PORT=8000 uv run sunrise-sunset-calendar
 ```
 
-Open `http://localhost:8000/`, enter the token as the password and generate a subscription URL.
+Open `http://localhost:8000/?token=<the token>` and generate a subscription URL. Bookmark that link: without the token the page answers 403, like the feed.
 
 As a container, from the image CI publishes on every push to `main`, or built locally:
 
@@ -50,7 +50,7 @@ All settings are environment variables.
 
 | Setting | Default | Meaning |
 |---------|---------|---------|
-| `AUTH_TOKEN` | none (required) | Secret embedded in feed URLs and used as the web form password. Without it every request gets a 500. |
+| `AUTH_TOKEN` | none (required) | Secret in the feed URLs and in the page's (`/?token=…`). Without it every request gets a 500. |
 | `CALENDAR_WINDOW_DAYS` | `400` | Days of future events in the feed; the ephemeris ends in 2150, so no feed can reach past 2148 |
 | `CALENDAR_PAST_DAYS` | `30` | Days of past events in the feed |
 | `UPDATE_INTERVAL` | `86400` | Refresh interval suggested to calendar apps, in seconds |
@@ -61,12 +61,12 @@ All settings are environment variables.
 
 | Path | Response |
 |------|----------|
-| `/` | The web page that builds subscription URLs |
+| `/?token=…` | The web page that builds subscription URLs; without the token, 403 |
 | `/?feed=1&…` | The feed (parameters below) |
 | `/assets/` | The page's CSS and JavaScript; its address search calls [Nominatim](https://nominatim.org/) from the browser |
-| `/health` | `{"status":"ok","python":"<version>","timestamp":<unix time>}`, with `Cache-Control: no-store` |
+| `/health` | `{"status":"ok","years":[2000,2148]}`, the years the ephemeris serves; 503 with `"status":"down"` and the problem when `CALENDAR_PAST_DAYS` or `CALENDAR_WINDOW_DAYS` reach outside them |
 
-Every other path returns 404. Behind a proxy that serves the app on another host, it builds subscription URLs from the `X-Forwarded-Host` header and ignores a malformed value.
+Every other path returns 404. Every response carries `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and a `Content-Security-Policy` that allows only the page's own script and stylesheet, and Nominatim. Feeds are `Cache-Control: private`, because their URL holds the token; the page, errors and `/health` are `no-store`. Behind a proxy that serves the app on another host, it builds subscription URLs from the `X-Forwarded-Host` header and ignores a malformed value.
 
 ## Feed URL parameters
 

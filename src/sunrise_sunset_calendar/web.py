@@ -64,11 +64,10 @@ def json_encode_strings(values: dict[str, str]) -> str:
 def render_page(
     now: int,
     timezones: list[str],
-    error: str | None = None,
     subscription_url: str | None = None,
     webcal_url: str | None = None,
 ) -> str:
-    """The page, with today's times in Rome, an optional error and the generated URLs."""
+    """The page, with today's times in Rome and the generated URLs."""
     cache.reset()
     with default_timezone_set(DEFAULT_TIMEZONE), frozen_time(now):
         today = sun_events(LocalDate.today(zone(DEFAULT_TIMEZONE), now), DEFAULT_LAT, DEFAULT_LON)
@@ -105,12 +104,6 @@ def render_page(
         "\n"
         "        "
     ]
-    if error is not None:
-        out.append(
-            '            <div class="error-box">\n'
-            f"                <strong>{e(_W['error'])}</strong> {e(error)}            </div>\n"
-            "        "
-        )
     out.append("\n        ")
     if subscription_url is not None and webcal_url is not None:
         link = '<a href="https://calendar.google.com" target="_blank">' + e(_W["google_link"]) + "</a>"
@@ -123,12 +116,12 @@ def render_page(
             f"                <h3>{e(_W['generated'])}</h3>\n"
             f"                <p><strong>{e(_W['subscription_url'])}</strong></p>\n"
             f'                <div class="url-display" id="subscription-url">{e(subscription_url)}</div>\n'
-            '                <button class="copy-button" onclick="copyToClipboard(\'subscription-url\', this)">'
+            '                <button class="copy-button" data-copy="subscription-url">'
             f"{e(_W['copy_url'])}</button>\n"
             "\n"
-            f'                <p style="margin-top: 20px;"><strong>{e(_W["webcal_url"])}</strong></p>\n'
+            f'                <p class="spaced"><strong>{e(_W["webcal_url"])}</strong></p>\n'
             f'                <div class="url-display" id="webcal-url">{e(webcal_url)}</div>\n'
-            '                <button class="copy-button" onclick="copyToClipboard(\'webcal-url\', this)">'
+            '                <button class="copy-button" data-copy="webcal-url">'
             f"{e(_W['copy_webcal'])}</button>\n"
             "\n"
             "                <hr>\n"
@@ -158,34 +151,23 @@ def render_page(
     )
     out.append(
         "\n"
-        '        <div class="warning-box">\n'
-        f"            <strong>{e(_W['auth_heading'])}</strong><br>\n"
-        f"            {e(_W['auth_text'])}        </div>\n"
-        "\n"
         '        <div class="button-row">\n'
-        f'            <button onclick="getLocation()" class="secondary">{e(_W["use_location"])}</button>\n'
-        f'            <button onclick="showAddressSearch()" class="secondary">{e(_W["search_address"])}</button>\n'
+        f'            <button id="use-location" class="secondary">{e(_W["use_location"])}</button>\n'
+        f'            <button id="show-address-search" class="secondary">{e(_W["search_address"])}</button>\n'
         "        </div>\n"
         '        <div id="location-status"></div>\n'
         "\n"
-        '        <div id="address-search" style="display: none; margin-top: 15px;">\n'
+        '        <div id="address-search" hidden>\n'
         '            <div class="form-group">\n'
         f'                <label for="address-input">{e(_W["address"])}</label>\n'
         f'                <input type="text" id="address-input" placeholder="{e(_W["address_placeholder"])}">\n'
-        '                <button onclick="geocodeAddress()" style="margin-top: 10px;">'
+        '                <button id="geocode-address">'
         f"{e(_W['search_location'])}</button>\n"
         "            </div>\n"
         '            <div id="geocode-status"></div>\n'
         "        </div>\n"
         "\n"
-        '        <form method="post" onsubmit="return validateForm()">\n'
-        "            <hr>\n"
-        "\n"
-        '            <div class="form-group">\n'
-        f'                <label for="password">{e(_W["password"])} <span class="required">*</span></label>\n'
-        '                <input type="password" name="password" id="password" required>\n'
-        "            </div>\n"
-        "\n"
+        '        <form method="post" id="feed-form">\n'
         "            <hr>\n"
         "\n"
         '            <div class="form-group">\n'
@@ -198,14 +180,14 @@ def render_page(
         '            <div class="form-group">\n'
         f'                <label for="lat">{e(_W["latitude"])} <span class="required">*</span></label>\n'
         '                <input type="number" name="lat" id="lat" step="0.000001" min="-90" max="90"\n'
-        f'                    value="{DEFAULT_LAT_TEXT}" required onchange="reverseGeocode()">\n'
+        f'                    value="{DEFAULT_LAT_TEXT}" required>\n'
         f'                <div class="help-text">{e(_W["latitude_help"])}</div>\n'
         "            </div>\n"
         "\n"
         '            <div class="form-group">\n'
         f'                <label for="lon">{e(_W["longitude"])} <span class="required">*</span></label>\n'
         '                <input type="number" name="lon" id="lon" step="0.000001" min="-180" max="180"\n'
-        f'                    value="{DEFAULT_LON_TEXT}" required onchange="reverseGeocode()">\n'
+        f'                    value="{DEFAULT_LON_TEXT}" required>\n'
         f'                <div class="help-text">{e(_W["longitude_help"])}</div>\n'
         "            </div>\n"
         "\n"
@@ -219,7 +201,7 @@ def render_page(
         "\n"
         '            <div class="form-group">\n'
         f'                <strong>{e(_W["event_types"])} <span class="required">*</span></strong>\n'
-        f'                <div class="help-text" style="margin-bottom: 10px;">{e(_W["event_types_help"])}</div>\n'
+        f'                <div class="help-text event-types-help">{e(_W["event_types_help"])}</div>\n'
         "                " + types + "            </div>\n"
         "\n"
         "            <hr>\n"
@@ -251,7 +233,8 @@ def render_page(
         "            " + footer + "        </div>\n"
         "    </div>\n"
         "\n"
-        f"    <script>const STRINGS = {json_encode_strings(_W['js'])};</script>\n"
+        # Data, not code: the Content-Security-Policy runs no inline script
+        f'    <script type="application/json" id="strings">{json_encode_strings(_W["js"])}</script>\n'
         '    <script src="assets/script.js"></script>\n'
         "</body>\n"
         "\n"

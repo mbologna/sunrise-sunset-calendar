@@ -41,6 +41,16 @@ from .php import LocalDate, gmmktime, local, mktime, php_round, round_int
 
 _EPHEMERIS = load_file(str(resources.files(__package__).joinpath("data", "de442-1999-2150.bsp")))
 _TS = load.timescale(builtin=True)
+# The years a feed can cover: each search reaches up to 31 days beyond its year
+_COVERAGE = [
+    (jd - 2440587.5) * 86400
+    for jd in (
+        max(s.start_jd for s in _EPHEMERIS.spk.segments),
+        min(s.end_jd for s in _EPHEMERIS.spk.segments),
+    )
+]
+FIRST_YEAR = datetime.fromtimestamp(_COVERAGE[0] + 32 * 86400, UTC).year + 1
+LAST_YEAR = datetime.fromtimestamp(_COVERAGE[1] - 32 * 86400, UTC).year - 1
 _EARTH, _SUN, _MOON = _EPHEMERIS["earth"], _EPHEMERIS["sun"], _EPHEMERIS["moon"]
 _MOON_HORIZON = almanac.build_horizon_function(_MOON)
 

@@ -102,7 +102,6 @@ class WebStrings(TypedDict):
     today_date_format: str
     today_times: dict[str, str]
     day_length: str
-    error: str
     generated: str
     subscription_url: str
     copy_url: str
@@ -111,14 +110,11 @@ class WebStrings(TypedDict):
     google_heading: str
     google_link: str
     google_steps: list[str]
-    auth_heading: str
-    auth_text: str
     use_location: str
     search_address: str
     address: str
     address_placeholder: str
     search_location: str
-    password: str
     location: str
     location_placeholder: str
     location_help: str
@@ -611,9 +607,8 @@ STRINGS: Strings = {
     },
     # Responses of the HTTP entry point
     "errors": {
-        "missing_token": "Error: Please set AUTH_TOKEN via environment variable or config/config.php",  # nosec B105: an error message, not a credential
+        "missing_token": "Error: set the AUTH_TOKEN environment variable",  # nosec B105: an error message, not a credential
         "invalid_token": "Invalid authentication token",  # nosec B105: an error message, not a credential
-        "invalid_password": "Invalid password",  # nosec B105: an error message, not a credential
     },
     # Web page for generating subscription URLs
     "web": {
@@ -634,7 +629,6 @@ STRINGS: Strings = {
             "astro_end": "Astronomical dusk",
         },
         "day_length": "Day length: %s",
-        "error": "Error:",
         "generated": "✅ Subscription URL generated",
         "subscription_url": "Your calendar subscription URL:",
         "copy_url": "📋 Copy URL",
@@ -650,14 +644,11 @@ STRINGS: Strings = {
             "Paste the URL.",
             'Click "Add calendar".',
         ],
-        "auth_heading": "🔒 Password required",
-        "auth_text": "Generating a calendar feed needs the password.",
         "use_location": "📍 Use my current location",
         "search_address": "🔍 Search for an address",
         "address": "Address",
         "address_placeholder": "e.g. Rome, Italy",
         "search_location": "Search",
-        "password": "Password",  # nosec B105: a form label, not a credential
         "location": "Location name",
         "location_placeholder": "e.g. Rome",
         "location_help": 'Calendar name: "🌅 Your location · Sun & Twilight"',
@@ -715,7 +706,6 @@ STRINGS: Strings = {
             "unavailable": "location unavailable.",
             "timeout": "the request timed out.",
             "select_type": "Please select at least one event type.",
-            "enter_password": "Please enter the password.",  # nosec B105: a prompt, not a credential
             "copied": "✓ Copied",
             "copy_failed": "Failed to copy: ",
         },

@@ -27,9 +27,7 @@ h1 {
 
 /* Message Boxes */
 .info-box,
-.success-box,
-.error-box,
-.warning-box {
+.success-box {
     padding: 15px;
     margin: 20px 0;
     border-radius: 4px;
@@ -43,17 +41,6 @@ h1 {
 .success-box {
     background: #d4edda;
     border-left: 4px solid #28a745;
-}
-
-.error-box {
-    background: #f8d7da;
-    border-left: 4px solid #dc3545;
-    color: #721c24;
-}
-
-.warning-box {
-    background: #fff3cd;
-    border-left: 4px solid #ffc107;
 }
 
 /* Form Elements */
@@ -266,4 +253,21 @@ hr {
         margin-right: 0;
         margin-bottom: 10px;
     }
+}
+
+/* In place of inline styles, which the Content-Security-Policy blocks */
+.spaced {
+    margin-top: 20px;
+}
+
+#address-search {
+    margin-top: 15px;
+}
+
+#geocode-address {
+    margin-top: 10px;
+}
+
+.help-text.event-types-help {
+    margin-bottom: 10px;
 }
