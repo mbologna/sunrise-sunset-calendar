@@ -6,6 +6,10 @@ page is byte-for-byte the same.
 
 from __future__ import annotations
 
+import hashlib
+from functools import cache as memoize
+from importlib import resources
+
 from . import cache
 from .astronomy import sun_events
 from .helpers import format_duration, format_time
@@ -61,6 +65,17 @@ def json_encode_strings(values: dict[str, str]) -> str:
     return "{" + ",".join(f"{enc(k)}:{enc(v)}" for k, v in values.items()) + "}"
 
 
+@memoize
+def asset_url(name: str) -> str:
+    """An asset's URL with a hash of its content: a new release's page never gets a cached old asset.
+
+    Cloudflare keeps the assets at its edge for hours, so after a deploy the page could otherwise load
+    the previous script, built for the previous page. The server ignores the query string.
+    """
+    digest = hashlib.sha256(resources.files(__package__).joinpath("assets", name).read_bytes()).hexdigest()
+    return f"assets/{name}?v={digest[:12]}"
+
+
 def render_page(
     now: int,
     timezones: list[str],
@@ -86,7 +101,7 @@ def render_page(
         '    <meta charset="utf-8">\n'
         '    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
         f"    <title>{e(_W['title'])}</title>\n"
-        '    <link rel="stylesheet" href="assets/styles.css">\n'
+        f'    <link rel="stylesheet" href="{asset_url("styles.css")}">\n'
         "</head>\n"
         "\n"
         "<body>\n"
@@ -235,7 +250,7 @@ def render_page(
         "\n"
         # Data, not code: the Content-Security-Policy runs no inline script
         f'    <script type="application/json" id="strings">{json_encode_strings(_W["js"])}</script>\n'
-        '    <script src="assets/script.js"></script>\n'
+        f'    <script src="{asset_url("script.js")}"></script>\n'
         "</body>\n"
         "\n"
         "</html>\n"

@@ -8,6 +8,7 @@ import json
 import pytest
 
 from sunrise_sunset_calendar import app as app_module
+from sunrise_sunset_calendar import web
 from sunrise_sunset_calendar.app import Config, make_app
 from tests.helpers import StartResponse
 
@@ -149,6 +150,17 @@ def test_assets(config: Config, path: str, content_type: str) -> None:
     assert dict(headers)["Content-Type"] == content_type
     assert len(body) == int(dict(headers)["Content-Length"]) > 100
     assert call(config, path, method="HEAD")[2] == b""
+
+
+def test_the_page_names_its_assets_by_content(config: Config) -> None:
+    _, _, body = call(config, "/", query="token=app-test-token")
+    for name in ("styles.css", "script.js"):
+        url = web.asset_url(name)
+        assert url.startswith(f"assets/{name}?v=") and len(url) == len(f"assets/{name}?v=") + 12
+        assert url.encode() in body
+        # The server serves the asset whatever the version says
+        status, _, served = call(config, f"/assets/{name}", query="v=anything")
+        assert status == "200 OK" and len(served) > 100
 
 
 @pytest.mark.parametrize("path", ["/index.php", "/src/app.py", "/assets/", "/favicon.ico"])
