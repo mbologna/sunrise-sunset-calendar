@@ -37,7 +37,8 @@ from skyfield.nutationlib import iau2000b_radians
 from skyfield.searchlib import find_discrete
 
 from . import cache
-from .php import LocalDate, gmmktime, local, mktime, php_round, round_int
+from .numbers import round_half_up, round_int
+from .php import LocalDate, gmmktime, local, mktime
 
 _EPHEMERIS = load_file(str(resources.files(__package__).joinpath("data", "de442-1999-2150.bsp")))
 _TS = load.timescale(builtin=True)
@@ -431,7 +432,7 @@ def get_accurate_moon_phase(timestamp: int) -> dict:
 
     return {
         "phase_name": current,
-        "illumination": php_round(moon_illumination(timestamp), 1),
+        "illumination": round_half_up(moon_illumination(timestamp), 1),
         "prev_phase": prev,
         "next_phase": nxt,
     }

@@ -13,7 +13,8 @@ from importlib import resources
 from . import cache
 from .astronomy import sun_events
 from .helpers import format_duration, format_time
-from .php import LocalDate, default_timezone_set, frozen_time, htmlspecialchars, php_date, round_int, zone
+from .numbers import round_int
+from .php import LocalDate, default_timezone_set, frozen_time, htmlspecialchars, php_date, zone
 from .strings import STRINGS
 
 DEFAULT_LAT = 41.9028

@@ -13,7 +13,8 @@ from __future__ import annotations
 import pytest
 
 from sunrise_sunset_calendar.astronomy import calculate_sun_times, fraction_to_timestamp
-from sunrise_sunset_calendar.php import mktime, round_int
+from sunrise_sunset_calendar.numbers import round_int
+from sunrise_sunset_calendar.php import mktime
 from tests.fixtures.reference_locations import mapello
 from tests.helpers import assert_duration_equals, assert_time_equals
 

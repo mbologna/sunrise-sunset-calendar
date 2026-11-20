@@ -9,6 +9,8 @@ they give the minute, truncated.
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from sunrise_sunset_calendar.astronomy import (
@@ -16,7 +18,7 @@ from sunrise_sunset_calendar.astronomy import (
     moon_illumination,
     moon_phases_between,
 )
-from sunrise_sunset_calendar.php import PHP_INT_MAX, gmdate, local, mktime, php_date
+from sunrise_sunset_calendar.php import gmdate, local, mktime, php_date
 from tests.fixtures.astronomical_reference_data import date_to_timestamp, get_moon_phases_2026, normalize_phase_name
 from tests.helpers import utc
 
@@ -45,7 +47,7 @@ def test_moon_phase_2026_accuracy(expected_phase: str, expected_datestring: str)
 
     # Find the phase closest to expected
     closest_phase = None
-    min_difference = PHP_INT_MAX
+    min_difference = math.inf
 
     for phase in phases:
         phase_name_normalized = normalize_phase_name(phase["name"])

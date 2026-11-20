@@ -6,21 +6,20 @@ text of each event description.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable
 from typing import TypedDict
 
 from . import cache
 from .astronomy import calculate_equinox_solstice, moon_phases_between
+from .numbers import round_int
 from .php import (
-    PHP_INT_MIN,
     LocalDate,
     default_timezone,
     gmmktime,
-    intdiv,
     mktime,
     php_date,
-    round_int,
 )
 from .strings import STRINGS, DayFactKind
 
@@ -80,11 +79,11 @@ def format_duration(seconds: int, with_seconds: bool = False) -> str:
     if with_seconds and seconds < 3600:
         if seconds < 60:
             return units["seconds"].format(seconds)
-        return units["minutes_seconds"].format(intdiv(seconds, 60), seconds % 60)
+        return units["minutes_seconds"].format(seconds // 60, seconds % 60)
     minutes = round_int(seconds / 60)
     if minutes < 60:
         return units["minutes"].format(minutes)
-    return units["hours_minutes"].format(intdiv(minutes, 60), minutes % 60)
+    return units["hours_minutes"].format(minutes // 60, minutes % 60)
 
 
 def format_signed_duration(seconds: int) -> str:
@@ -165,7 +164,7 @@ def format_time(timestamp: int | None) -> str:
 def format_range_bar(seconds: int, shortest: int, longest: int, width: int = 10) -> str:
     """Where a length sits in the year's range: "9h 08m ▕██░░░░░░░░▏ 15h 14m"."""
     span = longest - shortest
-    filled = round_int((seconds - shortest) / span * width) if span > 0 else intdiv(width, 2)
+    filled = round_int((seconds - shortest) / span * width) if span > 0 else width // 2
     filled = max(0, min(width, filled))
     return format_duration(shortest) + " ▕" + "█" * filled + "░" * (width - filled) + "▏ " + format_duration(longest)
 
@@ -795,14 +794,14 @@ def format_light_block(ev: dict) -> str:
     return "\n".join(texts[group].format(", ".join(items)) for group, items in groups.items() if items)
 
 
-def light_entries(ev: dict, groups: list[str]) -> list[tuple[int, str]]:
+def light_entries(ev: dict, groups: list[str]) -> list[tuple[float, str]]:
     """Blue and golden hours as schedule entries (sort key, text), for calendars without Daylight."""
     texts = S["light"]
     entries = []
     for group, kind, start, end in grouped_light_periods(ev):
         if group in groups:
             entries.append(
-                (start if start is not None else PHP_INT_MIN, schedule_entry(start, end, texts[f"{kind}_entry"], None))
+                (start if start is not None else -math.inf, schedule_entry(start, end, texts[f"{kind}_entry"], None))
             )
     return entries
 

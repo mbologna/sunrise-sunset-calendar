@@ -38,15 +38,13 @@ from .helpers import (
     year_day_facts,
     year_summary,
 )
+from .numbers import format_coordinate, round_int
 from .php import (
     LocalDate,
     default_timezone_set,
-    float_to_str,
     frozen_time,
     gmdate,
-    intdiv,
     php_date,
-    round_int,
     zone,
 )
 from .strings import STRINGS as S
@@ -157,7 +155,7 @@ def solar_spans(ev: dict, nxt: dict) -> dict[str, Span | None]:
 
 def ical_duration(seconds: int) -> str:
     """An iCalendar duration, in hours when whole."""
-    return f"PT{intdiv(seconds, 3600)}H" if seconds % 3600 == 0 else f"PT{seconds}S"
+    return f"PT{seconds // 3600}H" if seconds % 3600 == 0 else f"PT{seconds}S"
 
 
 def ical_event(uid: str, dates: list[str], summary: str, description: str, dtstamp: str) -> str:
@@ -195,7 +193,7 @@ def _render(o: Options, now: int) -> bytes:
     lat = o.lat
     lon = o.lon
     enabled = o.enabled
-    uid_suffix = f"{float_to_str(lat)}-{float_to_str(lon)}@sun-calendar"
+    uid_suffix = f"{format_coordinate(lat)}-{format_coordinate(lon)}@sun-calendar"
     dtstamp = gmdate("Ymd\\THis\\Z", now)
     refresh = ical_duration(o.refresh_seconds)
 
@@ -216,13 +214,13 @@ def _render(o: Options, now: int) -> bytes:
     today = LocalDate.parse(o.today, tz) if o.today is not None else LocalDate.today(tz, now)
     today_year = year_summary(lat, lon, today.year, today.set_time(12, 0).offset() / 3600)
     place = (S["place_named"] if o.location != "" else S["place_coordinates"]).format(
-        o.location, float_to_str(lat), float_to_str(lon)
+        o.location, format_coordinate(lat), format_coordinate(lon)
     )
     calendar_description = " ".join(
         [S["calendar_description_format"].format(place, o.timezone), *location_facts(today_year)]
     )
     # PHP's ?: treats "0" as empty too
-    name = o.location if o.location not in ("", "0") else f"{float_to_str(lat)}, {float_to_str(lon)}"
+    name = o.location if o.location not in ("", "0") else f"{format_coordinate(lat)}, {format_coordinate(lon)}"
 
     out = _Output()
     out.extend(
