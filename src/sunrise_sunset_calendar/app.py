@@ -3,6 +3,7 @@
 Configuration comes from the environment:
 
 - AUTH_TOKEN (required): the secret in feed URLs and in the page's
+- AUTH_TOKENS: more secrets, comma-separated, each as good as AUTH_TOKEN
 - CALENDAR_WINDOW_DAYS (400): days of future events in a feed
 - CALENDAR_PAST_DAYS (30): days of past events
 - UPDATE_INTERVAL (86400): refresh interval suggested to calendar apps, in seconds
@@ -11,6 +12,8 @@ Configuration comes from the environment:
 
 from __future__ import annotations
 
+import dataclasses
+import hashlib
 import hmac
 import json
 import math
@@ -27,6 +30,7 @@ from urllib.parse import parse_qsl, urlencode
 from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
 
 from .astronomy import FIRST_YEAR, LAST_YEAR
+from .clock import zone
 from .feed import Options, render_feed
 from .strings import STRINGS
 from .timezones import timezone_identifiers, timezone_set
@@ -75,11 +79,20 @@ class Config:
     window_days: int = 400
     past_days: int = 30
     update_interval: int = 86400
+    # More tokens, from AUTH_TOKENS: one per person, so one can be revoked alone
+    extra_tokens: tuple[bytes, ...] = ()
+
+    @property
+    def tokens(self) -> tuple[bytes, ...]:
+        """Every usable token: AUTH_TOKEN and AUTH_TOKENS, without empty ones or the placeholder."""
+        candidates = (self.auth_token, *self.extra_tokens)
+        return tuple(t for t in candidates if t and t != PLACEHOLDER_TOKEN)
 
     @classmethod
     def from_env(cls, environ: dict[str, str] | None = None) -> Config:
         env = os.environ if environ is None else environ
         token = env.get("AUTH_TOKEN")
+        extra = [t.strip() for t in env.get("AUTH_TOKENS", "").split(",")]
 
         def number(name: str, default: int) -> int:
             value = env.get(name)
@@ -95,6 +108,7 @@ class Config:
             window_days=number("CALENDAR_WINDOW_DAYS", 400),
             past_days=number("CALENDAR_PAST_DAYS", 30),
             update_interval=number("UPDATE_INTERVAL", 86400),
+            extra_tokens=tuple(os.fsencode(t) for t in extra if t),
         )
 
 
@@ -166,9 +180,43 @@ def sanitize_text(value: bytes, max_length: int = 500) -> str:
     return clean.decode("utf-8", "replace")[:max_length]
 
 
+def code_revision() -> str:
+    """What code is running: Cloud Run's revision name, or else a hash of the package's source."""
+    revision = os.environ.get("K_REVISION")
+    if revision:
+        return revision
+    digest = hashlib.sha256()
+    for entry in sorted(resources.files(__package__).iterdir(), key=lambda e: e.name):
+        if entry.name.endswith(".py"):
+            digest.update(entry.read_bytes())
+    return digest.hexdigest()
+
+
+def feed_etag(revision: str, options: Options, now: int) -> str:
+    """A feed's ETag: what its content depends on, DTSTAMP aside.
+
+    The code, the options (the token isn't one) and the date in the feed's zone: the
+    events start from a date, so the content holds until local midnight.
+    """
+    today = options.today or datetime.fromtimestamp(now, zone(options.timezone)).date().isoformat()
+    fields = dataclasses.asdict(options)
+    del fields["now"]
+    key = json.dumps([revision, today, fields], sort_keys=True)
+    return '"' + hashlib.sha256(key.encode()).hexdigest()[:20] + '"'
+
+
+def etag_matches(etag: str, if_none_match: str) -> bool:
+    """Whether an If-None-Match header names the ETag (weak or not) or is "*"."""
+    tags = [tag.strip().removeprefix("W/") for tag in if_none_match.split(",")]
+    return etag in tags or "*" in tags
+
+
 def verify_token(config: Config, provided: bytes) -> bool:
-    """Constant-time comparison with AUTH_TOKEN."""
-    return hmac.compare_digest(config.auth_token or b"", provided)
+    """Whether provided is one of the tokens, comparing with each in constant time."""
+    matched = False
+    for token in config.tokens:
+        matched |= hmac.compare_digest(token, provided)
+    return matched
 
 
 def _form(environ: WSGIEnvironment) -> dict[str, bytes]:
@@ -212,6 +260,7 @@ def _form(environ: WSGIEnvironment) -> dict[str, bytes]:
 def make_app(config: Config | None = None, clock: Callable[[], float] = time.time) -> WSGIApplication:
     """The WSGI application."""
     config = config or Config.from_env()
+    revision = code_revision()
     strings = STRINGS
 
     def app(environ: WSGIEnvironment, start_response: StartResponse) -> Iterable[bytes]:
@@ -231,8 +280,7 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
         if path not in ("/", "/health"):
             return respond("404 Not Found", b"Not Found", [("Content-Type", "text/plain; charset=utf-8"), NO_STORE])
 
-        token = config.auth_token
-        if token is None or token in (b"", PLACEHOLDER_TOKEN):
+        if not config.tokens:
             return respond(
                 "500 Internal Server Error",
                 strings["errors"]["missing_token"].encode(),
@@ -253,8 +301,9 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
             status = "200 OK" if health["status"] == "ok" else "503 Service Unavailable"
             return respond(status, body, [("Content-Type", "application/json"), NO_STORE])
 
-        # The feed and the page that builds its URL both need the token; only /health doesn't
-        if not verify_token(config, param(query, "token")):
+        # The feed and the page that builds its URL both need a token; only /health doesn't
+        token = param(query, "token")
+        if not verify_token(config, token):
             return respond(
                 "403 Forbidden", strings["errors"]["invalid_token"].encode(), [("Content-Type", HTML), NO_STORE]
             )
@@ -283,16 +332,14 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
                 refresh_seconds=config.update_interval,
                 now=now,
             )
+            etag = feed_etag(revision, options, now)
+            # Calendar apps may keep it; shared caches must not, as its URL holds the token
+            cache_headers = [("ETag", etag), ("Cache-Control", f"private, max-age={config.update_interval}")]
+            # A client that still has today's feed gets a 304, and the feed isn't built
+            if etag_matches(etag, environ.get("HTTP_IF_NONE_MATCH", "")):
+                return respond("304 Not Modified", b"", cache_headers)
             body = render_feed(options)
-            return respond(
-                "200 OK",
-                body,
-                [
-                    ("Content-Type", "text/calendar; charset=utf-8"),
-                    # Calendar apps may keep it; shared caches must not, as its URL holds the token
-                    ("Cache-Control", f"private, max-age={config.update_interval}"),
-                ],
-            )
+            return respond("200 OK", body, [("Content-Type", "text/calendar; charset=utf-8"), *cache_headers])
 
         # The form posts back to the page's own URL, token and all
         subscription_url = webcal_url = None

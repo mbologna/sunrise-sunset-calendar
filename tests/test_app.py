@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 
 import pytest
 
@@ -55,6 +56,33 @@ def test_without_a_token_every_request_fails(token: bytes | None) -> None:
     assert headers[:6] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8"), NO_STORE]
 
 
+def test_config_reads_several_tokens() -> None:
+    config = Config.from_env({"AUTH_TOKEN": "main", "AUTH_TOKENS": " alice, ,bob "})
+    assert config.tokens == (b"main", b"alice", b"bob")
+    assert Config.from_env({"AUTH_TOKENS": "alice"}).tokens == (b"alice",)
+
+
+def test_any_of_the_tokens_opens_feed_and_page() -> None:
+    config = Config(auth_token=None, extra_tokens=(b"alice", b"bob"))
+    assert call(config, query="feed=1&token=bob&daynight=1")[0] == "200 OK"
+    assert call(config, query="token=alice")[0] == "200 OK"
+    assert call(config, query="token=carol")[0] == "403 Forbidden"
+
+
+def test_the_page_builds_urls_with_its_own_token() -> None:
+    """Revoking one person's token then stops only the feeds that person built."""
+    config = Config(auth_token=TOKEN, extra_tokens=(b"alice",))
+    _, _, page = call(
+        config,
+        query="token=alice",
+        method="POST",
+        body=b"generate_url=1",
+        CONTENT_TYPE="application/x-www-form-urlencoded",
+    )
+    assert b"token=alice&amp;" in page
+    assert TOKEN not in page
+
+
 def test_health(config: Config) -> None:
     status, headers, body = call(config, "/health")
     assert status == "200 OK"
@@ -89,13 +117,60 @@ def test_the_old_health_query_is_just_the_page(config: Config) -> None:
 def test_feed_headers(config: Config) -> None:
     status, headers, body = call(config, query=f"feed=1&token={TOKEN.decode()}&daynight=1")
     assert status == "200 OK"
-    assert headers[:6] == [
+    etag = dict(headers)["ETag"]
+    assert headers[:7] == [
         *SECURITY,
         ("Content-Type", "text/calendar; charset=utf-8"),
+        ("ETag", etag),
         ("Cache-Control", "private, max-age=7200"),
     ]
+    assert re.fullmatch(r'"[0-9a-f]{20}"', etag)
     assert body.startswith(b"BEGIN:VCALENDAR\r\n")
     assert b"REFRESH-INTERVAL;VALUE=DURATION:PT2H\r\n" in body
+
+
+FEED = f"feed=1&token={TOKEN.decode()}&lat=41.9&lon=12.5&zone=Europe%2FRome&daynight=1"
+
+
+def test_an_unchanged_feed_is_a_304(config: Config, monkeypatch: pytest.MonkeyPatch) -> None:
+    etag = dict(call(config, query=FEED)[1])["ETag"]
+
+    def no_feed(*_: object) -> bytes:
+        raise AssertionError("A 304 builds no feed")
+
+    monkeypatch.setattr(app_module, "render_feed", no_feed)
+    for header in (etag, f"W/{etag}", f'"other", {etag}', "*"):
+        status, headers, body = call(config, query=FEED, HTTP_IF_NONE_MATCH=header)
+        assert status == "304 Not Modified", header
+        assert body == b""
+        assert ("ETag", etag) in headers
+        assert ("Cache-Control", "private, max-age=7200") in headers
+
+
+def test_the_etag_follows_what_the_feed_depends_on(config: Config, monkeypatch: pytest.MonkeyPatch) -> None:
+    def etag(query: str = FEED, now: int = NOW, cfg: Config = config) -> str:
+        application = app_module.make_app(cfg, clock=lambda: now)
+        environ = {
+            "REQUEST_METHOD": "GET",
+            "PATH_INFO": "/",
+            "QUERY_STRING": query,
+            "HTTP_HOST": "x",
+            "wsgi.input": io.BytesIO(b""),
+            "CONTENT_LENGTH": "0",
+        }
+        response = StartResponse()
+        b"".join(application(environ, response))
+        return dict(response.calls[0][1])["ETag"]
+
+    base = etag()
+    assert etag(now=NOW + 3600) == base, "Same local date"
+    assert etag(now=NOW + 86400) != base, "Next day"
+    assert etag(FEED.replace("lat=41.9", "lat=45")) != base, "Another place"
+    assert etag(cfg=Config(auth_token=TOKEN, window_days=4, past_days=1, update_interval=7200)) != base
+    other = Config(auth_token=b"other", window_days=3, past_days=1, update_interval=7200)
+    assert etag(FEED.replace(TOKEN.decode(), "other"), cfg=other) == base, "The token isn't part of it"
+    monkeypatch.setenv("K_REVISION", "sunrise-sunset-calendar-00042-abc")
+    assert etag() != base, "A new deploy"
 
 
 @pytest.mark.parametrize("query", ["feed=1", "feed=1&token=wrong", "feed=1&token[]=app-test-token", "feed&token=app"])
