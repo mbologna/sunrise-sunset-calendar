@@ -96,7 +96,7 @@ def ical_timestamp(value: str) -> int:
 
 
 # ----------------------------------------------------------------------------
-# PHP's date_sun_info() sunrise: an independent solar model to cross-check against
+# Paul Schlyter's sunriset: an independent solar model to cross-check sunrise against
 # ----------------------------------------------------------------------------
 # A port of timelib's astro.c (Paul Schlyter's sunriset.c) as PHP 8.5's
 # date_sun_info() calls it, for sunrise with the default time zone UTC:
