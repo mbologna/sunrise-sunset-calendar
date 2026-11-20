@@ -900,6 +900,13 @@ def daylight_details(c: DayContext, with_clock: bool = True) -> str:
         lines.append(labels["sun_peak_skimming"].format(format_local(ev["solar_noon"])))
     else:
         lines.append(labels["sun_peak"].format(format_local(ev["solar_noon"]), noon))
+    first, last = ev["nautical_begin"], ev["nautical_end"]
+    if first is not None and last is not None:
+        lines.append(labels["first_last_light"].format(format_local(first), format_local(last)))
+    elif first is not None:
+        lines.append(labels["first_light_only"].format(format_local(first)))
+    elif last is not None:
+        lines.append(labels["last_light_only"].format(format_local(last)))
 
     shortest = (round_int(year["daylight_min"][0] * 3600), year["daylight_min"][1])
     longest = (round_int(year["daylight_max"][0] * 3600), year["daylight_max"][1])

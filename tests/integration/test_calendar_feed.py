@@ -350,12 +350,41 @@ def test_daylight_shows_change_and_place_in_the_year() -> None:
     assert re.search(
         r"^2m 0\ds shorter than yesterday: sunrise 1m \d\ds later, sunset \d+s earlier\n"
         r"Sun highest at 11:54, 30° above the horizon\n"
+        r"First light \d\d:\d\d, last light \d\d:\d\d \(sun 12° below the horizon\)\n"
         r"Over the year: 9h 08m ▕█░░░░░░░░░▏ 15h 14m\n"
         r"42m more than the shortest day \(Dec 21\), 5h 24m less than the longest \(Jun 21\)\n",
         description,
     )
     assert "📅" not in description
     assert "%" not in description
+
+
+def test_daylight_names_first_and_last_light() -> None:
+    """First and last light are when morning nautical twilight starts and evening nautical twilight ends."""
+    ics = feed(today="2026-11-15", window_days=0)
+    daylight = text(events_of_type(ics, "daylight")[0])
+    first = local_time(
+        events_of_type(ics, "morning-nautical-twilight")[0]["DTSTART"], "Europe/Rome", "{hour:02d}:{minute:02d}"
+    )
+    last = local_time(
+        events_of_type(ics, "evening-nautical-twilight")[0]["DTEND"], "Europe/Rome", "{hour:02d}:{minute:02d}"
+    )
+
+    assert f"First light {first}, last light {last} (sun 12° below the horizon)" in daylight
+    about = text(events_of_type(ics, "morning-nautical-twilight")[0])
+    assert "In military use its start is called first light." in about
+
+
+def test_first_and_last_light_without_astronomical_night() -> None:
+    """London in June never gets 18° dark, but still goes 12° below the horizon."""
+    ics = feed(lat=51.5074, lon=-0.1278, timezone="Europe/London", today="2026-06-21", window_days=0)
+    assert re.search(r"First light \d\d:\d\d, last light \d\d:\d\d", text(events_of_type(ics, "daylight")[0]))
+
+
+def test_no_first_or_last_light_under_the_midnight_sun() -> None:
+    ics = feed(lat=78.2232, lon=15.6267, timezone="Arctic/Longyearbyen", today="2026-06-21", window_days=0)
+    daylight = text(events_of_type(ics, "daylight")[0])
+    assert "First light" not in daylight and "Last light" not in daylight
 
 
 def test_twilight_length_sits_in_the_years_range() -> None:

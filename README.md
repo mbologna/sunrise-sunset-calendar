@@ -10,7 +10,7 @@ An [iCalendar](https://en.wikipedia.org/wiki/ICalendar) feed of sunrise, sunset,
 
 - Daylight and night as events, each titled with its length. The description gives the change since yesterday (including how far sunrise and sunset moved on the clock) and where the day sits between the year's shortest and longest.
 - Morning and evening civil, nautical and astronomical twilight, each as its own event.
-- On Daylight: the noon sun's height, and the morning and evening blue and golden hours.
+- On Daylight: the noon sun's height, first and last light (the start of morning and the end of evening nautical twilight, as the military uses the terms), and the morning and evening blue and golden hours.
 - On Night: the moon's phase and illumination, and the moonless part of the night.
 - Weekly summaries from Sunday to Saturday, with the drift of sunrise and sunset.
 - Equinoxes and solstices, named by the local season, with the exact moment and facts for the location.
