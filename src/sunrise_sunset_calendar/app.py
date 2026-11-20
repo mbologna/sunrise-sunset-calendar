@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import math
 import os
 import re
 import time
@@ -22,12 +23,11 @@ from datetime import UTC, datetime
 from email.parser import BytesParser
 from email.policy import HTTP
 from importlib import resources
+from urllib.parse import parse_qsl, urlencode
 from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
 
 from .astronomy import FIRST_YEAR, LAST_YEAR
 from .feed import Options, render_feed
-from .php import ARRAY, env_int, filter_validate_float, filter_validate_int, http_build_query, mb_substr, parse_query
-from .php import strip_tags as php_strip_tags
 from .strings import STRINGS
 from .timezones import timezone_identifiers, timezone_set
 from .web import DEFAULT_LAT, DEFAULT_LAT_TEXT, DEFAULT_LON, DEFAULT_LON_TEXT, DEFAULT_TIMEZONE, render_page
@@ -83,7 +83,12 @@ class Config:
 
         def number(name: str, default: int) -> int:
             value = env.get(name)
-            return default if value is None else env_int(value)
+            if value is None:
+                return default
+            try:
+                return int(value.strip())
+            except ValueError:
+                raise SystemExit(f"{name} must be a whole number, not {value!r}") from None
 
         return cls(
             auth_token=None if token is None else os.fsencode(token),
@@ -98,20 +103,48 @@ class Config:
 # ============================================================================
 
 
-def param(source: dict, key: str, default: bytes = b"") -> bytes:
-    """A string request parameter; anything else (missing, array) yields the default."""
-    value = source.get(key)
-    return value if isinstance(value, bytes) else default
+_WHITESPACE = b" \t\r\n\v\f"
+_DECIMAL = re.compile(rb"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?")
+_INTEGER = re.compile(rb"[+-]?\d+")
+# A tag, or one cut off at the end
+_TAG = re.compile(rb"<[^>]*(?:>|$)")
+# Control characters, which iCalendar text can't hold
+_CONTROL = re.compile(rb"[\x00-\x1f\x7f]")
+
+
+def parse_query(query: bytes) -> dict[str, bytes]:
+    """A query string or urlencoded body; a repeated name keeps its last value."""
+    return {key.decode("utf-8", "replace"): value for key, value in parse_qsl(query, keep_blank_values=True)}
+
+
+def param(source: dict[str, bytes], key: str, default: bytes = b"") -> bytes:
+    return source.get(key, default)
+
+
+def parse_float(value: bytes) -> float | None:
+    """A decimal number, surrounding whitespace allowed ("41.9", " 4.19e1 "), or None."""
+    value = value.strip(_WHITESPACE)
+    if not _DECIMAL.fullmatch(value):
+        return None
+    number = float(value)
+    # + 0.0 turns -0.0 into 0.0, so "-0" writes as "0"
+    return number + 0.0 if math.isfinite(number) else None
+
+
+def parse_int(value: bytes) -> int | None:
+    """A whole number, surrounding whitespace allowed, or None."""
+    value = value.strip(_WHITESPACE)
+    return int(value) if _INTEGER.fullmatch(value) else None
 
 
 def sanitize_float(value: bytes, default: float, low: float, high: float) -> float:
-    filtered = filter_validate_float(value)
-    return default if filtered is None or filtered < low or filtered > high else filtered
+    number = parse_float(value)
+    return default if number is None or number < low or number > high else number
 
 
 def sanitize_int(value: bytes, default: int, low: int = -1440, high: int = 1440) -> int:
-    filtered = filter_validate_int(value)
-    return default if filtered is None or filtered < low or filtered > high else filtered
+    number = parse_int(value)
+    return default if number is None or number < low or number > high else number
 
 
 def sanitize_timezone(value: bytes) -> str:
@@ -123,10 +156,14 @@ def sanitize_timezone(value: bytes) -> str:
 
 
 def sanitize_text(value: bytes, max_length: int = 500) -> str:
-    """Strip tags, flatten newlines, cap the length in characters."""
-    clean = php_strip_tags(value)
-    clean = clean.replace(b"\r\n", b" ").replace(b"\r", b" ").replace(b"\n", b" ")
-    return mb_substr(clean, max_length)
+    """Strip tags, flatten newlines and tabs, drop other control characters, cap the length in characters.
+
+    Invalid UTF-8 becomes U+FFFD.
+    """
+    clean = _TAG.sub(b"", value)
+    clean = clean.replace(b"\r\n", b" ").replace(b"\r", b" ").replace(b"\n", b" ").replace(b"\t", b" ")
+    clean = _CONTROL.sub(b"", clean)
+    return clean.decode("utf-8", "replace")[:max_length]
 
 
 def verify_token(config: Config, provided: bytes) -> bool:
@@ -134,14 +171,14 @@ def verify_token(config: Config, provided: bytes) -> bool:
     return hmac.compare_digest(config.auth_token or b"", provided)
 
 
-def _form(environ: WSGIEnvironment) -> dict:
-    """The POST body as PHP's $_POST: urlencoded or multipart forms only."""
+def _form(environ: WSGIEnvironment) -> dict[str, bytes]:
+    """The fields of a POSTed form: urlencoded or multipart, files left out."""
     content_type = environ.get("CONTENT_TYPE", "")
     try:
         length = int(environ.get("CONTENT_LENGTH") or 0)
     except ValueError:
         length = 0
-    # PHP's post_max_size (8M): a larger body leaves $_POST empty
+    # Bodies over 8 MB are ignored
     if not 0 < length <= POST_MAX_SIZE:
         return {}
     body = environ["wsgi.input"].read(length)
@@ -152,7 +189,7 @@ def _form(environ: WSGIEnvironment) -> dict:
         message = BytesParser(policy=HTTP).parsebytes(
             b"Content-Type: " + content_type.encode("latin-1") + b"\r\n\r\n" + body
         )
-        fields: dict = {}
+        fields: dict[str, bytes] = {}
         if message.is_multipart():
             for part in message.iter_parts():
                 if part.get_filename() is not None:
@@ -161,17 +198,10 @@ def _form(environ: WSGIEnvironment) -> dict:
                 # EmailMessage decodes RFC 2231 values (name*=) to str; only the compat32
                 # policy returns them as (charset, language, value) tuples
                 if isinstance(name, str) and name:
-                    key = parse_query(urlencode_key(name) + b"=")
-                    for k in key:
-                        fields[k] = ARRAY if key[k] is ARRAY else (part.get_payload(decode=True) or b"")
+                    payload = part.get_payload(decode=True)
+                    fields[name] = payload if isinstance(payload, bytes) else b""
         return fields
     return {}
-
-
-def urlencode_key(name: str) -> bytes:
-    from urllib.parse import quote_from_bytes
-
-    return quote_from_bytes(name.encode("utf-8"), safe="").encode("ascii")
 
 
 # ============================================================================
@@ -196,7 +226,7 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
             filename, content_type = ASSETS[path]
             body = resources.files(__package__).joinpath("assets", filename).read_bytes()
             return respond("200 OK", body, [("Content-Type", content_type)])
-        # The page and feed at /, the health check at /health. The PHP release's
+        # The page and feed at /, the health check at /health. The PHP version's
         # /sunrise-sunset-calendar.php and /?health are gone (2026-11-19).
         if path not in ("/", "/health"):
             return respond("404 Not Found", b"Not Found", [("Content-Type", "text/plain; charset=utf-8"), NO_STORE])
@@ -283,7 +313,7 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
                 params += [(kind, b"1") for kind in ("civil", "nautical", "astro", "daynight") if kind in form]
                 https = environ.get("HTTPS", "") == "on" or environ.get("HTTP_X_FORWARDED_PROTO", "") == "https"
                 host = public_host(environ)
-                subscription_url = ("https" if https else "http") + "://" + host + "/?" + http_build_query(params)
+                subscription_url = ("https" if https else "http") + "://" + host + "/?" + urlencode(params)
                 webcal_url = re.sub(r"^https?://", "webcal://", subscription_url, count=1)
 
         page = render_page(now, timezone_identifiers(), subscription_url, webcal_url)

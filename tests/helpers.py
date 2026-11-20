@@ -1,4 +1,4 @@
-"""Shared assertions and helpers for the solar calculation tests (the PHP suite's BaseTest)."""
+"""Shared assertions and helpers for the solar calculation tests."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import math
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from sunrise_sunset_calendar import astronomy, php
+from sunrise_sunset_calendar import astronomy, clock
 
 
 def assert_float_equals(expected: float, actual: float, message: str = "", tolerance: float = 0.01) -> None:
@@ -27,17 +27,17 @@ def assert_time_equals(expected: int | str, actual: int, message: str = "", tole
     """
     if isinstance(expected, str):
         parts = expected.split(":")
-        ref = php.local(actual)
-        expected_ts = php.mktime(
-            int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 0, ref.month, ref.day, ref.year
+        ref = clock.local(actual)
+        expected_ts = clock.local_timestamp(
+            ref.year, ref.month, ref.day, int(parts[0]), int(parts[1]), int(parts[2]) if len(parts) > 2 else 0
         )
     else:
         expected_ts = expected
 
     diff = abs(expected_ts - actual)
     assert diff <= tolerance_seconds, (
-        f"{message}\n    Expected: {php.php_date('Y-m-d H:i:s', expected_ts)}\n"
-        f"    Actual:   {php.php_date('Y-m-d H:i:s', actual)}\n"
+        f"{message}\n    Expected: {clock.format_local_time(expected_ts, '{year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}')}\n"
+        f"    Actual:   {clock.format_local_time(actual, '{year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}')}\n"
         f"    Difference: {diff / 60:.2f} minutes ({diff} seconds, tolerance: {tolerance_seconds} seconds)"
     )
 
@@ -48,8 +48,8 @@ def assert_duration_equals(
     """Assert a duration in seconds within tolerance."""
     diff = abs(expected_seconds - actual_seconds)
     assert diff <= tolerance_seconds, (
-        f"{message}\n    Expected: {php.gmdate('H:i:s', expected_seconds)} ({expected_seconds} seconds)\n"
-        f"    Actual:   {php.gmdate('H:i:s', actual_seconds)} ({actual_seconds} seconds)\n"
+        f"{message}\n    Expected: {clock.format_utc_time(expected_seconds, '{hour:02d}:{minute:02d}:{second:02d}')} ({expected_seconds} seconds)\n"
+        f"    Actual:   {clock.format_utc_time(actual_seconds, '{hour:02d}:{minute:02d}:{second:02d}')} ({actual_seconds} seconds)\n"
         f"    Difference: {diff} seconds (tolerance: {tolerance_seconds} seconds)"
     )
 
@@ -77,19 +77,19 @@ def calculate_sun_times(year: int, month: int, day: int, lat: float, lon: float,
 def fraction_to_timestamp(year: int, month: int, day: int, fraction: float) -> int:
     """Convert a fraction to a timestamp, reading the local wall-clock time as UTC.
 
-    Tests run in UTC, so this matches mktime()-built expectations.
+    Tests run in UTC, so this matches clock.local_timestamp() expectations.
     """
     return astronomy.fraction_to_timestamp(year, month, day, fraction, 0.0)
 
 
 def utc(text: str) -> int:
-    """strtotime('YYYY-MM-DD HH:MM[:SS] UTC'): a UTC date and time as a timestamp."""
+    """A 'YYYY-MM-DD HH:MM[:SS]' UTC date and time as a timestamp."""
     fmt = "%Y-%m-%d %H:%M:%S" if text.count(":") == 2 else "%Y-%m-%d %H:%M"
     return calendar.timegm(datetime.strptime(text, fmt).timetuple())
 
 
 def ical_timestamp(value: str) -> int:
-    """strtotime() of an iCalendar DTSTART/DTEND: UTC date-times, or all-day dates at midnight UTC."""
+    """An iCalendar DTSTART/DTEND as a timestamp: UTC date-times, or all-day dates at midnight UTC."""
     if "T" in value:
         return calendar.timegm(datetime.strptime(value, "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC).timetuple())
     return calendar.timegm(datetime.strptime(value, "%Y%m%d").timetuple())

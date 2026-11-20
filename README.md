@@ -142,26 +142,24 @@ CI runs ruff and the tests through `mbologna/.github`'s `python-ci`, then builds
 │   ├── feed.py         # generate_calendar(): builds the VCALENDAR
 │   ├── helpers.py      # iCalendar escaping and folding, descriptions, year statistics
 │   ├── astronomy.py    # skyfield: sun_events(), twilight, equinoxes and solstices, moon phases, moonrise and moonset
-│   ├── php.py          # the PHP behaviours the output depends on (see below)
+│   ├── clock.py        # dates and times in the feed's zone, on datetime and zoneinfo
+│   ├── numbers.py      # rounding, and how coordinates are written
 │   ├── web.py          # the web page
 │   ├── strings.py      # all user-facing text
 │   ├── timezones.py    # accepted time zones (the tz database's zone.tab, plus UTC)
 │   ├── cache.py        # per-request memoisation
 │   ├── assets/         # the page's CSS and JavaScript
 │   └── data/           # the JPL DE442 excerpt (see astronomy.py)
-└── tests/              # unit, integration, reference and accuracy suites, the golden corpus, PHP references
+└── tests/              # unit, integration, reference and accuracy suites, the golden corpus
 ```
 
 ### Golden corpus
 
 `tests/golden/` holds 403 recorded responses: 46 locations (polar day and night, both hemispheres, the equator, the date line, every kind of DST rule, including changes at midnight), the full default window, extra dates (DST changes, New Year, a leap day), every combination of event types for six representative places, offsets, notes, malformed input, environment settings, the web page and its form. `test_golden.py` replays every request and compares the bytes, apart from `DTSTAMP`, the moment a feed is generated. When the output changes on purpose, `uv run python -m tests.golden.make_corpus` records the corpus again; review the changed lines before committing.
 
-### The PHP version
+### History
 
-Up to v2 the calendar was written in PHP. Its subscriptions, URLs, parameters and tokens still work; its `/sunrise-sunset-calendar.php` path and `/?health` check are gone. The times now come from skyfield instead of the PHP version's solar position algorithm, so they differ from it by seconds, a few minutes near the poles, and the first or last day of polar day, polar night or white nights can move by one.
-
-- `php.py` reproduces the PHP 8.5 primitives whose results reach the output: rounding, float-to-string conversion, input filters, `strip_tags()`, multibyte truncation, date formatting and wall-clock time zone arithmetic. Each follows php-src's C code, so edge cases match too.
-- `tests/php_reference/` records what PHP returns for those primitives (`record.sh`, with the last PHP release's image; needs Docker), and `test_php.py` checks `php.py` against it.
+Up to v2 the calendar was written in PHP, and v3 began as a port that reproduced its feeds byte for byte. Subscriptions, URLs, parameters and tokens from then still work; the `/sunrise-sunset-calendar.php` path and `/?health` check are gone. The times now come from skyfield, and the code no longer emulates PHP.
 
 ## Versioning
 

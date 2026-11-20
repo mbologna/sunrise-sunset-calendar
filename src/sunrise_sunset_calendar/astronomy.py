@@ -37,7 +37,8 @@ from skyfield.nutationlib import iau2000b_radians
 from skyfield.searchlib import find_discrete
 
 from . import cache
-from .php import LocalDate, gmmktime, local, mktime, php_round, round_int
+from .clock import LocalDate, local, local_timestamp, utc_timestamp
+from .numbers import round_half_up, round_int
 
 _EPHEMERIS = load_file(str(resources.files(__package__).joinpath("data", "de442-1999-2150.bsp")))
 _TS = load.timescale(builtin=True)
@@ -116,7 +117,7 @@ def _utc_year(timestamp: float) -> int:
 
 def _year_span(year: int, margin: int) -> tuple[int, int]:
     """A UTC year widened by margin seconds on both sides, as Unix timestamps."""
-    return gmmktime(0, 0, 0, 1, 1, year) - margin, gmmktime(0, 0, 0, 1, 1, year + 1) + margin
+    return utc_timestamp(year, 1, 1, 0, 0, 0) - margin, utc_timestamp(year + 1, 1, 1, 0, 0, 0) + margin
 
 
 # ============================================================================
@@ -244,7 +245,7 @@ def calculate_sun_times(y: int, m: int, d: int, lat: float, lon: float, utc_offs
     if cached is not None:
         return cached
 
-    midnight = gmmktime(0, 0, 0, m, d, y) - utc_offset * 3600
+    midnight = utc_timestamp(y, m, d, 0, 0, 0) - utc_offset * 3600
     noon = midnight + DAY / 2
     # The date's solar day is the one around the mean solar noon nearest its local noon. Mean noon
     # advances exactly a day a day, unlike the transit, which the equation of time moves by up to
@@ -302,7 +303,7 @@ def calculate_sun_times(y: int, m: int, d: int, lat: float, lon: float, utc_offs
 
 def fraction_to_timestamp(y: int, m: int, d: int, frac: float, utc_offset: float) -> int:
     """A day fraction in a fixed UTC offset as a Unix timestamp, anchored on UTC midnight."""
-    return gmmktime(0, 0, 0, m, d, y) + round_int((frac * 24 - utc_offset) * 3600)
+    return utc_timestamp(y, m, d, 0, 0, 0) + round_int((frac * 24 - utc_offset) * 3600)
 
 
 _EVENT_FIELDS = ("solar_noon", *(field for band in _BANDS for field in band))
@@ -412,7 +413,7 @@ def get_accurate_moon_phase(timestamp: int) -> dict:
     intermediate = _INTERMEDIATE.get(prev["name"], {}).get(nxt["name"], "Unknown") if prev and nxt else "Unknown"
 
     # A named phase on the same calendar day takes over; the intermediate name otherwise
-    day_start = mktime(0, 0, 0, lt.month, lt.day, lt.year)
+    day_start = local_timestamp(lt.year, lt.month, lt.day, 0, 0, 0)
     day_end = day_start + 86399
     current = intermediate
     for p in phases:
@@ -431,7 +432,7 @@ def get_accurate_moon_phase(timestamp: int) -> dict:
 
     return {
         "phase_name": current,
-        "illumination": php_round(moon_illumination(timestamp), 1),
+        "illumination": round_half_up(moon_illumination(timestamp), 1),
         "prev_phase": prev,
         "next_phase": nxt,
     }

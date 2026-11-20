@@ -9,22 +9,24 @@ they give the minute, truncated.
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
+from sunrise_sunset_calendar import clock
 from sunrise_sunset_calendar.astronomy import (
     get_accurate_moon_phase,
     moon_illumination,
     moon_phases_between,
 )
-from sunrise_sunset_calendar.php import PHP_INT_MAX, gmdate, local, mktime, php_date
 from tests.fixtures.astronomical_reference_data import date_to_timestamp, get_moon_phases_2026, normalize_phase_name
 from tests.helpers import utc
 
 
 def phases_around_month(year: int, month: int) -> list[dict]:
     """Principal phases from 15 days before a month to 15 days after it."""
-    start = mktime(0, 0, 0, month, 1, year) - 15 * 86400
-    stop = mktime(0, 0, 0, month + 1, 1, year) + 15 * 86400
+    start = clock.local_timestamp(year, month, 1, 0, 0, 0) - 15 * 86400
+    stop = clock.local_timestamp(year, month + 1, 1, 0, 0, 0) + 15 * 86400
     return moon_phases_between(start, stop)
 
 
@@ -38,14 +40,14 @@ def test_moon_phase_2026_accuracy(expected_phase: str, expected_datestring: str)
     """Accuracy for all 2026 moon phases."""
     # Parse expected date
     expected_timestamp = date_to_timestamp(expected_datestring)
-    date_parts = local(expected_timestamp)
+    date_parts = clock.local(expected_timestamp)
 
     # Calculate phases for this month
     phases = phases_around_month(date_parts.year, date_parts.month)
 
     # Find the phase closest to expected
     closest_phase = None
-    min_difference = PHP_INT_MAX
+    min_difference = math.inf
 
     for phase in phases:
         phase_name_normalized = normalize_phase_name(phase["name"])
@@ -61,8 +63,8 @@ def test_moon_phase_2026_accuracy(expected_phase: str, expected_datestring: str)
 
     # The references give the minute
     assert min_difference <= 60, (
-        f"{expected_phase}: Expected {php_date('Y-m-d H:i:s', expected_timestamp)} UTC, "
-        f"got {php_date('Y-m-d H:i:s', closest_phase['timestamp'])} UTC (difference: {min_difference} seconds)\n"
+        f"{expected_phase}: Expected {clock.format_local_time(expected_timestamp, '{year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}')} UTC, "
+        f"got {clock.format_local_time(closest_phase['timestamp'], '{year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}')} UTC (difference: {min_difference} seconds)\n"
         "Reference: timeanddate.com\n"
         "Algorithm: skyfield, JPL DE442"
     )
@@ -93,10 +95,10 @@ def test_february_2026_phases() -> None:
 
     for phase in phases:
         ts = phase["timestamp"]
-        day = int(php_date("j", ts))
+        day = int(clock.format_local_time(ts, "{day}"))
 
         # Filter to February phases only
-        if int(php_date("n", ts)) != 2:
+        if int(clock.format_local_time(ts, "{month}")) != 2:
             continue
 
         if phase["name"] == "Full Moon" and day == 1:
@@ -113,28 +115,28 @@ def test_february_2026_phases() -> None:
     expected_full = utc("2026-02-01 22:09:00")
     assert abs(expected_full - full_moon["timestamp"]) <= 60, (
         "Full Moon Feb 1 should be 22:09 UTC, not 10:12!\n"
-        f"Calculated: {php_date('Y-m-d H:i', full_moon['timestamp'])} UTC"
+        f"Calculated: {clock.format_local_time(full_moon['timestamp'], '{year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}')} UTC"
     )
 
     # Test Last Quarter: Feb 9, 12:43 UTC
     assert last_quarter is not None, "Should find Last Quarter on Feb 9"
     expected_last = utc("2026-02-09 12:43:00")
     assert abs(expected_last - last_quarter["timestamp"]) <= 60, (
-        f"Last Quarter Feb 9 should be 12:43 UTC\nCalculated: {php_date('Y-m-d H:i', last_quarter['timestamp'])} UTC"
+        f"Last Quarter Feb 9 should be 12:43 UTC\nCalculated: {clock.format_local_time(last_quarter['timestamp'], '{year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}')} UTC"
     )
 
     # Test New Moon: Feb 17, 12:01 UTC
     assert new_moon is not None, "Should find New Moon on Feb 17"
     expected_new = utc("2026-02-17 12:01:00")
     assert abs(expected_new - new_moon["timestamp"]) <= 60, (
-        f"New Moon Feb 17 should be 12:01 UTC\nCalculated: {php_date('Y-m-d H:i', new_moon['timestamp'])} UTC"
+        f"New Moon Feb 17 should be 12:01 UTC\nCalculated: {clock.format_local_time(new_moon['timestamp'], '{year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}')} UTC"
     )
 
     # Test First Quarter: Feb 24, 12:27 UTC
     assert first_quarter is not None, "Should find First Quarter on Feb 24"
     expected_first = utc("2026-02-24 12:27:00")
     assert abs(expected_first - first_quarter["timestamp"]) <= 60, (
-        f"First Quarter Feb 24 should be 12:27 UTC\nCalculated: {php_date('Y-m-d H:i', first_quarter['timestamp'])} UTC"
+        f"First Quarter Feb 24 should be 12:27 UTC\nCalculated: {clock.format_local_time(first_quarter['timestamp'], '{year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}')} UTC"
     )
 
 
@@ -203,7 +205,7 @@ def test_illumination_percentage() -> None:
     assert len(phases) >= 48
     for phase in phases:
         assert abs(expected[phase["name"]] - moon_illumination(phase["timestamp"])) <= 1.0, (
-            f"{phase['name']} on {gmdate('Y-m-d H:i', phase['timestamp'])}"
+            f"{phase['name']} on {clock.format_utc_time(phase['timestamp'], '{year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}')}"
         )
 
 
@@ -215,7 +217,7 @@ def test_all_2026_phases_within_tolerance() -> None:
 
     for ref in get_moon_phases_2026():
         expected_timestamp = date_to_timestamp(ref["date"])
-        date_parts = local(expected_timestamp)
+        date_parts = clock.local(expected_timestamp)
 
         calculated_phases = phases_around_month(date_parts.year, date_parts.month)
 
@@ -257,8 +259,8 @@ def test_month_boundary_phases() -> None:
     found_dec30 = False
     for phase in phases:
         if phase["name"] == "Last Quarter":
-            day = int(php_date("j", phase["timestamp"]))
-            month = int(php_date("n", phase["timestamp"]))
+            day = int(clock.format_local_time(phase["timestamp"], "{day}"))
+            month = int(clock.format_local_time(phase["timestamp"], "{month}"))
 
             if month == 12 and day == 30:
                 found_dec30 = True
@@ -288,7 +290,7 @@ def test_synodic_month_variation() -> None:
         phases = phases_around_month(2026, month)
 
         for phase in phases:
-            if phase["name"] == "New Moon" and int(php_date("n", phase["timestamp"])) == month:
+            if phase["name"] == "New Moon" and int(clock.format_local_time(phase["timestamp"], "{month}")) == month:
                 new_moons.append(phase["timestamp"])
                 break
 

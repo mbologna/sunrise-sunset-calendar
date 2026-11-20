@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
+from sunrise_sunset_calendar import clock
 from sunrise_sunset_calendar.astronomy import calculate_equinox_solstice
-from sunrise_sunset_calendar.php import php_date
 from tests.fixtures.astronomical_reference_data import date_to_timestamp, get_equinoxes_solstices
 from tests.helpers import utc
 
@@ -39,8 +39,8 @@ def test_equinox_solstice_accuracy(year: int, event: str, expected_datestring: s
 
     # The references give the minute
     assert difference <= 60, (
-        f"{year} {event}: Expected {php_date('Y-m-d H:i:s', expected_timestamp)} UTC, "
-        f"got {php_date('Y-m-d H:i:s', calculated_timestamp)} UTC (difference: {difference} seconds)\n"
+        f"{year} {event}: Expected {clock.format_local_time(expected_timestamp, '{year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}')} UTC, "
+        f"got {clock.format_local_time(calculated_timestamp, '{year}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}:{second:02d}')} UTC (difference: {difference} seconds)\n"
         "Reference: timeanddate.com\n"
         "Algorithm: skyfield, JPL DE442"
     )
@@ -55,7 +55,7 @@ def test_2026_march_equinox() -> None:
     actual = result["march_equinox"]
 
     assert abs(expected - actual) <= 60, (
-        f"March Equinox 2026 should be March 20, 14:46 UTC\nCalculated: {php_date('M j, H:i', actual)} UTC"
+        f"March Equinox 2026 should be March 20, 14:46 UTC\nCalculated: {clock.format_local_time(actual, '{month_short} {day}, {hour:02d}:{minute:02d}')} UTC"
     )
 
 
@@ -69,7 +69,7 @@ def test_2026_june_solstice() -> None:
     actual = result["june_solstice"]
 
     assert abs(expected - actual) <= 60, (
-        f"June Solstice 2026 should be June 21, 08:24 UTC (not Jun 20!)\nCalculated: {php_date('M j, H:i', actual)} UTC"
+        f"June Solstice 2026 should be June 21, 08:24 UTC (not Jun 20!)\nCalculated: {clock.format_local_time(actual, '{month_short} {day}, {hour:02d}:{minute:02d}')} UTC"
     )
 
 
@@ -95,7 +95,7 @@ def test_2026_december_solstice() -> None:
 
     assert abs(expected - actual) <= 60, (
         "December Solstice 2026 should be December 21, 20:50 UTC (not 12:19!)\n"
-        f"Calculated: {php_date('M j, H:i', actual)} UTC\n"
+        f"Calculated: {clock.format_local_time(actual, '{month_short} {day}, {hour:02d}:{minute:02d}')} UTC\n"
         "Error in old code: 8h 30m off!"
     )
 
@@ -135,9 +135,9 @@ def test_leap_year_handling() -> None:
     assert result_2026["march_equinox"] > 0
 
     # March equinox 2026 should be later in the day than 2024
-    assert int(php_date("H", result_2026["march_equinox"])) > int(php_date("H", result_2024["march_equinox"])), (
-        "Equinox times should progress through leap year cycle"
-    )
+    assert int(clock.format_local_time(result_2026["march_equinox"], "{hour:02d}")) > int(
+        clock.format_local_time(result_2024["march_equinox"], "{hour:02d}")
+    ), "Equinox times should progress through leap year cycle"
 
 
 def test_century_boundaries() -> None:

@@ -8,15 +8,15 @@ from __future__ import annotations
 
 import pytest
 
-from sunrise_sunset_calendar import php
+from sunrise_sunset_calendar import clock
 from sunrise_sunset_calendar.astronomy import moon_rise_set
 
 
 def local_timestamp(date: str, time: str) -> int:
-    """strtotime('YYYY-MM-DD HH:MM') in the default time zone."""
+    """A 'YYYY-MM-DD' date and 'HH:MM' time in the current zone, as a timestamp."""
     y, m, d = (int(part) for part in date.split("-"))
     hour, minute = (int(part) for part in time.split(":"))
-    return php.mktime(hour, minute, 0, m, d, y)
+    return clock.local_timestamp(y, m, d, hour, minute, 0)
 
 
 @pytest.mark.parametrize(
@@ -47,7 +47,7 @@ def local_timestamp(date: str, time: str) -> int:
 )
 def test_rise_set_matches_usno(lat: float, lon: float, zone: str, date: str, expected: list[tuple[str, str]]) -> None:
     """Expected: [event, local HH:MM] from USNO."""
-    with php.default_timezone_set(zone):
+    with clock.use_zone(zone):
         start = local_timestamp(date, "00:00")
         events = moon_rise_set(start, start + 86400, lat, lon)["events"]
 

@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
+from sunrise_sunset_calendar import clock
 from sunrise_sunset_calendar.astronomy import calculate_sun_times
-from sunrise_sunset_calendar.php import local, mktime, strtotime_days
 
 
-def strtotime_date(text: str) -> int:
-    """strtotime('YYYY-MM-DD'): midnight in the default time zone (UTC)."""
+def utc_midnight(text: str) -> int:
+    """Midnight of a 'YYYY-MM-DD' date in the current zone (UTC)."""
     y, m, d = (int(part) for part in text.split("-"))
-    return mktime(0, 0, 0, m, d, y)
+    return clock.local_timestamp(y, m, d, 0, 0, 0)
 
 
 def sun_times_on(timestamp: int, lat: float, lon: float, utc_offset: float) -> dict:
-    date_parts = local(timestamp)
+    date_parts = clock.local(timestamp)
     return calculate_sun_times(date_parts.year, date_parts.month, date_parts.day, lat, lon, utc_offset)
 
 
@@ -23,8 +23,8 @@ def test_us_dst_spring_forward_week_summary() -> None:
     lon = -74.0060
     utc_offset = -5.0  # EST (before DST)
 
-    week_start = strtotime_date("2026-03-01")
-    week_end = strtotime_days(6, week_start)
+    week_start = utc_midnight("2026-03-01")
+    week_end = clock.days_later(week_start, 6)
 
     # Calculate for all 7 days of the week spanning the DST transition
     current = week_start
@@ -39,7 +39,7 @@ def test_us_dst_spring_forward_week_summary() -> None:
         assert result["daylength_h"] > 0
 
         day_count += 1
-        current = strtotime_days(1, current)
+        current = clock.days_later(current, 1)
 
     # Verify we got all 7 days
     assert day_count == 7
@@ -52,10 +52,10 @@ def test_day_length_continuity_across_dst_boundary() -> None:
     utc_offset = -5.0
 
     # Day before DST transition
-    day_before = sun_times_on(strtotime_date("2026-03-07"), lat, lon, utc_offset)
+    day_before = sun_times_on(utc_midnight("2026-03-07"), lat, lon, utc_offset)
 
     # Day after DST transition
-    day_after = sun_times_on(strtotime_date("2026-03-09"), lat, lon, utc_offset)
+    day_after = sun_times_on(utc_midnight("2026-03-09"), lat, lon, utc_offset)
 
     day_before_daylength = day_before["daylength_h"] * 3600
     day_after_daylength = day_after["daylength_h"] * 3600
@@ -72,8 +72,8 @@ def test_us_dst_fall_back_week_summary() -> None:
     lon = -74.0060
     utc_offset = -4.0  # EDT (before fall back)
 
-    week_start = strtotime_date("2026-10-25")
-    week_end = strtotime_days(6, week_start)
+    week_start = utc_midnight("2026-10-25")
+    week_end = clock.days_later(week_start, 6)
 
     day_count = 0
     current = week_start
@@ -85,7 +85,7 @@ def test_us_dst_fall_back_week_summary() -> None:
         assert "daylength_h" in result
 
         day_count += 1
-        current = strtotime_days(1, current)
+        current = clock.days_later(current, 1)
 
     assert day_count == 7
 
@@ -106,7 +106,7 @@ def test_eu_dst_spring_forward_sun_times() -> None:
     prev_sunrise = None
 
     for date_str in dates:
-        result = sun_times_on(strtotime_date(date_str), lat, lon, utc_offset)
+        result = sun_times_on(utc_midnight(date_str), lat, lon, utc_offset)
 
         assert isinstance(result, dict)
 
@@ -135,7 +135,7 @@ def test_eu_dst_fall_back_sun_times() -> None:
     prev_sunset = None
 
     for date_str in dates:
-        result = sun_times_on(strtotime_date(date_str), lat, lon, utc_offset)
+        result = sun_times_on(utc_midnight(date_str), lat, lon, utc_offset)
 
         assert isinstance(result, dict)
 

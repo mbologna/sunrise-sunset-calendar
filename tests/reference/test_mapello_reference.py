@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import pytest
 
+from sunrise_sunset_calendar import clock
 from sunrise_sunset_calendar.astronomy import calculate_sun_times, fraction_to_timestamp
-from sunrise_sunset_calendar.php import mktime, round_int
+from sunrise_sunset_calendar.numbers import round_int
 from tests.fixtures.reference_locations import mapello
 from tests.helpers import assert_duration_equals, assert_time_equals
 
@@ -185,8 +186,8 @@ def test_night_duration(reference: dict) -> None:
 
     # Night is from end of astronomical dusk to beginning of astronomical dawn
     # Split across midnight: from astro_end to midnight (23:59:59) + midnight to astro_begin
-    midnight_end = mktime(23, 59, 59, TEST_MONTH, TEST_DAY, TEST_YEAR)
-    midnight_start = mktime(0, 0, 0, TEST_MONTH, TEST_DAY, TEST_YEAR)
+    midnight_end = clock.local_timestamp(TEST_YEAR, TEST_MONTH, TEST_DAY, 23, 59, 59)
+    midnight_start = clock.local_timestamp(TEST_YEAR, TEST_MONTH, TEST_DAY, 0, 0, 0)
 
     night_duration = (midnight_end - astro_end) + (astro_begin - midnight_start) + 1  # +1 for inclusive
 
@@ -226,8 +227,8 @@ def test_total_day_breakdown_sums_to_24_hours() -> None:
     nautical = (civil_begin - nautical_begin) + (nautical_end - civil_end)
     astro = (nautical_begin - astro_begin) + (astro_end - nautical_end)
 
-    midnight_start = mktime(0, 0, 0, TEST_MONTH, TEST_DAY, TEST_YEAR)
-    midnight_end = mktime(23, 59, 59, TEST_MONTH, TEST_DAY, TEST_YEAR)
+    midnight_start = clock.local_timestamp(TEST_YEAR, TEST_MONTH, TEST_DAY, 0, 0, 0)
+    midnight_end = clock.local_timestamp(TEST_YEAR, TEST_MONTH, TEST_DAY, 23, 59, 59)
     night = (astro_begin - midnight_start) + (midnight_end - astro_end) + 1
 
     total = daylight + civil + nautical + astro + night

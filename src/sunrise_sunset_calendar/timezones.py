@@ -1,7 +1,6 @@
-"""The time zones a feed accepts: PHP's timezone_identifiers_list().
+"""The time zones a feed accepts: every zone in the tz database's zone.tab, plus UTC.
 
-That list is every zone in the tz database's zone.tab, plus UTC. It is read
-from the pinned tzdata package, the same database the feed's times use.
+The list is read from the pinned tzdata package, the same database the feed's times use.
 """
 
 from __future__ import annotations

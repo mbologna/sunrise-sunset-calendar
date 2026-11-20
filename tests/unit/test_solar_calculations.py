@@ -12,7 +12,7 @@ Coverage:
 
 from __future__ import annotations
 
-from sunrise_sunset_calendar.php import mktime
+from sunrise_sunset_calendar import clock
 from tests.helpers import (
     assert_float_equals,
     assert_in_range,
@@ -28,12 +28,12 @@ def test_rome_sunrise_sunset() -> None:
 
     # Sunrise should be around 7:00-7:30 local time
     sunrise = fraction_to_timestamp(2026, 1, 29, result["sunrise_frac"])
-    expected_sunrise = mktime(7, 15, 0, 1, 29, 2026)
+    expected_sunrise = clock.local_timestamp(2026, 1, 29, 7, 15, 0)
     assert_time_equals(expected_sunrise, sunrise, "Rome sunrise on Jan 29, 2026", 1800)
 
     # Sunset should be around 17:15-17:45
     sunset = fraction_to_timestamp(2026, 1, 29, result["sunset_frac"])
-    expected_sunset = mktime(17, 30, 0, 1, 29, 2026)
+    expected_sunset = clock.local_timestamp(2026, 1, 29, 17, 30, 0)
     assert_time_equals(expected_sunset, sunset, "Rome sunset on Jan 29, 2026", 1800)
 
 
@@ -43,12 +43,12 @@ def test_new_york_sunrise_sunset() -> None:
 
     # Sunrise should be around 5:20-5:30
     sunrise = fraction_to_timestamp(2026, 6, 21, result["sunrise_frac"])
-    expected_sunrise = mktime(5, 25, 0, 6, 21, 2026)
+    expected_sunrise = clock.local_timestamp(2026, 6, 21, 5, 25, 0)
     assert_time_equals(expected_sunrise, sunrise, "NYC sunrise on summer solstice", 1800)
 
     # Sunset should be around 20:25-20:35
     sunset = fraction_to_timestamp(2026, 6, 21, result["sunset_frac"])
-    expected_sunset = mktime(20, 30, 0, 6, 21, 2026)
+    expected_sunset = clock.local_timestamp(2026, 6, 21, 20, 30, 0)
     assert_time_equals(expected_sunset, sunset, "NYC sunset on summer solstice", 1800)
 
 
@@ -172,7 +172,7 @@ def test_non_leap_year_february() -> None:
 def test_fraction_to_timestamp_noon() -> None:
     # Test fraction 0.5 = noon
     ts = fraction_to_timestamp(2026, 1, 29, 0.5)
-    expected = mktime(12, 0, 0, 1, 29, 2026)
+    expected = clock.local_timestamp(2026, 1, 29, 12, 0, 0)
 
     assert_time_equals(expected, ts, "Fraction 0.5 equals noon", 60)
 
@@ -180,7 +180,7 @@ def test_fraction_to_timestamp_noon() -> None:
 def test_fraction_to_timestamp_midnight() -> None:
     # Test fraction 0.0 = midnight
     ts = fraction_to_timestamp(2026, 1, 29, 0.0)
-    expected = mktime(0, 0, 0, 1, 29, 2026)
+    expected = clock.local_timestamp(2026, 1, 29, 0, 0, 0)
 
     assert_time_equals(expected, ts, "Fraction 0.0 equals midnight", 60)
 
@@ -188,7 +188,7 @@ def test_fraction_to_timestamp_midnight() -> None:
 def test_fraction_to_timestamp_quarter_day() -> None:
     # Test fraction 0.25 = 6:00 AM
     ts = fraction_to_timestamp(2026, 1, 29, 0.25)
-    expected = mktime(6, 0, 0, 1, 29, 2026)
+    expected = clock.local_timestamp(2026, 1, 29, 6, 0, 0)
 
     assert_time_equals(expected, ts, "Fraction 0.25 equals 6 AM", 60)
 
@@ -198,7 +198,7 @@ def test_solar_noon_calculations() -> None:
     result = calculate_sun_times(2026, 1, 29, 45.0, 0.0, 0)
 
     solar_noon = fraction_to_timestamp(2026, 1, 29, result["solar_noon_frac"])
-    expected_noon = mktime(12, 0, 0, 1, 29, 2026)
+    expected_noon = clock.local_timestamp(2026, 1, 29, 12, 0, 0)
 
     # Within 30 minutes of local noon
     assert_time_equals(expected_noon, solar_noon, "Solar noon near longitude 0°", 1800)
