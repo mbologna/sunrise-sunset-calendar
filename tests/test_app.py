@@ -55,6 +55,33 @@ def test_without_a_token_every_request_fails(token: bytes | None) -> None:
     assert headers[:6] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8"), NO_STORE]
 
 
+def test_config_reads_several_tokens() -> None:
+    config = Config.from_env({"AUTH_TOKEN": "main", "AUTH_TOKENS": " alice, ,bob "})
+    assert config.tokens == (b"main", b"alice", b"bob")
+    assert Config.from_env({"AUTH_TOKENS": "alice"}).tokens == (b"alice",)
+
+
+def test_any_of_the_tokens_opens_feed_and_page() -> None:
+    config = Config(auth_token=None, extra_tokens=(b"alice", b"bob"))
+    assert call(config, query="feed=1&token=bob&daynight=1")[0] == "200 OK"
+    assert call(config, query="token=alice")[0] == "200 OK"
+    assert call(config, query="token=carol")[0] == "403 Forbidden"
+
+
+def test_the_page_builds_urls_with_its_own_token() -> None:
+    """Revoking one person's token then stops only the feeds that person built."""
+    config = Config(auth_token=TOKEN, extra_tokens=(b"alice",))
+    _, _, page = call(
+        config,
+        query="token=alice",
+        method="POST",
+        body=b"generate_url=1",
+        CONTENT_TYPE="application/x-www-form-urlencoded",
+    )
+    assert b"token=alice&amp;" in page
+    assert TOKEN not in page
+
+
 def test_health(config: Config) -> None:
     status, headers, body = call(config, "/health")
     assert status == "200 OK"

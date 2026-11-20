@@ -50,7 +50,8 @@ All settings are environment variables.
 
 | Setting | Default | Meaning |
 |---------|---------|---------|
-| `AUTH_TOKEN` | none (required) | Secret in the feed URLs and in the page's (`/?token=…`). Without it every request gets a 500. |
+| `AUTH_TOKEN` | none (required) | Secret in the feed URLs and in the page's (`/?token=…`). Without it, or `AUTH_TOKENS`, every request gets a 500. |
+| `AUTH_TOKENS` | none | More secrets, comma-separated, each as good as `AUTH_TOKEN`. Give each person their own: the page builds feed URLs with the token it was opened with, so removing one revokes that person's feeds only. |
 | `CALENDAR_WINDOW_DAYS` | `400` | Days of future events in the feed; the ephemeris ends in 2150, so no feed can reach past 2148 |
 | `CALENDAR_PAST_DAYS` | `30` | Days of past events in the feed |
 | `UPDATE_INTERVAL` | `86400` | Refresh interval suggested to calendar apps, in seconds |
@@ -75,7 +76,7 @@ Every other path returns 404. Every response carries `X-Content-Type-Options`, `
 | Parameter | Required | Values |
 |-----------|----------|--------|
 | `feed` | yes | `1` |
-| `token` | yes | `AUTH_TOKEN` |
+| `token` | yes | `AUTH_TOKEN`, or one of `AUTH_TOKENS` |
 | `lat` | yes | -90 to 90 |
 | `lon` | yes | -180 to 180 |
 | `zone` | yes | IANA time zone, e.g. `Europe/Rome` |

@@ -3,6 +3,7 @@
 Configuration comes from the environment:
 
 - AUTH_TOKEN (required): the secret in feed URLs and in the page's
+- AUTH_TOKENS: more secrets, comma-separated, each as good as AUTH_TOKEN
 - CALENDAR_WINDOW_DAYS (400): days of future events in a feed
 - CALENDAR_PAST_DAYS (30): days of past events
 - UPDATE_INTERVAL (86400): refresh interval suggested to calendar apps, in seconds
@@ -75,11 +76,20 @@ class Config:
     window_days: int = 400
     past_days: int = 30
     update_interval: int = 86400
+    # More tokens, from AUTH_TOKENS: one per person, so one can be revoked alone
+    extra_tokens: tuple[bytes, ...] = ()
+
+    @property
+    def tokens(self) -> tuple[bytes, ...]:
+        """Every usable token: AUTH_TOKEN and AUTH_TOKENS, without empty ones or the placeholder."""
+        candidates = (self.auth_token, *self.extra_tokens)
+        return tuple(t for t in candidates if t and t != PLACEHOLDER_TOKEN)
 
     @classmethod
     def from_env(cls, environ: dict[str, str] | None = None) -> Config:
         env = os.environ if environ is None else environ
         token = env.get("AUTH_TOKEN")
+        extra = [t.strip() for t in env.get("AUTH_TOKENS", "").split(",")]
 
         def number(name: str, default: int) -> int:
             value = env.get(name)
@@ -95,6 +105,7 @@ class Config:
             window_days=number("CALENDAR_WINDOW_DAYS", 400),
             past_days=number("CALENDAR_PAST_DAYS", 30),
             update_interval=number("UPDATE_INTERVAL", 86400),
+            extra_tokens=tuple(os.fsencode(t) for t in extra if t),
         )
 
 
@@ -167,8 +178,11 @@ def sanitize_text(value: bytes, max_length: int = 500) -> str:
 
 
 def verify_token(config: Config, provided: bytes) -> bool:
-    """Constant-time comparison with AUTH_TOKEN."""
-    return hmac.compare_digest(config.auth_token or b"", provided)
+    """Whether provided is one of the tokens, comparing with each in constant time."""
+    matched = False
+    for token in config.tokens:
+        matched |= hmac.compare_digest(token, provided)
+    return matched
 
 
 def _form(environ: WSGIEnvironment) -> dict[str, bytes]:
@@ -231,8 +245,7 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
         if path not in ("/", "/health"):
             return respond("404 Not Found", b"Not Found", [("Content-Type", "text/plain; charset=utf-8"), NO_STORE])
 
-        token = config.auth_token
-        if token is None or token in (b"", PLACEHOLDER_TOKEN):
+        if not config.tokens:
             return respond(
                 "500 Internal Server Error",
                 strings["errors"]["missing_token"].encode(),
@@ -253,8 +266,9 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
             status = "200 OK" if health["status"] == "ok" else "503 Service Unavailable"
             return respond(status, body, [("Content-Type", "application/json"), NO_STORE])
 
-        # The feed and the page that builds its URL both need the token; only /health doesn't
-        if not verify_token(config, param(query, "token")):
+        # The feed and the page that builds its URL both need a token; only /health doesn't
+        token = param(query, "token")
+        if not verify_token(config, token):
             return respond(
                 "403 Forbidden", strings["errors"]["invalid_token"].encode(), [("Content-Type", HTML), NO_STORE]
             )
