@@ -213,14 +213,12 @@ def _cases() -> list[Case]:
     for tag, env in {
         "refresh-hourly": {"UPDATE_INTERVAL": "3600"},
         "refresh-odd": {"UPDATE_INTERVAL": "5400"},
-        "refresh-text": {"UPDATE_INTERVAL": "12abc"},
         "window-zero": {"CALENDAR_PAST_DAYS": "0", "CALENDAR_WINDOW_DAYS": "0"},
-        "window-text": {"CALENDAR_PAST_DAYS": "x", "CALENDAR_WINDOW_DAYS": "3 days"},
     }.items():
         cases.append(Case(f"env-{tag}", "options", feed_query(41.9028, 12.4964, "Europe/Rome", "Rome"), env=env))
 
     # Days a DST change skips or repeats midnight (or the evening hour before it): "today",
-    # sunrise shifts and week starts depend on how PHP resolves those wall times
+    # sunrise shifts and week starts depend on how those wall times resolve
     edge = {"CALENDAR_PAST_DAYS": "3", "CALENDAR_WINDOW_DAYS": "10"}
     transitions = {
         "Havana": ("2026-03-08", "2026-11-01"),

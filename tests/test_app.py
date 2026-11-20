@@ -246,10 +246,16 @@ def test_post_without_a_form_body_shows_the_page(config: Config) -> None:
 
 def test_config_from_env() -> None:
     config = Config.from_env(
-        {"AUTH_TOKEN": "s3cret", "CALENDAR_WINDOW_DAYS": "12abc", "CALENDAR_PAST_DAYS": " 3", "UPDATE_INTERVAL": "1e3"}
+        {"AUTH_TOKEN": "s3cret", "CALENDAR_WINDOW_DAYS": "12", "CALENDAR_PAST_DAYS": " 3", "UPDATE_INTERVAL": "1000"}
     )
     assert config == Config(auth_token=b"s3cret", window_days=12, past_days=3, update_interval=1000)
     assert Config.from_env({}) == Config(auth_token=None)
+
+
+@pytest.mark.parametrize("value", ["12abc", "3 days", "1e3", "x", ""])
+def test_config_refuses_a_number_it_cannot_read(value: str) -> None:
+    with pytest.raises(SystemExit, match="CALENDAR_WINDOW_DAYS must be a whole number"):
+        Config.from_env({"AUTH_TOKEN": "s3cret", "CALENDAR_WINDOW_DAYS": value})
 
 
 def test_main_serves_on_port(monkeypatch: pytest.MonkeyPatch) -> None:

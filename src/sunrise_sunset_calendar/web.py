@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 from functools import cache as memoize
+from html import escape
 from importlib import resources
 
 from . import cache
@@ -15,7 +16,6 @@ from .astronomy import sun_events
 from .clock import LocalDate, format_local_time, use_zone, zone
 from .helpers import format_duration, format_time
 from .numbers import round_int
-from .php import htmlspecialchars
 from .strings import STRINGS
 
 DEFAULT_LAT = 41.9028
@@ -25,7 +25,7 @@ DEFAULT_LAT_TEXT = "41.9028"
 DEFAULT_LON_TEXT = "12.4964"
 
 _W = STRINGS["web"]
-e = htmlspecialchars
+e = escape
 
 
 def json_encode_strings(values: dict[str, str]) -> str:
