@@ -254,6 +254,14 @@ def api_now(query: dict[str, bytes], now: int) -> tuple[str, bytes, list[tuple[s
     return "200 OK", body.encode(), [JSON, NO_STORE]
 
 
+def request_token(environ: WSGIEnvironment, query: dict[str, bytes]) -> bytes:
+    """The token from an Authorization: Bearer header, which keeps it out of URLs and logs, else from ?token=."""
+    scheme, _, credentials = environ.get("HTTP_AUTHORIZATION", "").strip().partition(" ")
+    if scheme.lower() == "bearer" and credentials.strip():
+        return credentials.strip().encode("latin-1")
+    return param(query, "token")
+
+
 def verify_token(config: Config, provided: bytes) -> bool:
     """Whether provided is one of the tokens, comparing with each in constant time."""
     matched = False
@@ -345,8 +353,11 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
             return respond(status, body, [JSON, NO_STORE])
 
         # The feed and the page that builds its URL both need a token; only /health doesn't
-        token = param(query, "token")
+        token = request_token(environ, query)
         if not verify_token(config, token):
+            if path == API_NOW:
+                body = json.dumps({"error": strings["errors"]["invalid_token"]}, separators=(",", ":")).encode()
+                return respond("401 Unauthorized", body, [JSON, NO_STORE, ("WWW-Authenticate", "Bearer")])
             return respond(
                 "403 Forbidden", strings["errors"]["invalid_token"].encode(), [("Content-Type", HTML), NO_STORE]
             )
