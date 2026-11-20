@@ -153,7 +153,7 @@ The sun and the moon come from NASA JPL's DE442 ephemeris (2024), the latest, th
 
 Real times can still differ by a minute or more near the horizon: refraction changes with the weather, and the feed assumes a flat horizon at sea level. The tests check:
 
-- sunrise against PHP's `date_sun_info()` algorithm, an independent solar model, every day for a year in Rome, New York and Sydney, within 2 minutes;
+- sunrise against Paul Schlyter's sunriset algorithm, an independent solar model, every day for a year in Rome, New York and Sydney, within 2 minutes;
 - twilight times for Mapello, Italy, against published reference times, within a minute;
 - equinoxes, solstices and moon phases against published times, which give the minute, within 60 seconds; moon illumination at each phase within 1%; and moonrise and moonset against the US Naval Observatory within 30 seconds (its tables round to the minute).
 
@@ -191,10 +191,6 @@ CI runs ruff and the tests through `mbologna/.github`'s `python-ci`, then builds
 ### Golden corpus
 
 `tests/golden/` holds 403 recorded responses: 46 locations (polar day and night, both hemispheres, the equator, the date line, every kind of DST rule, including changes at midnight), the full default window, extra dates (DST changes, New Year, a leap day), every combination of event types for six representative places, offsets, notes, malformed input, environment settings, the web page and its form. `test_golden.py` replays every request and compares the bytes, apart from `DTSTAMP`, the moment a feed is generated. When the output changes on purpose, `uv run python -m tests.golden.make_corpus` records the corpus again; review the changed lines before committing.
-
-### History
-
-Up to v2 the calendar was written in PHP, and v3 began as a port that reproduced its feeds byte for byte. Subscriptions, URLs, parameters and tokens from then still work; the `/sunrise-sunset-calendar.php` path and `/?health` check are gone. The times now come from skyfield, and the code no longer emulates PHP.
 
 ## Versioning
 
