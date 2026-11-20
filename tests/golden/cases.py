@@ -1,9 +1,9 @@
-"""The golden-master corpus: requests answered by the last PHP release, replayed against the port.
+"""The golden-master corpus: requests whose recorded responses pin the app's output.
 
 Each case is one web request: a query string, an optional urlencoded POST
-body, the environment, and the moment it is made (the PHP side ran under
-libfaketime). make_corpus.py records the PHP responses; test_golden.py
-replays every case and wants the same bytes, DTSTAMP aside.
+body, the environment, and the moment it is made. make_corpus.py records the
+responses; test_golden.py replays every case and wants the same bytes,
+DTSTAMP aside.
 """
 
 from __future__ import annotations

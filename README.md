@@ -145,13 +145,16 @@ CI runs ruff and the tests through `mbologna/.github`'s `python-ci`, then builds
 └── tests/              # unit, integration, reference and accuracy suites, the golden corpus, PHP references
 ```
 
+### Golden corpus
+
+`tests/golden/` holds 1002 recorded responses: 46 locations (polar day and night, both hemispheres, the equator, the date line, every kind of DST rule, including changes at midnight), the full default window, extra dates (DST changes, New Year, a leap day), every combination of event types, offsets, notes, malformed input, environment settings, the web page and its form. `test_golden.py` replays every request and compares the bytes, apart from `DTSTAMP`, the moment a feed is generated. When the output changes on purpose, `uv run python -m tests.golden.make_corpus` records the corpus again; review the changed lines before committing.
+
 ### Parity with the PHP version
 
-Up to v2 the calendar was written in PHP. The Python version produces the same feeds byte for byte, apart from `DTSTAMP`, the moment a feed is generated, so existing subscriptions, URLs, parameters and tokens work unchanged. The PHP version's `/sunrise-sunset-calendar.php` path and `/?health` check are gone.
+Up to v2 the calendar was written in PHP. The Python version produced the same feeds byte for byte, apart from `DTSTAMP`, so existing subscriptions, URLs, parameters and tokens work unchanged. The PHP version's `/sunrise-sunset-calendar.php` path and `/?health` check are gone.
 
 - `php.py` reproduces the PHP 8.5 primitives whose results reach the output: rounding, float-to-string conversion, input filters, `strip_tags()`, multibyte truncation, date formatting and wall-clock time zone arithmetic. Each follows php-src's C code, so edge cases match too.
-- `tests/php_reference/` records what PHP returns for those primitives, and `test_php.py` checks `php.py` against it.
-- `tests/golden/` holds 1004 responses recorded from the last PHP release: 46 locations (polar day and night, both hemispheres, the equator, the date line, every kind of DST rule, including changes at midnight), the full default window, extra dates (DST changes, New Year, a leap day), every combination of event types, offsets, notes, malformed input, environment settings, the web page and its form. `test_golden.py` replays every request against the Python app and compares the bytes. `make_corpus.py` records the corpus again from the PHP image (needs Docker), and `http_parity.py` compares the two images' status codes and headers over HTTP.
+- `tests/php_reference/` records what PHP returns for those primitives (`record.sh`, with the last PHP release's image; needs Docker), and `test_php.py` checks `php.py` against it.
 
 The sunrise and sunset times come from a line-by-line port of [sun-position-spa-php](https://github.com/abbadon1334/sun-position-spa-php), the library the PHP version used. Its interpolation of rise and set times differs slightly from other SPA implementations, and the feeds keep their times to the second.
 
