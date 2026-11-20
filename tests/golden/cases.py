@@ -25,6 +25,7 @@ class Case:
     now: str = "2026-03-29 10:00:00"
     https: bool = False
     host: str = "calendar.example"
+    path: str = "/"
 
 
 # name, latitude, longitude, time zone
@@ -279,6 +280,22 @@ def _cases() -> list[Case]:
         ),
         Case("page-post-no-submit", "page", page, body="lat=1"),
         Case("page-get-generate", "page", f"{page}&generate_url=1"),
+    ]
+    # G. The JSON endpoint: a place, polar day and night, a pole on a zone 12 hours off, a set moment
+    api = f"token={TOKEN}"
+    cases += [
+        Case("api-rome", "api", f"{api}&lat=41.9028&lon=12.4964&zone=Europe%2FRome", path="/api/v1/now"),
+        Case(
+            "api-longyearbyen", "api", f"{api}&lat=78.2232&lon=15.6267&zone=Arctic%2FLongyearbyen", path="/api/v1/now"
+        ),
+        Case("api-south-pole", "api", f"{api}&lat=-90&lon=0&zone=Antarctica%2FMcMurdo", path="/api/v1/now"),
+        Case(
+            "api-at",
+            "api",
+            f"{api}&lat=40.7128&lon=-74.006&zone=America%2FNew_York&at=2026-12-21T23:30",
+            path="/api/v1/now",
+        ),
+        Case("api-bad-zone", "api", f"{api}&lat=1&lon=2&zone=Nowhere", path="/api/v1/now"),
     ]
     return cases
 

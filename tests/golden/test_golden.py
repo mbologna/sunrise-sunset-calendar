@@ -45,7 +45,7 @@ def request(case: Case) -> tuple[int, list[tuple[str, str]], bytes]:
     body = (case.body or "").encode("latin-1")
     environ = {
         "REQUEST_METHOD": "GET" if case.body is None else "POST",
-        "PATH_INFO": "/",
+        "PATH_INFO": case.path,
         "QUERY_STRING": case.query,
         "HTTP_HOST": case.host,
         "wsgi.input": io.BytesIO(body),

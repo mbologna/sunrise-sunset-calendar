@@ -29,6 +29,7 @@ from importlib import resources
 from urllib.parse import parse_qsl, urlencode
 from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
 
+from .api import now_json
 from .astronomy import FIRST_YEAR, LAST_YEAR
 from .clock import zone
 from .feed import Options, render_feed
@@ -70,6 +71,8 @@ ASSETS = {
     "/assets/script.js": ("script.js", "text/javascript"),
 }
 HTML = "text/html; charset=UTF-8"
+JSON = ("Content-Type", "application/json")
+API_NOW = "/api/v1/now"
 POST_MAX_SIZE = 8 * 1024 * 1024
 
 
@@ -211,6 +214,46 @@ def etag_matches(etag: str, if_none_match: str) -> bool:
     return etag in tags or "*" in tags
 
 
+def parse_moment(value: bytes, zone_name: str, default: int) -> int | None:
+    """A Unix time, or an ISO 8601 date and time (read in zone_name without an offset); default if empty."""
+    text = value.decode("utf-8", "replace").strip()
+    if not text:
+        return default
+    if _INTEGER.fullmatch(value.strip(_WHITESPACE)):
+        return int(text)
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=zone(zone_name))
+    return int(moment.timestamp())
+
+
+def api_now(query: dict[str, bytes], now: int) -> tuple[str, bytes, list[tuple[str, str]]]:
+    """GET /api/v1/now: status, body and headers. Unlike the feed, it refuses input it can't read."""
+
+    def error(message: str) -> tuple[str, bytes, list[tuple[str, str]]]:
+        return "400 Bad Request", json.dumps({"error": message}, separators=(",", ":")).encode(), [JSON, NO_STORE]
+
+    lat = parse_float(param(query, "lat"))
+    lon = parse_float(param(query, "lon"))
+    zone_name = param(query, "zone").decode("utf-8", "replace")
+    if lat is None or not -90 <= lat <= 90:
+        return error("lat must be a number from -90 to 90")
+    if lon is None or not -180 <= lon <= 180:
+        return error("lon must be a number from -180 to 180")
+    if zone_name not in timezone_set():
+        return error("zone must be a time zone name, such as Europe/Rome")
+    at = parse_moment(param(query, "at"), zone_name, now)
+    if at is None:
+        return error("at must be a Unix time or an ISO 8601 date and time")
+    if not FIRST_YEAR <= datetime.fromtimestamp(at, UTC).year <= LAST_YEAR:
+        return error(f"at must fall between {FIRST_YEAR} and {LAST_YEAR}")
+    body = json.dumps(now_json(lat, lon, zone_name, at), separators=(",", ":"), ensure_ascii=False)
+    return "200 OK", body.encode(), [JSON, NO_STORE]
+
+
 def verify_token(config: Config, provided: bytes) -> bool:
     """Whether provided is one of the tokens, comparing with each in constant time."""
     matched = False
@@ -275,9 +318,9 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
             filename, content_type = ASSETS[path]
             body = resources.files(__package__).joinpath("assets", filename).read_bytes()
             return respond("200 OK", body, [("Content-Type", content_type)])
-        # The page and feed at /, the health check at /health. The PHP version's
-        # /sunrise-sunset-calendar.php and /?health are gone (2026-11-19).
-        if path not in ("/", "/health"):
+        # The page and feed at /, the health check at /health, JSON at /api/v1/now. The PHP
+        # version's /sunrise-sunset-calendar.php and /?health are gone (2026-11-19).
+        if path not in ("/", "/health", API_NOW):
             return respond("404 Not Found", b"Not Found", [("Content-Type", "text/plain; charset=utf-8"), NO_STORE])
 
         if not config.tokens:
@@ -299,7 +342,7 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
                 health |= {"status": "down", "problems": [f"feeds reach {first} to {last}, outside the ephemeris"]}
             body = json.dumps(health, separators=(",", ":")).encode()
             status = "200 OK" if health["status"] == "ok" else "503 Service Unavailable"
-            return respond(status, body, [("Content-Type", "application/json"), NO_STORE])
+            return respond(status, body, [JSON, NO_STORE])
 
         # The feed and the page that builds its URL both need a token; only /health doesn't
         token = param(query, "token")
@@ -307,6 +350,9 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
             return respond(
                 "403 Forbidden", strings["errors"]["invalid_token"].encode(), [("Content-Type", HTML), NO_STORE]
             )
+
+        if path == API_NOW:
+            return respond(*api_now(query, now))
 
         if "feed" in query:
 

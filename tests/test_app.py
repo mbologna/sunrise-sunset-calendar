@@ -181,6 +181,53 @@ def test_feed_rejects_bad_tokens(config: Config, query: str) -> None:
     assert headers[:6] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8"), NO_STORE]
 
 
+API = f"token={TOKEN.decode()}&lat=41.9028&lon=12.4964&zone=Europe%2FRome"
+
+
+def test_api_now(config: Config) -> None:
+    status, headers, body = call(config, "/api/v1/now", query=API)
+    assert status == "200 OK"
+    assert headers[:6] == [*SECURITY, ("Content-Type", "application/json"), NO_STORE]
+    data = json.loads(body)
+    assert data["at"] == "2026-03-29T12:00:00+02:00"
+    assert data["location"] == {"lat": 41.9028, "lon": 12.4964, "zone": "Europe/Rome"}
+    assert data["sun"]["period"] == "daylight" and data["sun"]["up"] is True
+    assert call(config, "/api/v1/now", query=API, method="HEAD")[2] == b""
+
+
+@pytest.mark.parametrize(
+    ("at", "expected"),
+    [("1767268800", "2026-01-01T13:00:00+01:00"), ("2026-07-01T06:30", "2026-07-01T06:30:00+02:00")],
+)
+def test_api_now_at_a_moment(config: Config, at: str, expected: str) -> None:
+    status, _, body = call(config, "/api/v1/now", query=f"{API}&at={at}")
+    assert status == "200 OK"
+    assert json.loads(body)["at"] == expected
+
+
+def test_api_needs_the_token(config: Config) -> None:
+    assert call(config, "/api/v1/now", query="lat=1&lon=2&zone=UTC")[0] == "403 Forbidden"
+
+
+@pytest.mark.parametrize(
+    ("query", "message"),
+    [
+        ("lon=12&zone=UTC", "lat must be"),
+        ("lat=91&lon=12&zone=UTC", "lat must be"),
+        ("lat=41&lon=x&zone=UTC", "lon must be"),
+        ("lat=41&lon=12", "zone must be"),
+        ("lat=41&lon=12&zone=Mars%2FOlympus", "zone must be"),
+        ("lat=41&lon=12&zone=UTC&at=yesterday", "at must be a Unix time"),
+        ("lat=41&lon=12&zone=UTC&at=1990-01-01T00:00", "at must fall between"),
+    ],
+)
+def test_api_refuses_what_it_cannot_read(config: Config, query: str, message: str) -> None:
+    status, headers, body = call(config, "/api/v1/now", query=f"token={TOKEN.decode()}&{query}")
+    assert status == "400 Bad Request"
+    assert ("Content-Type", "application/json") in headers
+    assert json.loads(body)["error"].startswith(message)
+
+
 @pytest.mark.parametrize("query", ["", "token=wrong", "token[]=app-test-token"])
 def test_page_needs_the_token(config: Config, query: str) -> None:
     status, headers, body = call(config, query=query)
