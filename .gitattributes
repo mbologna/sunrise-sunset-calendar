@@ -5,7 +5,6 @@
 *.tar.xz binary
 # The JPL ephemeris excerpt
 *.bsp binary
-tests/php_reference/*.json -diff
 
 # Exclude from exports
 /.github export-ignore

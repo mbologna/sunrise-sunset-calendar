@@ -507,22 +507,6 @@ def year_summary(lat: float, lon: float, year: int, utc_offset: float) -> dict:
     return result
 
 
-def _php_min(values: list[float]) -> float:
-    best = values[0]
-    for v in values[1:]:
-        if v < best:
-            best = v
-    return best
-
-
-def _php_max(values: list[float]) -> float:
-    best = values[0]
-    for v in values[1:]:
-        if v > best:
-            best = v
-    return best
-
-
 def year_day_facts(year: dict) -> dict[str, list[dict]]:
     """Days worth an all-day event because something changes that day, by local date."""
     days = year["days"]
@@ -540,8 +524,8 @@ def year_day_facts(year: dict) -> dict[str, list[dict]]:
                 continue
             before = window[:20]
             after = window[21:]
-            is_min = values[i] < _php_min(before) and values[i] <= _php_min(after)
-            is_max = values[i] > _php_max(before) and values[i] >= _php_max(after)
+            is_min = values[i] < min(before) and values[i] <= min(after)
+            is_max = values[i] > max(before) and values[i] >= max(after)
             if not is_min and not is_max:
                 continue
             # How many days around the turn stay within a minute of it

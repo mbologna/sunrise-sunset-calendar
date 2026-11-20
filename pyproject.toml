@@ -72,8 +72,6 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105", "S310", "S603", "S607"]
-# Literal ports of PHP's C state machines: their branch structure is kept as is
-"src/sunrise_sunset_calendar/php.py" = ["SIM102"]
 
 [tool.ruff.format]
 quote-style = "double"

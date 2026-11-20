@@ -9,9 +9,10 @@ from typing import Any
 
 import pytest
 
-from sunrise_sunset_calendar import clock, php
+from sunrise_sunset_calendar import clock
 from sunrise_sunset_calendar.feed import Options, generate_calendar
 from sunrise_sunset_calendar.helpers import format_duration, year_summary
+from sunrise_sunset_calendar.numbers import round_int
 from tests.helpers import date_sun_info_sunrise, ical_timestamp
 
 ALL_TYPES = {"civil": True, "nautical": True, "astro": True, "daylight": True}
@@ -31,7 +32,7 @@ DEFAULTS = Options(
     today="2026-10-15",
 )
 
-# PHP's trim() characters
+# The whitespace trimmed around event text
 _TRIM = " \t\n\r\0\x0b"
 
 
@@ -126,8 +127,8 @@ def test_every_event_ends_after_it_starts() -> None:
 )
 def test_daylight_starts_at_sunrise_across_dst_changes(lat: float, lon: float, zone: str) -> None:
     """Sunrise must track the zone's real UTC offset on each date, not the offset
-    on the day the feed was generated. Cross-check against PHP's own solar model
-    (date_sun_info(), ported in tests/helpers.py).
+    on the day the feed was generated. Cross-check against an independent solar
+    model (Paul Schlyter's sunriset, in tests/helpers.py).
     """
     ics = feed(lat=lat, lon=lon, timezone=zone)
     tz = clock.zone(zone)
@@ -251,7 +252,7 @@ def test_offsets_shift_morning_and_evening_events() -> None:
 
 def test_night_duration_matches_event_span() -> None:
     night = events_of_type(feed(window_days=0), "night")[0]
-    minutes = php.round_int((ical_timestamp(night["DTEND"]) - ical_timestamp(night["DTSTART"])) / 60)
+    minutes = round_int((ical_timestamp(night["DTEND"]) - ical_timestamp(night["DTSTART"])) / 60)
 
     assert " Night · " + format_duration(minutes * 60) in night["SUMMARY"]
 

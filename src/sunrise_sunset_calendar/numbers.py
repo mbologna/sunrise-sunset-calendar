@@ -24,7 +24,7 @@ def format_coordinate(value: float) -> str:
 
     Fourteen significant digits, as the feeds have always had: changing how a coordinate
     is written would change every event's UID, and calendar apps would re-create them.
-    Never in exponent notation, which PHP used below 0.0001 ("1.0E-5").
+    Never in exponent notation, which older feeds used below 0.0001 ("1.0E-5").
     """
     text = f"{value:.14g}"
     return f"{value:.14f}".rstrip("0").rstrip(".") if "e" in text else text

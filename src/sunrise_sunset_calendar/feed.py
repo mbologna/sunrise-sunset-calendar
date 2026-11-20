@@ -215,8 +215,7 @@ def _render(o: Options, now: int) -> bytes:
     calendar_description = " ".join(
         [S["calendar_description_format"].format(place, o.timezone), *location_facts(today_year)]
     )
-    # PHP's ?: treats "0" as empty too
-    name = o.location if o.location not in ("", "0") else f"{format_coordinate(lat)}, {format_coordinate(lon)}"
+    name = o.location if o.location != "" else f"{format_coordinate(lat)}, {format_coordinate(lon)}"
 
     out = _Output()
     out.extend(

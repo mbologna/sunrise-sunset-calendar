@@ -226,7 +226,7 @@ def make_app(config: Config | None = None, clock: Callable[[], float] = time.tim
             filename, content_type = ASSETS[path]
             body = resources.files(__package__).joinpath("assets", filename).read_bytes()
             return respond("200 OK", body, [("Content-Type", content_type)])
-        # The page and feed at /, the health check at /health. The PHP release's
+        # The page and feed at /, the health check at /health. The PHP version's
         # /sunrise-sunset-calendar.php and /?health are gone (2026-11-19).
         if path not in ("/", "/health"):
             return respond("404 Not Found", b"Not Found", [("Content-Type", "text/plain; charset=utf-8"), NO_STORE])

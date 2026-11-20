@@ -1,8 +1,4 @@
-"""The web page for generating subscription URLs.
-
-The markup, whitespace included, is what the PHP template rendered, so the
-page is byte-for-byte the same.
-"""
+"""The web page for generating subscription URLs."""
 
 from __future__ import annotations
 

@@ -1,7 +1,8 @@
 """Per-request memoization of the expensive astronomical calculations.
 
-Each request starts with an empty cache, as each PHP request did, so entries
-stay bounded by one feed's window.
+Each request starts with an empty cache, so entries stay bounded by one
+feed's window. The yearly astronomy searches have their own cache, kept
+across requests (astronomy.py).
 """
 
 from __future__ import annotations

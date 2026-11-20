@@ -171,7 +171,7 @@ def _cases() -> list[Case]:
         )
 
     raw_queries = {
-        # Locations: none, "0" (empty for PHP's ?:), markup, very long, odd characters
+        # Locations: none, "0", markup, very long, odd characters
         "location-none": feed_query(41.9028, 12.4964, "Europe/Rome"),
         "location-zero": feed_query(41.9028, 12.4964, "Europe/Rome", "0"),
         "location-markup": feed_query(41.9028, 12.4964, "Europe/Rome", "<i>Rome</i> & co, \"centro\"; 'X'"),
@@ -180,7 +180,7 @@ def _cases() -> list[Case]:
         "location-invalid-utf8": "feed=1&token=golden-token&lat=41.9&lon=12.5&zone=Europe%2FRome"
         "&location=caf%E9+%C3%28+%E2%82+%F0%9F%8C+%ED%A0%80+%C0%AF&daynight=1",
         "location-nul": "feed=1&token=golden-token&lat=41.9&lon=12.5&location=a%00b&daynight=1",
-        # Coordinates: limits, formats PHP's filter accepts or rejects
+        # Coordinates: limits, and formats the parser accepts or rejects
         "lat-out-of-range": "feed=1&token=golden-token&lat=91&lon=181&daynight=1",
         "lat-exponent": "feed=1&token=golden-token&lat=4.19e1&lon=1.2e1&daynight=1&civil=1",
         "lat-padded": "feed=1&token=golden-token&lat=+41.9%20&lon=%0A12.5&daynight=1",
@@ -201,7 +201,7 @@ def _cases() -> list[Case]:
         # Flags must be exactly "1"
         "flags-not-one": "feed=1&token=golden-token&lat=45&lon=9&civil=on&nautical=true&astro=2&daynight=1",
         "flags-array": "feed=1&token=golden-token&lat=45&lon=9&civil[]=1&daynight=1",
-        # PHP's parameter names: dots and spaces become underscores, the last value wins
+        # Parameter names: dots and spaces, and a repeated name, whose last value wins
         "names-mangled": "feed=1&token=golden-token&lat=45&lon=9&rise.off=30&set%20off=-30&daynight=1",
         "names-repeated": "feed=1&token=golden-token&lat=10&lat=45&lon=9&daynight=1&daynight=0&civil=1",
         "plus-as-space": "feed=1&token=golden-token&lat=45&lon=9&location=San+Marino%2BCity&daynight=1",

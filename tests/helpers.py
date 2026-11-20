@@ -1,4 +1,4 @@
-"""Shared assertions and helpers for the solar calculation tests (the PHP suite's BaseTest)."""
+"""Shared assertions and helpers for the solar calculation tests."""
 
 from __future__ import annotations
 

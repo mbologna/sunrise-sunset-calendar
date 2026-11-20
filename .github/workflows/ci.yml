@@ -44,9 +44,6 @@ jobs:
       # tags build nothing.
       publish: push
       push_to_dockerhub: false
-      # tests/php_reference/Dockerfile pins the last PHP release's image by
-      # this tag; the cleanup keeps only five versions.
-      cleanup_keep_tags: '^sha-b47c648$'
       # Proves the image serves: starts the server, waits for it, then wants
       # the health check and a one-week feed back (on loopback: the smoke test
       # runs without network).
