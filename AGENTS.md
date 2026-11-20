@@ -6,7 +6,8 @@ iCalendar feed of sunrise, sunset, twilight and moon phases for any location, co
 
 - `src/sunrise_sunset_calendar/`: the package. `app.main()` is the console
   script `sunrise-sunset-calendar`, the image's entry point: a web service
-  that serves the page and the feed with waitress on `$PORT` (8080).
+  that serves the page, the feed and the JSON endpoint (`api.py`) with
+  waitress on `$PORT` (8080).
 - `tests/`: pytest. `tests/golden/` replays a corpus of recorded responses
   and compares the bytes; `make_corpus.py` records it again when the output
   changes on purpose (README, "Development").

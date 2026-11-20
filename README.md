@@ -64,10 +64,43 @@ All settings are environment variables.
 |------|----------|
 | `/?token=…` | The web page that builds subscription URLs; without the token, 403 |
 | `/?feed=1&…` | The feed (parameters below) |
+| `/api/v1/now?token=…&lat=…&lon=…&zone=…` | The sun and the moon at a moment, as JSON (see [JSON](#json)) |
 | `/assets/` | The page's CSS and JavaScript; its address search calls [Nominatim](https://nominatim.org/) from the browser |
 | `/health` | `{"status":"ok","years":[2000,2148]}`, the years the ephemeris serves; 503 with `"status":"down"` and the problem when `CALENDAR_PAST_DAYS` or `CALENDAR_WINDOW_DAYS` reach outside them |
 
 Every other path returns 404. Every response carries `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and a `Content-Security-Policy` that allows only the page's own script and stylesheet, and Nominatim. Feeds are `Cache-Control: private`, because their URL holds the token, and carry an `ETag`: a request whose `If-None-Match` matches it gets a 304 without the feed being built, until local midnight or the next deploy. The page, errors and `/health` are `no-store`. Behind a proxy that serves the app on another host, it builds subscription URLs from the `X-Forwarded-Host` header and ignores a malformed value.
+
+## JSON
+
+`GET /api/v1/now?token=TOKEN&lat=41.9028&lon=12.4964&zone=Europe/Rome` answers with the sun and the moon now, or at the moment `at` names: a Unix time, or an ISO 8601 date and time (read in `zone` without an offset), between 2000 and 2148.
+
+```json
+{
+  "at": "2026-11-20T12:42:00+01:00",
+  "location": {"lat": 41.9028, "lon": 12.4964, "zone": "Europe/Rome"},
+  "sun": {
+    "altitude": 27.42, "azimuth": 192.3, "up": true, "period": "daylight",
+    "today": {
+      "astronomical_dawn": "2026-11-20T05:28:00+01:00", "first_light": "2026-11-20T06:01:10+01:00",
+      "civil_dawn": "2026-11-20T06:35:12+01:00", "sunrise": "2026-11-20T07:05:32+01:00",
+      "solar_noon": "2026-11-20T11:55:37+01:00", "sunset": "2026-11-20T16:45:19+01:00",
+      "civil_dusk": "2026-11-20T17:15:39+01:00", "last_light": "2026-11-20T17:49:41+01:00",
+      "astronomical_dusk": "2026-11-20T18:22:49+01:00", "day_length": 34787, "polar": null
+    },
+    "next": {"event": "sunset", "at": "2026-11-20T16:45:19+01:00"}
+  },
+  "moon": {
+    "altitude": -15.77, "azimuth": 70.22, "up": false, "illumination": 78.8, "phase": "Waxing Gibbous",
+    "next_phase": {"name": "Full Moon", "at": "2026-11-24T15:53:34+01:00"},
+    "next_rise": "2026-11-20T14:05:57+01:00", "next_set": "2026-11-21T03:13:29+01:00"
+  }
+}
+```
+
+- `altitude` is the centre of the body above the horizon, in degrees and without refraction; `azimuth` is in degrees from north. `up` follows the feed's rules: the sun's centre above −0.8333°, the moon's upper limb above the horizon.
+- `period` is where the sun is: `daylight`, `civil_twilight`, `nautical_twilight`, `astronomical_twilight` or `night`.
+- `today` holds the local date's events; an event that doesn't happen (polar day or night) is `null`, and `polar` is `"day"`, `"night"` or `null`. `day_length` is in seconds.
+- Without a token, 403. Input it can't read gets a 400 with `{"error": "…"}`, unlike the feed, which falls back to defaults. Responses are `no-store`.
 
 ## Feed URL parameters
 
@@ -140,6 +173,7 @@ CI runs ruff and the tests through `mbologna/.github`'s `python-ci`, then builds
 ```
 ├── src/sunrise_sunset_calendar/
 │   ├── app.py          # WSGI app: configuration, routing, headers, input sanitisation; main() serves it
+│   ├── api.py          # the JSON endpoint: the sun and the moon at a moment
 │   ├── feed.py         # generate_calendar(): builds the VCALENDAR
 │   ├── helpers.py      # iCalendar escaping and folding, descriptions, year statistics
 │   ├── astronomy.py    # skyfield: sun_events(), twilight, equinoxes and solstices, moon phases, moonrise and moonset

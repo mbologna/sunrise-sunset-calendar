@@ -210,6 +210,31 @@ def _moon_height(observer) -> Callable[[np.ndarray], np.ndarray]:
 
 
 # ============================================================================
+# POSITIONS AT A MOMENT
+# ============================================================================
+
+
+def sun_position(ts: float, lat: float, lon: float) -> tuple[float, float, bool]:
+    """The sun's altitude (its centre, without refraction) and azimuth in degrees, and whether it's up.
+
+    Up means its centre is above -0.8333°, the sunrise and sunset rule.
+    """
+    observer = _EARTH + wgs84.latlon(lat, lon)
+    altitude, azimuth, _ = observer.at(_times(ts)).observe(_SUN).apparent().altaz()
+    return float(altitude.degrees), float(azimuth.degrees), bool(altitude.degrees > SUNRISE_ALTITUDE)
+
+
+def moon_position(ts: float, lat: float, lon: float) -> tuple[float, float, bool]:
+    """The moon's altitude (its centre, without refraction) and azimuth in degrees, and whether it's up.
+
+    Up means its upper limb is above the horizon, refraction included, the moonrise rule.
+    """
+    observer = _EARTH + wgs84.latlon(lat, lon)
+    altitude, azimuth, distance = observer.at(_times(ts)).observe(_MOON).apparent().altaz()
+    return float(altitude.degrees), float(azimuth.degrees), bool(altitude.radians > _MOON_HORIZON(distance))
+
+
+# ============================================================================
 # THE SUN
 # ============================================================================
 
