@@ -4,12 +4,8 @@ from __future__ import annotations
 
 import io
 import json
-import platform
-import time
 import warnings
 from urllib.parse import urlencode
-
-import pytest
 
 from sunrise_sunset_calendar import app
 from tests.helpers import StartResponse
@@ -41,9 +37,7 @@ def request(query: str, path: str = "/") -> str:
 def test_health_endpoint() -> None:
     data = json.loads(request("", path="/health"))
 
-    assert data["status"] == "ok"
-    assert data["python"] == platform.python_version()
-    assert data["timestamp"] == pytest.approx(time.time(), abs=60)
+    assert data == {"status": "ok", "years": [2000, 2148]}
 
 
 def test_feed_rejects_wrong_token() -> None:

@@ -64,9 +64,9 @@ All settings are environment variables.
 | `/` | The web page that builds subscription URLs |
 | `/?feed=1&…` | The feed (parameters below) |
 | `/assets/` | The page's CSS and JavaScript; its address search calls [Nominatim](https://nominatim.org/) from the browser |
-| `/health` | `{"status":"ok","python":"<version>","timestamp":<unix time>}`, with `Cache-Control: no-store` |
+| `/health` | `{"status":"ok","years":[2000,2148]}`, the years the ephemeris serves; 503 with `"status":"down"` and the problem when `CALENDAR_PAST_DAYS` or `CALENDAR_WINDOW_DAYS` reach outside them |
 
-Every other path returns 404. Behind a proxy that serves the app on another host, it builds subscription URLs from the `X-Forwarded-Host` header and ignores a malformed value.
+Every other path returns 404. Every response carries `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and a `Content-Security-Policy` that allows only the page's own script and stylesheet, and Nominatim. Feeds are `Cache-Control: private`, because their URL holds the token; the page, errors and `/health` are `no-store`. Behind a proxy that serves the app on another host, it builds subscription URLs from the `X-Forwarded-Host` header and ignores a malformed value.
 
 ## Feed URL parameters
 

@@ -611,7 +611,7 @@ STRINGS: Strings = {
     },
     # Responses of the HTTP entry point
     "errors": {
-        "missing_token": "Error: Please set AUTH_TOKEN via environment variable or config/config.php",  # nosec B105: an error message, not a credential
+        "missing_token": "Error: set the AUTH_TOKEN environment variable",  # nosec B105: an error message, not a credential
         "invalid_token": "Invalid authentication token",  # nosec B105: an error message, not a credential
         "invalid_password": "Invalid password",  # nosec B105: an error message, not a credential
     },

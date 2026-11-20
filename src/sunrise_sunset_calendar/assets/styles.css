@@ -267,3 +267,20 @@ hr {
         margin-bottom: 10px;
     }
 }
+
+/* In place of inline styles, which the Content-Security-Policy blocks */
+.spaced {
+    margin-top: 20px;
+}
+
+#address-search {
+    margin-top: 15px;
+}
+
+#geocode-address {
+    margin-top: 10px;
+}
+
+.help-text.event-types-help {
+    margin-bottom: 10px;
+}

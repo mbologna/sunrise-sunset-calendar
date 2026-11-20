@@ -1,6 +1,9 @@
+// The page's strings, in a JSON block: the Content-Security-Policy allows no inline script
+const STRINGS = JSON.parse(document.getElementById('strings').textContent);
+
 function showAddressSearch() {
     const searchDiv = document.getElementById('address-search');
-    searchDiv.style.display = searchDiv.style.display === 'none' ? 'block' : 'none';
+    searchDiv.hidden = !searchDiv.hidden;
 }
 
 // Address lookups go from the browser straight to OpenStreetMap Nominatim
@@ -162,6 +165,23 @@ function copyToClipboard(elementId, button) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+    // Handlers are bound here, not in the markup: the Content-Security-Policy runs no inline script
+    document.getElementById('use-location').addEventListener('click', getLocation);
+    document.getElementById('show-address-search').addEventListener('click', showAddressSearch);
+    document.getElementById('geocode-address').addEventListener('click', geocodeAddress);
+    document.getElementById('lat').addEventListener('change', reverseGeocode);
+    document.getElementById('lon').addEventListener('change', reverseGeocode);
+    document.getElementById('feed-form').addEventListener('submit', function (e) {
+        if (!validateForm()) {
+            e.preventDefault();
+        }
+    });
+    document.querySelectorAll('[data-copy]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            copyToClipboard(button.dataset.copy, button);
+        });
+    });
+
     // Default the timezone to the browser's own, when the list has it
     const zone = document.getElementById('zone');
     const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;

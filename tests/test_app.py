@@ -1,4 +1,4 @@
-"""The HTTP layer: status codes, headers, routing and configuration, as the PHP entry point had them."""
+"""The HTTP layer: status codes, headers, routing and configuration."""
 
 from __future__ import annotations
 
@@ -13,7 +13,13 @@ from tests.helpers import StartResponse
 
 TOKEN = b"app-test-token"
 NOW = 1774778400  # 2026-03-29 10:00 UTC
-SECURITY = [("X-Content-Type-Options", "nosniff"), ("X-Frame-Options", "DENY"), ("Referrer-Policy", "no-referrer")]
+SECURITY = [
+    ("X-Content-Type-Options", "nosniff"),
+    ("X-Frame-Options", "DENY"),
+    ("Referrer-Policy", "no-referrer"),
+    ("Content-Security-Policy", app_module.CONTENT_SECURITY_POLICY),
+]
+NO_STORE = ("Cache-Control", "no-store")
 
 
 def call(
@@ -44,20 +50,24 @@ def config() -> Config:
 def test_without_a_token_every_request_fails(token: bytes | None) -> None:
     status, headers, body = call(Config(auth_token=token), "/health")
     assert status == "500 Internal Server Error"
-    assert body == b"Error: Please set AUTH_TOKEN via environment variable or config/config.php"
-    # PHP exits before it sets the security headers
-    assert headers[0] == ("Content-Type", "text/html; charset=UTF-8")
-    assert not any(name.startswith("X-") for name, _ in headers)
+    assert body == b"Error: set the AUTH_TOKEN environment variable"
+    assert headers[:6] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8"), NO_STORE]
 
 
 def test_health(config: Config) -> None:
     status, headers, body = call(config, "/health")
     assert status == "200 OK"
-    assert headers[:5] == [*SECURITY, ("Content-Type", "application/json"), ("Cache-Control", "no-store")]
+    assert headers[:6] == [*SECURITY, ("Content-Type", "application/json"), NO_STORE]
+    assert json.loads(body) == {"status": "ok", "years": [2000, 2148]}
+
+
+@pytest.mark.parametrize(("past", "window"), [(30, 50000), (10000, 400)])
+def test_health_is_down_when_feeds_reach_past_the_ephemeris(past: int, window: int) -> None:
+    status, _, body = call(Config(auth_token=TOKEN, past_days=past, window_days=window), "/health")
+    assert status == "503 Service Unavailable"
     data = json.loads(body)
-    assert data["status"] == "ok"
-    assert data["timestamp"] == NOW
-    assert "python" in data
+    assert data["status"] == "down"
+    assert data["problems"][0].endswith("outside the ephemeris")
 
 
 def test_health_head_has_no_body(config: Config) -> None:
@@ -76,10 +86,10 @@ def test_the_old_health_query_is_just_the_page(config: Config) -> None:
 def test_feed_headers(config: Config) -> None:
     status, headers, body = call(config, query=f"feed=1&token={TOKEN.decode()}&daynight=1")
     assert status == "200 OK"
-    assert headers[:5] == [
+    assert headers[:6] == [
         *SECURITY,
         ("Content-Type", "text/calendar; charset=utf-8"),
-        ("Cache-Control", "max-age=7200"),
+        ("Cache-Control", "private, max-age=7200"),
     ]
     assert body.startswith(b"BEGIN:VCALENDAR\r\n")
     assert b"REFRESH-INTERVAL;VALUE=DURATION:PT2H\r\n" in body
@@ -90,14 +100,18 @@ def test_feed_rejects_bad_tokens(config: Config, query: str) -> None:
     status, headers, body = call(config, query=query)
     assert status == "403 Forbidden"
     assert body == b"Invalid authentication token"
-    assert headers[:4] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8")]
+    assert headers[:6] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8"), NO_STORE]
 
 
 def test_page(config: Config) -> None:
     status, headers, body = call(config, "/")
     assert status == "200 OK"
-    assert headers[:4] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8")]
+    assert headers[:6] == [*SECURITY, ("Content-Type", "text/html; charset=UTF-8"), NO_STORE]
     assert b'<option value="Europe/Rome" selected>Europe/Rome</option>' in body
+    # Nothing inline for the Content-Security-Policy to block
+    assert b"<script>" not in body
+    assert b"onclick" not in body and b"onchange" not in body and b"onsubmit" not in body
+    assert b"style=" not in body
 
 
 @pytest.mark.parametrize("path", ["/sunrise-sunset-calendar.php", "/sunrise-sunset-calendar.php/extra"])
@@ -120,6 +134,7 @@ def test_head_has_no_body(config: Config) -> None:
 def test_assets(config: Config, path: str, content_type: str) -> None:
     status, headers, body = call(config, path)
     assert status == "200 OK"
+    assert headers[:4] == SECURITY
     assert dict(headers)["Content-Type"] == content_type
     assert len(body) == int(dict(headers)["Content-Length"]) > 100
     assert call(config, path, method="HEAD")[2] == b""
@@ -127,7 +142,9 @@ def test_assets(config: Config, path: str, content_type: str) -> None:
 
 @pytest.mark.parametrize("path", ["/index.php", "/src/app.py", "/assets/", "/favicon.ico"])
 def test_other_paths_are_not_found(config: Config, path: str) -> None:
-    assert call(config, path)[0] == "404 Not Found"
+    status, headers, _ = call(config, path)
+    assert status == "404 Not Found"
+    assert headers[:4] == SECURITY
 
 
 def form_post(config: Config, body: bytes, content_type: str, **extra: str) -> tuple[str, list[tuple[str, str]], bytes]:
