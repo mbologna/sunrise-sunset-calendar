@@ -22,6 +22,7 @@ to 2148. To make it again, from https://ssd.jpl.nasa.gov/ftp/eph/planets/bsp/de4
 
 from __future__ import annotations
 
+import math
 import threading
 from collections.abc import Callable, Hashable
 from datetime import UTC, datetime
@@ -235,9 +236,16 @@ def calculate_sun_times(y: int, m: int, d: int, lat: float, lon: float, utc_offs
 
     midnight = gmmktime(0, 0, 0, m, d, y) - utc_offset * 3600
     noon = midnight + DAY / 2
-    transits, declinations, crossings = _solar_year(float(lat), float(lon), _utc_year(noon))
-    i = int(np.searchsorted(transits, noon))
-    if i == len(transits) or (i > 0 and noon - transits[i - 1] < transits[i] - noon):
+    # The date's solar day is the one around the mean solar noon nearest its local noon. Mean noon
+    # advances exactly a day a day, unlike the transit, which the equation of time moves by up to
+    # 16 minutes: where solar noon is near local midnight, the nearest transit could serve two
+    # dates. A tie (solar noon at local midnight) goes to the earlier: daylight saving only moves
+    # local noon earlier, so the choice holds across it.
+    mean_noon = DAY / 2 - lon * 240
+    target = mean_noon + math.ceil((noon - mean_noon) / DAY - 0.5) * DAY
+    transits, declinations, crossings = _solar_year(float(lat), float(lon), _utc_year(target))
+    i = int(np.searchsorted(transits, target))
+    if i == len(transits) or (i > 0 and target - transits[i - 1] < transits[i] - target):
         i -= 1
     transit, decl = float(transits[i]), float(declinations[i])
     # The solar day runs from the solar midnight before the transit to the one after, halfway to
@@ -251,23 +259,32 @@ def calculate_sun_times(y: int, m: int, d: int, lat: float, lon: float, utc_offs
     result: dict = {"declination_deg": decl, "solar_noon_frac": frac(transit)}
     for (begin, end), altitude in _BANDS.items():
         rises, sets = crossings[altitude]
-        first_rise, noon_rise = np.searchsorted(rises, [day_start, transit], "right")
-        noon_set, last_set = np.searchsorted(sets, [transit, day_end])
-        # The rise before solar noon and the set after it
+        first_rise, noon_rise, last_rise = np.searchsorted(rises, [day_start, transit, day_end], "right")
+        first_set, noon_set, last_set = np.searchsorted(sets, [day_start, transit, day_end])
+        # The rise before solar noon and the set after it. Each side stands alone: the day a polar
+        # day or night starts or ends, the sun crosses once. At a pole, where the sun barely moves
+        # in altitude through a day, the year's one sunrise or sunset can fall on the other side
+        # of noon (elsewhere it can't, the sun being lower at midnight than at noon); it is kept
+        # for the day's daylight. Twilight keeps to its side of noon, where its spans are.
         rise = float(rises[noon_rise - 1]) if noon_rise > first_rise else None
         set_ = float(sets[noon_set]) if last_set > noon_set else None
-        # A band crossed on one side only (the day a polar day starts or ends) counts as not crossed
-        if rise is None or set_ is None:
-            rise = set_ = None
+        if altitude == SUNRISE_ALTITUDE:
+            if rise is None and last_rise > noon_rise:
+                rise = float(rises[noon_rise])
+            if set_ is None and noon_set > first_set:
+                set_ = float(sets[noon_set - 1])
         result[f"{begin}_frac"] = frac(rise)
         result[f"{end}_frac"] = frac(set_)
 
-    if result["sunrise_frac"] is None:
+    rise, set_, noon_frac = result["sunrise_frac"], result["sunset_frac"], result["solar_noon_frac"]
+    if rise is None and set_ is None:
         polar = "day" if 90 - abs(lat - decl) > SUNRISE_ALTITUDE else "night"
         result["daylength_h"] = 24.0 if polar == "day" else 0.0
     else:
+        # A missing sunrise or sunset: the sun is up from or until solar midnight
         polar = None
-        result["daylength_h"] = (result["sunset_frac"] - result["sunrise_frac"]) * 24
+        start = rise if rise is not None else noon_frac - 0.5
+        result["daylength_h"] = ((set_ if set_ is not None else noon_frac + 0.5) - start) * 24
     result["polar"] = polar
     store[key] = result
     return result

@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from skyfield.api import wgs84
 
-from sunrise_sunset_calendar import astronomy
+from sunrise_sunset_calendar import astronomy, php
 from sunrise_sunset_calendar.php import gmdate, gmmktime
 
 START, STOP = gmmktime(0, 0, 0, 1, 1, 2026), gmmktime(0, 0, 0, 1, 1, 2027)
@@ -76,3 +76,19 @@ def test_the_moon_rises_and_sets_at_the_north_pole() -> None:
     kinds = [kind for kind, _ in night["events"]]
     assert kinds in (["rise", "set"], ["set", "rise"], ["set", "rise", "set"], ["rise", "set", "rise"])
     assert night["up_at_start"] == (kinds[0] == "set")
+
+
+@pytest.mark.parametrize(
+    ("lat", "lon", "zone"), [(-90.0, 0.0, "Antarctica/McMurdo"), (51.5074, -0.1278, "Pacific/Kiritimati")]
+)
+def test_consecutive_dates_have_consecutive_solar_days(lat: float, lon: float, zone: str) -> None:
+    """Even where solar noon falls near local midnight, which the equation of time moves either side."""
+    tz = php.zone(zone)
+    day = php.LocalDate.parse("2026-01-01", tz)
+    noons = []
+    while day.year == 2026:
+        noons.append(astronomy.sun_events(day, lat, lon)["solar_noon"])
+        day = day.add_days(1)
+    gaps = np.diff(noons)
+    assert gaps.min() > 86400 - 60
+    assert gaps.max() < 86400 + 60
