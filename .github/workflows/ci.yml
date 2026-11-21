@@ -21,7 +21,7 @@ jobs:
   # ruff, the tests with the coverage gate (fail_under in pyproject.toml)
   # and pip-audit on the locked runtime dependencies.
   python:
-    uses: mbologna/.github/.github/workflows/python-ci.yml@d5f1cd97c9f8b34b1eacdacb39d1a30093f6f8c9 # main
+    uses: mbologna/.github/.github/workflows/python-ci.yml@52b335cb95b89c4084d3914b07fbceadc9a4e322 # main
     with:
       python_version: "3.15"
       enable_codecov: false
@@ -36,7 +36,7 @@ jobs:
       id-token: write
       attestations: write
       security-events: write
-    uses: mbologna/.github/.github/workflows/docker-ci.yml@d5f1cd97c9f8b34b1eacdacb39d1a30093f6f8c9 # main
+    uses: mbologna/.github/.github/workflows/docker-ci.yml@52b335cb95b89c4084d3914b07fbceadc9a4e322 # main
     with:
       image_name: sunrise-sunset-calendar
       # Every push to main publishes the image, tagged latest and
@@ -71,7 +71,7 @@ jobs:
     # contents: push the tag and create the Release.
     permissions:
       contents: write
-    uses: mbologna/.github/.github/workflows/auto-release.yml@d5f1cd97c9f8b34b1eacdacb39d1a30093f6f8c9 # main
+    uses: mbologna/.github/.github/workflows/auto-release.yml@52b335cb95b89c4084d3914b07fbceadc9a4e322 # main
     with:
       strategy: conventional
       # The security strategy compares this Dockerfile's base image at the
