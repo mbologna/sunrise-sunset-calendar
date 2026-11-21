@@ -291,9 +291,9 @@ STRINGS: Strings = {
         "sun_peak_skimming": "Highest at {}, skimming the horizon",
         "sun_skimming_all_day": "The sun circles the sky skimming the horizon all day.",
         # First and last light in the military sense: the start of morning and the end of evening
-        # nautical twilight. The note names the end of the twilight it sits on.
-        "first_light": "From first light: horizon visible",
-        "last_light": "Until last light: horizon fades",
+        # nautical twilight. The note says which end of the twilight it is: its start, or its end.
+        "first_light": "Begins at first light: horizon shows",
+        "last_light": "Ends at last light: horizon fades",
         "midnight_sun": "Midnight sun: the sun does not set today.",
         "night_all_day": "Polar night: the sun stays more than 18° below the horizon all day, so night lasts "
         "around the clock.",
