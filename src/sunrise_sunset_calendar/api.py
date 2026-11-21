@@ -20,13 +20,13 @@ from .numbers import round_int
 # The day's sun events in time order, by their name in the JSON
 _SUN_EVENTS = {
     "astronomical_dawn": "astro_begin",
-    "first_light": "nautical_begin",
+    "nautical_dawn": "nautical_begin",
     "civil_dawn": "civil_begin",
     "sunrise": "sunrise",
     "solar_noon": "solar_noon",
     "sunset": "sunset",
     "civil_dusk": "civil_end",
-    "last_light": "nautical_end",
+    "nautical_dusk": "nautical_end",
     "astronomical_dusk": "astro_end",
 }
 # Where the sun is, by the lowest altitude of its centre in each period

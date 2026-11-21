@@ -290,10 +290,6 @@ STRINGS: Strings = {
         "sun_low_skimming": "skimming the horizon",
         "sun_peak_skimming": "Highest at {}, skimming the horizon",
         "sun_skimming_all_day": "The sun circles the sky skimming the horizon all day.",
-        # First and last light in the military sense: the start of morning and the end of evening
-        # nautical twilight. The note names the end of the twilight it sits on.
-        "first_light": "From first light: horizon visible",
-        "last_light": "Until last light: horizon fades",
         "midnight_sun": "Midnight sun: the sun does not set today.",
         "night_all_day": "Polar night: the sun stays more than 18° below the horizon all day, so night lasts "
         "around the clock.",
@@ -361,8 +357,7 @@ STRINGS: Strings = {
             "fingers, at arm's length).",
             "text": "It is named for navigation at sea: the horizon becomes visible while bright stars are "
             "still out, so sailors could measure star altitudes with a sextant. On land, trees and "
-            "buildings show as silhouettes against a deep blue sky, but most tasks still need a light. "
-            "In military use its start is called first light.",
+            "buildings show as silhouettes against a deep blue sky, but most tasks still need a light.",
             "good_for": "bright stars and planets against a blue sky; silhouette photos.",
         },
         "morning_civil": {
@@ -370,7 +365,8 @@ STRINGS: Strings = {
             "text": 'It is named for everyday ("civil") activity: there is enough light to be outdoors '
             "without lamps under a clear sky. Colours return, only the brightest stars and planets "
             "remain, and streetlights typically switch off. Aviation rules in many countries count the night "
-            "as ending when this twilight begins.",
+            "as ending when this twilight begins. Weather apps call its start first light. The military uses "
+            "the term for the start of nautical twilight, with the sun 12° below.",
             "good_for": "early walks and runs; seeing the first colours of the day.",
         },
         "evening_civil": {
@@ -378,7 +374,8 @@ STRINGS: Strings = {
             "text": 'It is named for everyday ("civil") activity: until the sun is 6° down there is still '
             "enough light to be outdoors without lamps. Colours fade, the brightest stars and planets "
             "appear, and streetlights typically switch on. Aviation rules in many countries count the night "
-            "as starting when this twilight ends.",
+            "as starting when this twilight ends. Weather apps call its end last light; the military uses the "
+            "term for the end of nautical twilight, with the sun 12° below.",
             "good_for": "evening walks; the first bright stars and planets.",
         },
         "evening_nautical": {
@@ -387,7 +384,7 @@ STRINGS: Strings = {
             "text": "It is named for navigation at sea: the horizon is still visible while bright stars are "
             "out, so sailors could take star sights with a sextant. Most tasks now need a light. "
             "Satellites, including the International Space Station, are often visible: they are still "
-            "sunlit high overhead. In military use its end is called last light.",
+            "sunlit high overhead.",
             "good_for": "bright stars and planets; spotting satellites.",
         },
         "evening_astronomical": {
@@ -445,15 +442,19 @@ STRINGS: Strings = {
         "night_to_noon": "The sun stays more than 18° below the horizon all day tomorrow, so this night lasts "
         "until solar noon.",
     },
-    # One-line notes under the twilights in a schedule; a nautical twilight that reaches 12° below
-    # names first or last light instead (labels "first_light", "last_light")
+    # How each twilight changes the sky between its start and its end: the first line of a twilight
+    # event and its note in a schedule. Civil twilight runs from first light to sunrise and from sunset
+    # to last light (sun 6° below), as weather apps use the terms; "_unbounded" is a civil twilight that
+    # never gets 6° down (solar midnight bounds it), so it has no first or last light.
     "supplemental": {
-        "morning_astronomical": "First trace of sunlight",
-        "morning_nautical": "Horizon visible at sea",
-        "morning_civil": "Enough light without lamps",
-        "evening_civil": "Enough light without lamps",
-        "evening_nautical": "Horizon still visible at sea",
-        "evening_astronomical": "Last trace of sunlight",
+        "morning_astronomical": "Full dark gives way to a faint glow",
+        "morning_nautical": "Horizon appears as stars fade",
+        "morning_civil": "No lamps needed from first light",
+        "evening_civil": "No lamps needed until last light",
+        "evening_nautical": "Horizon fades as more stars appear",
+        "evening_astronomical": "The last glow fades to full dark",
+        "morning_civil_unbounded": "Enough light without lamps",
+        "evening_civil_unbounded": "Enough light without lamps",
     },
     # The twilights in a schedule, whose header already says the part of the day
     "schedule_names": {
