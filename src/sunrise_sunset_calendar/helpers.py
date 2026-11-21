@@ -37,6 +37,8 @@ class Carriers(TypedDict):
 
     morning: str | None
     evening: str | None
+    # The evening twilight nearest sunset, which says how sunset moved
+    sunset: str | None
 
 
 class DaylightInfo(TypedDict):
@@ -172,43 +174,74 @@ def format_range_bar(seconds: int, shortest: int, longest: int, width: int = 10)
     return format_duration(shortest) + " ▕" + "█" * filled + "░" * (width - filled) + "▏ " + format_duration(longest)
 
 
-def format_extremes(kind: str, seconds: int, shortest: tuple[int, int], longest: tuple[int, int]) -> str:
-    """Today against the year's shortest and longest day (or night), in words."""
+def format_extremes(
+    kind: str, seconds: int, shortest: tuple[int, int], longest: tuple[int, int], lengths: list[int]
+) -> list[str]:
+    """Today among the year's days (or nights): its rank, then the shortest and the longest.
+
+    "Longer than 58 of 365 days (16%)", "vs shortest (Dec 21): +29m (+5.2%)". On the extreme day itself, a
+    line naming it stands in for the rank and for that extreme.
+    """
     texts = S["year"][kind]
 
     def day(ts: int) -> str:
         return format_local(ts, "date_short")
 
-    def gap(diff: int) -> str:
+    def versus(text: str, extreme: tuple[int, int]) -> str:
         # Seconds matter only for a gap under a minute
-        return format_duration(diff, diff < 60)
+        diff = seconds - extreme[0]
+        return text.format(day(extreme[1]), format_signed_length(diff, abs(diff) < 60, extreme[0]))
 
     # Only the extreme day itself, allowing for rounding
     if seconds - shortest[0] <= 2:
-        return texts["is_shortest"].format(gap(longest[0] - seconds), day(longest[1]))
+        return [texts["is_shortest"], versus(texts["longest"], longest)]
     if longest[0] - seconds <= 2:
-        return texts["is_longest"].format(gap(seconds - shortest[0]), day(shortest[1]))
-    return texts["between"].format(
-        gap(seconds - shortest[0]), day(shortest[1]), gap(longest[0] - seconds), day(longest[1])
-    )
+        return [texts["is_longest"], versus(texts["shortest"], shortest)]
+    shorter = sum(1 for length in lengths if length < seconds)
+    rank = texts["rank"].format(shorter, len(lengths), f"{round_int(100 * shorter / len(lengths))}%")
+    return [rank, versus(texts["shortest"], shortest), versus(texts["longest"], longest)]
 
 
-def format_comparison(diff_seconds: int, referent: str) -> str:
-    """Two lengths compared in words: "2m 07s shorter than yesterday"."""
+def format_comparison(diff_seconds: int, referent: str, base: int) -> str:
+    """A length against an earlier one: "vs yesterday: −1m 50s (−0.3%)", the percentage of base."""
     if diff_seconds == 0:
         return S["comparisons"]["same"].format(referent)
-    return S["comparisons"]["longer" if diff_seconds > 0 else "shorter"].format(
-        format_duration(diff_seconds, True), referent
-    )
+    return S["comparisons"]["vs"].format(referent, format_signed_length(diff_seconds, True, base))
 
 
-def format_clock_shift(shift_seconds: int, alone: bool = False) -> str:
-    """How far an event moved on the clock since the day before: "1m 18s later"."""
+def format_signed_length(diff_seconds: int, with_seconds: bool, base: int) -> str:
+    """A change in length with its sign and, when it shows, its percentage of base: "+29m (+5.2%)"."""
+    length = ("+" if diff_seconds > 0 else "−") + format_duration(diff_seconds, with_seconds)
+    percent = format_percent(diff_seconds, base)
+    return length if percent is None else S["comparisons"]["percent"].format(length, percent)
+
+
+def format_percent(diff: float, base: float) -> str | None:
+    """A signed percentage of base: "−0.3%", "+5.2%", "−37%".
+
+    One decimal under 10%, whole numbers from there, and a true minus sign. None when there is
+    nothing to compare against (a base of zero) or the change rounds to 0.0%.
+    """
+    if base <= 0:
+        return None
+    value = 100 * diff / base
+    sign = "+" if value > 0 else "−"
+    magnitude = round(abs(value), 1)
+    if magnitude == 0:
+        return None
+    return sign + (f"{magnitude:.1f}" if magnitude < 10 else str(round_int(abs(value)))) + "%"
+
+
+def format_clock_shift(shift_seconds: int) -> str:
+    """How far an event moved on the clock since the day before: "1m 18s later than yesterday".
+
+    From ten minutes (polar days, where sunrise can move by most of an hour), to the minute.
+    """
     texts = S["clock"]
-    suffix = "_alone" if alone else ""
     if abs(shift_seconds) < 1:
-        return texts[f"same{suffix}"]
-    return texts[("later" if shift_seconds > 0 else "earlier") + suffix].format(format_duration(shift_seconds, True))
+        return texts["same"]
+    length = format_duration(shift_seconds, abs(shift_seconds) < 600)
+    return texts["later" if shift_seconds > 0 else "earlier"].format(length)
 
 
 def schedule_entry(start: int | None, end: int | None, label: str, note: str | None) -> str:
@@ -221,9 +254,7 @@ def schedule_entry(start: int | None, end: int | None, label: str, note: str | N
     else:
         when = format_local(start) + "–" + format_local(end)
     line = texts["entry"].format(when, label)
-    if start is not None and end is not None:
-        line += texts["length"].format(format_duration(end - start))
-    return line + "\n" + ("" if note is None else f"  {note}\n")
+    return line + "\n" + ("" if note is None else texts["indent"] + note + "\n")
 
 
 def format_schedule_span(label: str, span: Span, note: str) -> str:
@@ -231,14 +262,25 @@ def format_schedule_span(label: str, span: Span, note: str) -> str:
     return schedule_entry(span[0], span[1], label, note)
 
 
+def format_span_range(span: Span) -> str:
+    """A period's time range and length, for its details header: "07:07–16:43 (9h 36m)"."""
+    return S["schedule"]["range"].format(
+        format_local(span[0]), format_local(span[1]), format_duration(span[1] - span[0])
+    )
+
+
 def format_moon_section(moon: dict) -> str:
-    """The moon during the night: phase, moonless window, brightness and the next principal phase."""
+    """The moon during the night: phase, moonless window, brightness and a principal phase that night."""
     texts = S["moon"]
     lat = moon.get("lat", 0.0)
     lit = round_int(moon["illumination"])
     emoji = get_moon_phase_emoji(moon["phase_name"], lat)
 
     lines = [texts["current"].format(moon_phase_name(moon["phase_name"]), lit)]
+    # A principal phase that happens during the night, to the minute
+    if moon.get("night") is not None:
+        for phase in moon_phases_between(moon["night"][0], moon["night"][1]):
+            lines.append(texts["exact"].format(moon_phase_name(phase["name"]), format_local(phase["timestamp"])))
     if moon.get("rise_set") is not None and moon.get("night") is not None:
         windows = moonless_windows(moon["rise_set"], moon["night"][0], moon["night"][1])
         whole = moon["night"][1] - moon["night"][0]
@@ -247,22 +289,15 @@ def format_moon_section(moon: dict) -> str:
         elif len(windows) == 1 and windows[0][1] - windows[0][0] >= whole:
             lines.append(texts["moonless_all"])
         else:
-            lines.append(
-                texts["moonless"].format(
-                    ", ".join(
-                        format_local(w[0]) + "–" + format_local(w[1]) + " (" + format_duration(w[1] - w[0]) + ")"
-                        for w in windows
-                    )
-                )
-            )
+            # One window with its length; several only by their times, to fit one line
+            def window(w: list[int]) -> str:
+                times = format_local(w[0]) + "–" + format_local(w[1])
+                return times + " (" + format_duration(w[1] - w[0]) + ")" if len(windows) == 1 else times
+
+            lines.append(texts["moonless"].format(", ".join(window(w) for w in windows)))
         up_at_all = not windows or len(windows) > 1 or windows[0][1] - windows[0][0] < whole
         if up_at_all:
             lines.append(texts["impact"]["dark" if lit < 25 else ("partial" if lit <= 75 else "bright")])
-    # A principal phase that happens during the night, to the minute
-    if moon.get("night") is not None:
-        for phase in moon_phases_between(moon["night"][0], moon["night"][1]):
-            exact = texts["exact"].format(moon_phase_name(phase["name"]), format_local(phase["timestamp"]))
-            lines[0] += f" · {exact}"
 
     return S["headers"]["moon"].format(emoji) + "\n" + "\n".join(lines) + "\n"
 
@@ -390,16 +425,6 @@ _TWILIGHT_BANDS = {
     "evening_astronomical": _band("astro", 18, 12, False, "evening-astronomical-twilight"),
 }
 
-# Twilight boundaries in a year-profile record: [deep crossing, shallow crossing]
-_TWILIGHT_PROFILE_FIELDS = {
-    "morning_astronomical": ("astro_begin_frac", "nautical_begin_frac"),
-    "morning_nautical": ("nautical_begin_frac", "civil_begin_frac"),
-    "morning_civil": ("civil_begin_frac", "sunrise_frac"),
-    "evening_civil": ("civil_end_frac", "sunset_frac"),
-    "evening_nautical": ("nautical_end_frac", "civil_end_frac"),
-    "evening_astronomical": ("astro_end_frac", "nautical_end_frac"),
-}
-
 
 def _pick_first(values: list[float], target: float) -> int:
     for i, v in enumerate(values):
@@ -441,41 +466,6 @@ def year_summary(lat: float, lon: float, year: int, utc_offset: float) -> dict:
     # No astronomical night: the sun never crosses -18° because it stays above it at midnight
     white_nights = [d["astro_begin_frac"] is None and abs(lat + d["declination_deg"]) - 90 > -18 for d in days]
 
-    # Twilight lengths by day, with the same solar noon and midnight stand-ins as solar_spans()
-    bands: dict[str, dict[str, list[int]] | None] = {}
-    for band, (deep, shallow) in _TWILIGHT_PROFILE_FIELDS.items():
-        info = _TWILIGHT_BANDS[band]
-        deep_angle, high_angle, morning = info["deep"], info["high"], info["morning"]
-        by_day: dict[int, int] = {}
-        for i, d in enumerate(days):
-            noon = d["solar_noon_frac"]
-            if d[deep] is None and d[shallow] is None:
-                in_band = (
-                    abs(lat + d["declination_deg"]) - 90 > -deep_angle
-                    and 90 - abs(lat - d["declination_deg"]) < -high_angle
-                )
-                if in_band:
-                    by_day[i] = 43200
-                continue
-            if morning:
-                span = (d[shallow] if d[shallow] is not None else noon) - (
-                    d[deep] if d[deep] is not None else noon - 0.5
-                )
-            else:
-                span = (d[deep] if d[deep] is not None else noon + 0.5) - (
-                    d[shallow] if d[shallow] is not None else noon
-                )
-            by_day[i] = round_int(span * 86400)
-        if not by_day:
-            bands[band] = None
-        else:
-            lo = min(by_day.values())
-            hi = max(by_day.values())
-            bands[band] = {
-                "min": [lo, timestamps[next(k for k, v in by_day.items() if v == lo)]],
-                "max": [hi, timestamps[next(k for k, v in by_day.items() if v == hi)]],
-            }
-
     # Night lengths by day, with the solar-noon stand-in for days the sun stays more than
     # 18° below the horizon. December's last night borrows January 1 for its morning.
     all_dark = [d["astro_begin_frac"] is None and 90 - abs(lat - d["declination_deg"]) < -18 for d in days]
@@ -500,7 +490,6 @@ def year_summary(lat: float, lon: float, year: int, utc_offset: float) -> dict:
         "midnight_sun": day_runs(polar_day, timestamps),
         "polar_night": day_runs(polar_night, timestamps),
         "white_nights": day_runs(white_nights, timestamps),
-        "bands": bands,
         "nights": nights,
     }
     memo[key] = result
@@ -649,7 +638,10 @@ def get_special_astronomical_events(year: int, lat: float) -> list[dict]:
 
 
 def season_description(event: dict, ev: dict, year: dict, lat: float) -> str:
-    """An equinox or solstice at the feed's location, with facts about that day only."""
+    """An equinox or solstice at the feed's location, with facts about that day only.
+
+    The moment and what it marks, then what the sun does (☀️ Sun) and the day's length (🔆 Daylight).
+    """
     texts = S["season_text"]
     seconds = round_int(ev["daylength_h"] * 3600)
 
@@ -658,15 +650,23 @@ def season_description(event: dict, ev: dict, year: dict, lat: float) -> str:
         texts["sun"][event["key"]],
         texts["begins"].format(S["seasons"][event["season"]]["season"].lower()),
     ]
+    sun: list[str] = []
+    day: list[str] = []
+
+    def versus(kind: str, extreme: list) -> str:
+        length = round_int(extreme[0] * 3600)
+        diff = seconds - length
+        return S["year"]["daylight"][kind].format(
+            format_local(extreme[1], "date_short"), format_signed_length(diff, abs(diff) < 60, length)
+        )
 
     if event["season"].endswith("equinox"):
         if ev["sunrise"] is not None and ev["sunset"] is not None:
-            lines.append(texts["east_west"])
-        line = texts["daylight"].format(format_duration(seconds))
+            sun.append(texts["east_west"])
+        day.append(texts["daylight"].format(format_duration(seconds)))
         if 12 * 3600 <= seconds <= 12 * 3600 + 20 * 60:
-            line += " " + texts["near_12"]
-        lines.append(line)
-        return "\n".join(lines)
+            day.append(texts["near_12"])
+        return section_text(lines, sun, day)
 
     noon = round_int(ev["noon_elevation"])
 
@@ -676,20 +676,30 @@ def season_description(event: dict, ev: dict, year: dict, lat: float) -> str:
 
     if event["season"] == "summer_solstice":
         if ev["polar"] != "day" and is_extreme(year["daylight_max"]):
-            lines.append(texts["longest_day"].format(format_duration(seconds)))
+            day += [texts["longest_day"].format(format_duration(seconds)), versus("shortest", year["daylight_min"])]
         # Outside the tropics the noon sun peaks at the solstice; inside, it passes overhead twice a year
-        lines.append(
+        sun.append(
             (texts["noon_highest"] if abs(lat) >= abs(ev["declination"]) else texts["noon_tropics"]).format(noon)
         )
     else:
         if ev["polar"] != "night" and is_extreme(year["daylight_min"]):
-            lines.append(texts["shortest_day"].format(format_duration(seconds)))
+            day += [texts["shortest_day"].format(format_duration(seconds)), versus("longest", year["daylight_max"])]
         if ev["polar"] == "night":
-            lines.append(texts["noon_below"].format(abs(noon)))
+            sun.append(texts["noon_below"].format(abs(noon)))
         elif ev["noon_elevation"] > 0:
-            lines.append(texts["noon_lowest"].format(noon))
+            sun.append(texts["noon_lowest"].format(noon))
 
-    return "\n".join(lines)
+    return section_text(lines, sun, day)
+
+
+def section_text(lines: list[str], sun: list[str], day: list[str]) -> str:
+    """Lines, then a ☀️ Sun and a 🔆 Daylight section, each left out when empty."""
+    parts = ["\n".join(lines)]
+    if sun:
+        parts.append(S["headers"]["sun"] + "\n" + "\n".join(sun))
+    if day:
+        parts.append(S["headers"]["daylight_plain"] + "\n" + "\n".join(day))
+    return "\n\n".join(parts)
 
 
 # ============================================================================
@@ -703,22 +713,32 @@ def missing_boundaries(key: str, span: Span) -> tuple[bool, bool]:
     return span[2 if morning else 3] == "solar_midnight", span[3 if morning else 2] == "solar_noon"
 
 
-def twilight_details(key: str, span: Span, ev: dict, year: dict, clock: str | None = None) -> str:
-    """The data lines of a twilight event: its length within the year's range, and the sun's path."""
-    labels = S["labels"]
-    length = format_duration(span[1] - span[0])
-    band = year["bands"][key]
-    lines = [
-        labels["length"].format(length)
-        if band is None
-        else labels["length_range"].format(length, format_range_bar(span[1] - span[0], band["min"][0], band["max"][0]))
-    ]
+def twilight_details(key: str, span: Span, ev: dict) -> str:
+    """The data lines of a twilight event: first or last light on a nautical twilight, and the sun's path
+    on a day it misses one of the boundaries. "" when there is neither."""
+    lines = []
+    crossing = light_crossing(key, span)
+    if crossing is not None:
+        lines.append(crossing)
     path = twilight_path(key, span, ev)
     if path is not None:
         lines.append(path)
-    if clock is not None:
-        lines.append(clock)
     return "\n".join(lines)
+
+
+def light_crossing(key: str, span: Span) -> str | None:
+    """First light on a morning nautical twilight that starts 12° below, last light on an evening one that
+    ends there; None otherwise (a twilight bounded by solar midnight never reaches 12° below)."""
+    if key == "morning_nautical" and span[2] != "solar_midnight":
+        return S["labels"]["first_light"]
+    if key == "evening_nautical" and span[3] != "solar_midnight":
+        return S["labels"]["last_light"]
+    return None
+
+
+def twilight_note(key: str, span: Span) -> str:
+    """The note under a twilight in a schedule: first or last light where it applies."""
+    return light_crossing(key, span) or S["supplemental"][key]
 
 
 def light_periods(ev: dict) -> list[tuple[str, int | None, int | None]]:
@@ -761,21 +781,16 @@ def grouped_light_periods(ev: dict) -> list[tuple[str, str, int | None, int | No
 
 
 def format_light_block(ev: dict) -> str:
-    """Blue and golden hour for the Daylight event, one line per part of the day."""
+    """Blue and golden hour for the Daylight event: a schedule under its header, or "" without either."""
     texts = S["light"]
-    groups: dict[str, list[str]] = {"morning": [], "midday": [], "evening": []}
-    for group, kind, start, end in grouped_light_periods(ev):
-        if start is None:
-            if end is None:
-                return texts["all_day"]
-            when = texts["until"].format(format_local(end))
-        elif end is None:
-            when = texts["from"].format(format_local(start))
-        else:
-            when = format_local(start) + "–" + format_local(end)
-        groups[group].append(texts["item"].format(texts[kind], when))
-
-    return "\n".join(texts[group].format(", ".join(items)) for group, items in groups.items() if items)
+    periods = light_periods(ev)
+    if not periods:
+        return ""
+    if any(start is None and end is None for _, start, end in periods):
+        body = texts["all_day"]
+    else:
+        body = "".join(schedule_entry(start, end, texts[kind], None) for kind, start, end in periods).rstrip("\n")
+    return S["headers"]["light"] + "\n" + body
 
 
 def light_entries(ev: dict, groups: list[str]) -> list[tuple[float, str]]:
@@ -784,14 +799,18 @@ def light_entries(ev: dict, groups: list[str]) -> list[tuple[float, str]]:
     entries = []
     for group, kind, start, end in grouped_light_periods(ev):
         if group in groups:
-            entries.append(
-                (start if start is not None else -math.inf, schedule_entry(start, end, texts[f"{kind}_entry"], None))
-            )
+            entry = schedule_entry(start, end, texts[f"{kind}_entry"], texts[f"{kind}_note"])
+            entries.append((start if start is not None else -math.inf, entry))
     return entries
 
 
 def format_sequence(key: str, spans: dict[str, Span | None]) -> str:
-    """Today's sequence with the current twilight bracketed: "Night → [Astronomical] → …"."""
+    """Today's sequence with the current twilight bracketed: "Astro → Nautical → [Civil] → Sunrise".
+
+    It runs from the night side, which every sequence reaches and so goes unsaid, to the sun: sunrise
+    or sunset, or noon on a day the sun stays below the horizon. On a day solar noon or midnight stands
+    in for a boundary, the data lines describe the sun's path.
+    """
     texts = S["sequence"]
     morning = key.startswith("morning")
     keys = (
@@ -800,16 +819,12 @@ def format_sequence(key: str, spans: dict[str, Span | None]) -> str:
         else ("evening_civil", "evening_nautical", "evening_astronomical")
     )
     present = [(k, span) for k in keys if (span := spans[k]) is not None]
-    first = present[0][1]
-    last = present[-1][1]
-    if morning:
-        opening = "solar_midnight" if first[2] == "solar_midnight" else "night"
-        closing = "solar_noon" if last[3] == "solar_noon" else "sunrise"
-    else:
-        opening = "solar_noon" if first[2] == "solar_noon" else "sunset"
-        closing = "solar_midnight" if last[3] == "solar_midnight" else "night"
     items = [f"[{texts[k]}]" if k == key else texts[k] for k, _ in present]
-    return " → ".join([texts[opening], *items, texts[closing]])
+    if morning:
+        sun = "solar_noon" if present[-1][1][3] == "solar_noon" else "sunrise"
+        return " → ".join([*items, texts[sun]])
+    sun = "solar_noon" if present[0][1][2] == "solar_noon" else "sunset"
+    return " → ".join([texts[sun], *items])
 
 
 def twilight_path(key: str, span: Span, ev: dict) -> str | None:
@@ -858,7 +873,7 @@ def twilight_about(key: str, span: Span, spans: dict[str, Span | None]) -> str:
     # The usual angles are wrong on a day the data lines describe a different path
     angles = "" if (deep_missing or high_missing) else about["angles"] + " "
     return (
-        S["headers"]["about"].format(S["names"][key])
+        S["headers"]["about"]
         + "\n"
         + format_sequence(key, spans)
         + "\n\n"
@@ -871,50 +886,58 @@ def twilight_about(key: str, span: Span, spans: dict[str, Span | None]) -> str:
     )
 
 
-def daylight_details(c: DayContext, with_clock: bool = True) -> str:
-    """Daylight facts: how the day is changing, where the sun peaks, and where the day sits in the year."""
+def daylight_details(c: DayContext) -> str:
+    """Daylight in numbers: the change since yesterday, and where the day sits among the year's days."""
     ev = c["ev"]
     d = c["daylight"]
     year = c["year"]
     labels = S["labels"]
 
     lines = [labels["midnight_sun"]] if ev["polar"] == "day" else []
-    trend = format_comparison(d["change"], S["comparisons"]["yesterday"])
-    if with_clock and d["sunrise_shift"] is not None and d["sunset_shift"] is not None:
-        trend += labels["clock"].format(format_clock_shift(d["sunrise_shift"]), format_clock_shift(d["sunset_shift"]))
-    lines.append(trend)
+    lines.append(format_comparison(d["change"], S["comparisons"]["yesterday"], d["seconds"] - d["change"]))
+    shortest = (round_int(year["daylight_min"][0] * 3600), year["daylight_min"][1])
+    longest = (round_int(year["daylight_max"][0] * 3600), year["daylight_max"][1])
+    lines.append(labels["over_year"].format(format_range_bar(d["seconds"], shortest[0], longest[0])))
+    # With polar day or night the extremes last weeks, so a single date (or a rank among ties) would mislead
+    if not year["polar"]:
+        lengths = [round_int(day["daylength_h"] * 3600) for day in year["days"]]
+        lines += format_extremes("daylight", d["seconds"], shortest, longest, lengths)
+    return "\n".join(lines) + "\n"
+
+
+def sun_section(c: DayContext, part: str) -> str:
+    """☀️ Sun: the sun's own events. "morning" has sunrise and the sun's highest point, "evening" sunset,
+    "day" (the Daylight event) all three. "" when there is nothing to say."""
+    d = c["daylight"]
+    labels = S["labels"]
+    lines = []
+    if part in ("morning", "day") and d["sunrise_shift"] is not None:
+        lines.append(labels["sunrise_shift"].format(format_clock_shift(d["sunrise_shift"])))
+    if part in ("morning", "day") and c["spans"]["daylight"] is not None:
+        lines += sun_peak_lines(c["ev"])
+    if part in ("evening", "day") and d["sunset_shift"] is not None:
+        lines.append(labels["sunset_shift"].format(format_clock_shift(d["sunset_shift"])))
+    return "" if not lines else S["headers"]["sun"] + "\n" + "\n".join(lines)
+
+
+def sun_peak_lines(ev: dict) -> list[str]:
+    """Where the sun peaks, and under the midnight sun where it is lowest."""
+    labels = S["labels"]
     # Refraction keeps the sun in sight with its centre just below the horizon: an angle that rounds
     # to 0° or below reads as skimming the horizon, not "-1° up"
     noon = round_int(ev["noon_elevation"])
     midnight = round_int(ev["midnight_elevation"])
     if ev["polar"] == "day" and noon <= 0:
-        lines.append(labels["sun_skimming_all_day"])
-    elif ev["polar"] == "day":
+        return [labels["sun_skimming_all_day"]]
+    if ev["polar"] == "day":
         lowest = labels["sun_low_up"].format(midnight) if midnight > 0 else labels["sun_low_skimming"]
-        lines.append(
-            labels["sun_peak_midnight_sun"].format(
-                format_local(ev["solar_noon"]), noon, format_local(ev["solar_noon"] + 43200), lowest
-            )
-        )
-    elif noon <= 0:
-        lines.append(labels["sun_peak_skimming"].format(format_local(ev["solar_noon"])))
-    else:
-        lines.append(labels["sun_peak"].format(format_local(ev["solar_noon"]), noon))
-    first, last = ev["nautical_begin"], ev["nautical_end"]
-    if first is not None and last is not None:
-        lines.append(labels["first_last_light"].format(format_local(first), format_local(last)))
-    elif first is not None:
-        lines.append(labels["first_light_only"].format(format_local(first)))
-    elif last is not None:
-        lines.append(labels["last_light_only"].format(format_local(last)))
-
-    shortest = (round_int(year["daylight_min"][0] * 3600), year["daylight_min"][1])
-    longest = (round_int(year["daylight_max"][0] * 3600), year["daylight_max"][1])
-    lines.append(labels["over_year"].format(format_range_bar(d["seconds"], shortest[0], longest[0])))
-    # With polar day or night the extremes last weeks, so a single date would mislead
-    if not year["polar"]:
-        lines.append(format_extremes("daylight", d["seconds"], shortest, longest))
-    return "\n".join(lines) + "\n"
+        return [
+            labels["sun_peak"].format(format_local(ev["solar_noon"]), noon),
+            labels["sun_low"].format(format_local(ev["solar_noon"] + 43200), lowest),
+        ]
+    if noon <= 0:
+        return [labels["sun_peak_skimming"].format(format_local(ev["solar_noon"]))]
+    return [labels["sun_peak"].format(format_local(ev["solar_noon"]), noon)]
 
 
 def night_details(c: DayContext) -> str:
@@ -947,7 +970,7 @@ def night_details(c: DayContext) -> str:
         lines.append(labels["over_year"].format(format_range_bar(n["seconds"], shortest[0], longest[0])))
         # Polar or white-night years have no single shortest or longest night worth dating
         if not c["year"]["polar"] and not c["year"]["white_nights"]:
-            lines.append(format_extremes("night", n["seconds"], shortest, longest))
+            lines += format_extremes("night", n["seconds"], shortest, longest, list(nights.values()))
 
     return ("" if not lines else "\n".join(lines) + "\n\n") + format_moon_section(n["moon"])
 
@@ -957,16 +980,17 @@ def daylight_about(ev: dict) -> str:
     text = S["about"]["daylight"]["text"]
     if light_periods(ev):
         text += " " + S["about_dynamic"]["light"]
-    return S["headers"]["about"].format(S["names"]["daylight"]) + "\n" + text
+    return S["headers"]["about"] + "\n" + text
 
 
 def night_about() -> str:
     """The "About" section of the Night event."""
-    return S["headers"]["about"].format(S["names"]["night"]) + "\n" + S["about"]["night"]["text"]
+    return S["headers"]["about"] + "\n" + S["about"]["night"]["text"]
 
 
-def build_dawn_supplemental(c: DayContext, key: str) -> str:
-    """The Today schedule: morning periods not subscribed to as events, in time order."""
+def build_dawn_supplemental(c: DayContext, key: str) -> tuple[str, str]:
+    """The morning schedule (morning periods not subscribed to as events, in time order) and the
+    Daylight details, on the morning twilight nearest daylight."""
     twilights = ("morning_astronomical", "morning_nautical", "morning_civil")
     carrier = c["carriers"]["morning"] == key
     # Without a Daylight event the photo light joins the schedule; the evening part goes on the
@@ -978,15 +1002,16 @@ def build_dawn_supplemental(c: DayContext, key: str) -> str:
     return build_supplemental(c, "today", twilights, "daylight", carrier, light)
 
 
-def build_dusk_supplemental(c: DayContext, key: str) -> str:
-    """The evening schedule (counterpart of build_dawn_supplemental())."""
+def build_dusk_supplemental(c: DayContext, key: str) -> tuple[str, str]:
+    """The evening schedule and the Night details (counterpart of build_dawn_supplemental())."""
     twilights = ("evening_civil", "evening_nautical", "evening_astronomical")
     light = ["evening"] if key == "evening_civil" and not c["enabled"]["daylight"] else []
     return build_supplemental(c, "tonight", twilights, "night", c["carriers"]["evening"] == key, light)
 
 
 def build_twilight_schedule(c: DayContext, part: str, header: str | None = None) -> str:
-    """Twilights for a calendar subscribed to no twilight events, on the event right before them."""
+    """Twilights for a calendar subscribed to no twilight events, on the event right before them; ""
+    when there are none."""
     enabled = c["enabled"]
     if enabled["civil"] or enabled["nautical"] or enabled["astro"]:
         return ""
@@ -1000,8 +1025,8 @@ def build_twilight_schedule(c: DayContext, part: str, header: str | None = None)
     for key in keys:
         span = spans.get(key)
         if span is not None:
-            info += format_schedule_span(S["summaries"][key], span, S["supplemental"][key])
-    return "" if info == "" else "\n\n" + S["headers"][header or part] + "\n" + info.rstrip("\n")
+            info += format_schedule_span(S["schedule_names"][key], span, twilight_note(key, span))
+    return "" if info == "" else S["headers"][header or part] + "\n" + info.rstrip("\n")
 
 
 def build_supplemental(
@@ -1011,22 +1036,20 @@ def build_supplemental(
     period: str,
     with_period: bool,
     light: list[str] | None = None,
-) -> str:
-    """A schedule of times in order, then the details of the period it leads to as a section of its own."""
+) -> tuple[str, str]:
+    """A schedule of times in order, and the details of the period it leads to, under a header with
+    the period's times. Each is "" when empty."""
     entries = light_entries(c["ev"], light or [])
     for key in twilights:
         span = c["spans"][key]
         if not c["enabled"][_TWILIGHT_BANDS[key]["flag"]] and span is not None:
-            entries.append((span[0], format_schedule_span(S["summaries"][key], span, S["supplemental"][key])))
+            entries.append((span[0], format_schedule_span(S["schedule_names"][key], span, twilight_note(key, span))))
 
     details = ""
     span = c["spans"][period]
     if with_period and not c["enabled"]["daylight"] and span is not None:
-        entries.append((span[0], schedule_entry(span[0], span[1], S["schedule_labels"][period], None)))
-        # With civil twilight subscribed, its morning and evening events say how sunrise and sunset moved
-        text = daylight_details(c, not c["enabled"]["civil"]) if period == "daylight" else night_details(c)
-        details = "\n\n" + S["headers"][f"{period}_details"] + "\n" + text.rstrip("\n")
-    if not entries:
-        return details
+        text = daylight_details(c) if period == "daylight" else night_details(c)
+        details = S["headers"][f"{period}_details"].format(format_span_range(span)) + "\n" + text.rstrip("\n")
     entries.sort(key=lambda e: e[0])
-    return "\n\n" + S["headers"][header] + "\n" + "".join(e[1] for e in entries).rstrip("\n") + details
+    schedule = "" if not entries else S["headers"][header] + "\n" + "".join(e[1] for e in entries).rstrip("\n")
+    return schedule, details
