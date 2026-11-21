@@ -43,6 +43,10 @@ repos:
     rev: 1.9.4
     hooks:
       - id: bandit
+        # Like mypy: on pre-commit's own Python (3.12 with Homebrew), bandit
+        # can't parse newer syntax (`except A, B:`) and skips those files
+        # without failing, so they go unchecked.
+        language_version: python3.15
         args: ['-c', 'pyproject.toml']
         additional_dependencies: ['bandit[toml]']
         exclude: ^tests/
