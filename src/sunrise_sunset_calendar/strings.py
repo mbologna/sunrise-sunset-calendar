@@ -372,14 +372,16 @@ STRINGS: Strings = {
             "angles": "The sun climbs from 6° below the horizon (about three fingers at arm's length) to sunrise.",
             "text": 'It is named for everyday ("civil") activity: there is enough light to be outdoors '
             "without lamps under a clear sky. Colours return, only the brightest stars and planets "
-            "remain, and streetlights typically switch off.",
+            "remain, and streetlights typically switch off. Aviation rules in many countries count the night "
+            "as ending when this twilight begins.",
             "good_for": "early walks and runs; seeing the first colours of the day.",
         },
         "evening_civil": {
             "angles": "The sun sinks from sunset to 6° below the horizon (about three fingers at arm's length).",
             "text": 'It is named for everyday ("civil") activity: until the sun is 6° down there is still '
             "enough light to be outdoors without lamps. Colours fade, the brightest stars and planets "
-            "appear, and streetlights typically switch on.",
+            "appear, and streetlights typically switch on. Aviation rules in many countries count the night "
+            "as starting when this twilight ends.",
             "good_for": "evening walks; the first bright stars and planets.",
         },
         "evening_nautical": {
@@ -402,11 +404,13 @@ STRINGS: Strings = {
         },
         "daylight": {
             "text": "Daylight runs from sunrise to sunset, while any part of the sun is above the horizon. "
-            "Times assume a flat, open horizon; hills and buildings change what you see.",
+            "Times assume a flat, open horizon at sea level; hills, buildings and your own height change "
+            "what you see.",
         },
         "night": {
-            "text": "This is astronomical night: the sun is more than 18° below the horizon, so no sunlight "
-            "brightens the sky. What glow remains comes from the moon, light pollution and natural airglow.",
+            "text": "This is astronomical night: the sun is more than 18° below the horizon, too deep for the air "
+            "to scatter its light into the sky. What glow remains comes from the moon, light pollution, natural "
+            "airglow and, under the darkest skies, zodiacal light: sunlight scattered by dust between the planets.",
         },
     },
     # Sentences that depend on the day
@@ -431,9 +435,11 @@ STRINGS: Strings = {
         "shadows, if the weather allows.",
         # Why the length in the "Length" line changes over the year
         "length_morning": "Its length changes over the year because the sun rises at a different angle: "
-        "the more gently it rises, the longer twilight lasts.",
+        "the more gently it rises, the longer twilight lasts. It is shortest a little before the spring "
+        "equinox and a little after the autumn one, and longest in midsummer.",
         "length_evening": "Its length changes over the year because the sun sets at a different angle: "
-        "the more gently it sets, the longer twilight lasts.",
+        "the more gently it sets, the longer twilight lasts. It is shortest a little before the spring "
+        "equinox and a little after the autumn one, and longest in midsummer.",
     },
     # When the sun stays more than 18° below the horizon all day, solar noon bounds the night
     "no_crossing": {
@@ -547,7 +553,7 @@ STRINGS: Strings = {
             "sunset_latest": "The days are already getting shorter: sunrises are getting later faster than sunsets.",
         },
         "why": "Sunrise and sunset don't turn around together with the day length: the moment the sun is highest "
-        "drifts by up to about a quarter of an hour over the year, which shifts both.",
+        "drifts over a range of about half an hour through the year, which shifts both.",
         "twelve_hours_rising": {
             "title": "⚖️ 12 hours of daylight",
             "lead": "Daylight is {} today, the closest it gets to 12 hours, and the days are getting longer. "
