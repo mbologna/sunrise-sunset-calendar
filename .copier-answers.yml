@@ -35,5 +35,3 @@ smoke_cmd: AUTH_TOKEN=smoke CALENDAR_WINDOW_DAYS=7 sunrise-sunset-calendar & get
     2>&1 && break; sleep 0.5; done; get 'health' | grep -q '"status":"ok"' && get
     '?feed=1&token=smoke&daynight=1' | grep -q 'END:VCALENDAR'
 writable_dirs: ''
-
-#copier updated
