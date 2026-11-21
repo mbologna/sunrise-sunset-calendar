@@ -8,11 +8,11 @@ An [iCalendar](https://en.wikipedia.org/wiki/ICalendar) feed of sunrise, sunset,
 
 ## What the feed contains
 
-- Daylight and night as events, each titled with its length. The description gives the change since yesterday (including how far sunrise and sunset moved on the clock) and where the day sits between the year's shortest and longest.
-- Morning and evening civil, nautical and astronomical twilight, each as its own event.
-- On Daylight: the noon sun's height, first and last light (the start of morning and the end of evening nautical twilight, as the military uses the terms), and the morning and evening blue and golden hours.
+- Daylight and night as events, each titled with its length. The description gives the change since yesterday with its percentage, the day's rank among the year's, and how it compares with the year's shortest and longest.
+- Morning and evening civil, nautical and astronomical twilight, each as its own event. Nautical twilight names first and last light: its start in the morning and its end in the evening, as the military uses the terms.
+- On Daylight: what the sun does (how far sunrise and sunset moved on the clock, and its highest point) and the morning and evening blue and golden hours.
 - On Night: the moon's phase and illumination, and the moonless part of the night.
-- Weekly summaries from Sunday to Saturday, with the drift of sunrise and sunset.
+- Weekly summaries from Sunday to Saturday, with the drift of sunrise and sunset, the change in daylight and the moon's principal phases.
 - Equinoxes and solstices, named by the local season, with the exact moment and facts for the location.
 - All-day events on the days something changes: sunrises or sunsets turning earlier or later, 12 hours of daylight, the start of each meteorological season (outside the tropics), and the start and end of midnight sun, polar night and fully dark nights.
 - A calendar description with the location's daylight range, midnight sun, polar night and white nights.
@@ -120,20 +120,20 @@ Every other path returns 404. Every response carries `X-Content-Type-Options`, `
 | `rise_off`, `set_off` | no | Minutes (-1440 to 1440) to shift morning and evening events |
 | `desc` | no | Note appended to daylight and night events |
 
-Any selection of event types still carries every time. A period without its own event goes into the description of the subscribed event nearest in time: the one that contains it or comes just before it. Each description lists its times as one schedule in time order (`🕒 Today`, `🕒 This evening`), then the carried period's details in a section of their own. When there is no Daylight event, the schedule includes blue and golden hour.
+Any selection of event types still carries every time. A period without its own event goes into the description of the subscribed event nearest in time: the one that contains it or comes just before it. Each description lists its times as one schedule in time order (`🕒 This morning`, `🕒 This evening`), each twilight with a short note, then the carried period's details in a section of their own, headed with its times. When there is no Daylight event, the schedule includes blue and golden hour.
 
-On a twilight-only calendar, daylight rides on the last morning twilight and night on the last evening one. The civil twilight that ends at sunrise says how sunrise moved; the one that starts at sunset says how sunset moved and gives the evening's blue and golden hour. On a daylight-and-night calendar, Daylight lists this evening's twilights and Night tomorrow morning's.
+On a twilight-only calendar, daylight rides on the last morning twilight and night on the last evening one. The twilight nearest sunrise says how sunrise moved and where the sun peaks, the one nearest sunset how sunset moved; evening civil twilight gives the evening's blue and golden hour. On a daylight-and-night calendar, Daylight lists this evening's twilights and Night tomorrow morning's.
 
 ## Events
 
-Each event is a period titled with its name. Its description opens with what changed since yesterday, then an "Over the year" bar between the year's shortest and longest (`9h 08m ▕█░░░░░░░░░▏ 15h 14m`, linear, both ends labelled) with the distance to each and their dates. It closes with a plain-language explanation of the period.
+Each event is a period titled with its name. Every description keeps one layout: the schedule (`🕒`), what the sun does (`☀️ Sun`), the period's numbers (`🔆 Daylight`, `🌙 Night`), the moon (`🌔 Moon`), and a closing plain-language explanation (`ℹ️ About`); each emoji means the same thing in every event. The numbers open with the change since yesterday (`vs yesterday: −1m 50s (−0.3%)`), then a `Year:` bar between the year's shortest and longest (`9h 08m ▕█░░░░░░░░░▏ 15h 14m`, linear, both ends labelled), the rank among the year's days (`Longer than 58 of 365 days (16%)`) and the comparison with each extreme (`vs shortest (Dec 21): +29m (+5.2%)`). Data lines stay within 38 columns, so they don't wrap in macOS Calendar's popover, on an iPhone or in Google Calendar's popup; only prose does.
 
 | Event | Title | From | To |
 |-------|-------|------|----|
 | Morning astronomical twilight | 🌌 Morning Astronomical Twilight | astronomical dawn (sun 18° below) | nautical dawn (12° below) |
 | Morning nautical twilight | ⚓ Morning Nautical Twilight | nautical dawn | civil dawn (6° below) |
 | Morning civil twilight | 🌅 Morning Civil Twilight | civil dawn | sunrise |
-| Daylight | ☀️ Daylight · *length* | sunrise | sunset |
+| Daylight | 🔆 Daylight · *length* | sunrise | sunset |
 | Evening civil twilight | 🌇 Evening Civil Twilight | sunset | civil dusk (6° below) |
 | Evening nautical twilight | ⚓ Evening Nautical Twilight | civil dusk | nautical dusk (12° below) |
 | Evening astronomical twilight | 🌌 Evening Astronomical Twilight | nautical dusk | astronomical dusk (18° below) |
@@ -191,7 +191,7 @@ CI runs ruff and the tests through `mbologna/.github`'s `python-ci`, then builds
 
 ### Golden corpus
 
-`tests/golden/` holds 403 recorded responses: 46 locations (polar day and night, both hemispheres, the equator, the date line, every kind of DST rule, including changes at midnight), the full default window, extra dates (DST changes, New Year, a leap day), every combination of event types for six representative places, offsets, notes, malformed input, environment settings, the web page and its form. `test_golden.py` replays every request and compares the bytes, apart from `DTSTAMP`, the moment a feed is generated. When the output changes on purpose, `uv run python -m tests.golden.make_corpus` records the corpus again; review the changed lines before committing.
+`tests/golden/` holds 403 recorded responses: 46 locations (polar day and night, both hemispheres, the equator, the date line, every kind of DST rule, including changes at midnight), the full default window, extra dates (DST changes, New Year, a leap day), every combination of event types for six representative places, offsets, notes, malformed input, environment settings, the web page and its form. `test_golden.py` replays every request and compares the bytes, apart from `DTSTAMP`, the moment a feed is generated. When the output changes on purpose, `uv run python -m tests.golden.make_corpus` records the corpus again; review the changed lines before committing. `test_width.py` holds every data line of every recorded description to 38 columns, an emoji counting as two; prose (a sentence ending in a full stop, or a line over 60 columns) may wrap.
 
 ## Versioning
 

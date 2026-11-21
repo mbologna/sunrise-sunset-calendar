@@ -65,7 +65,7 @@ def test_feed_returns_calendar() -> None:
 
     assert body.startswith("BEGIN:VCALENDAR\r\n")
     assert "X-WR-TIMEZONE:America/New_York\r\n" in body
-    assert body.count("SUMMARY:☀️ Daylight") == 8
+    assert body.count("SUMMARY:🔆 Daylight") == 8
     assert body.endswith("END:VCALENDAR\r\n")
 
 

@@ -180,12 +180,12 @@ def test_polar_night_has_midday_twilight_and_no_daylight() -> None:
         in dawn["DESCRIPTION"]
     )
     assert "to sunrise" not in dawn["DESCRIPTION"]
-    assert "→ [Civil] → Solar noon" in dawn["DESCRIPTION"]
+    assert "Astro → Nautical → [Civil] → Noon\\n" in dawn["DESCRIPTION"]
     assert (
         r"Polar night: today the sun sinks from 3° below the horizon at solar noon\, its highest today\, to 6° below."
         in dusk["DESCRIPTION"]
     )
-    assert "Solar noon → [Civil] →" in dusk["DESCRIPTION"]
+    assert "Noon → [Civil] → Nautical → Astro\\n" in dusk["DESCRIPTION"]
 
     solstice = events_of_type(ics, "winter-solstice")[0]
     assert "The sun stays 3° below the horizon even at noon." in solstice["DESCRIPTION"]
@@ -223,7 +223,8 @@ def test_white_night_twilight_runs_through_solar_midnight() -> None:
     assert events_of_type(ics, "evening-astronomical-twilight") == []
     assert events_of_type(ics, "night") == []
 
-    assert "Sunset → Civil → [Nautical] → Solar midnight" in dusk["DESCRIPTION"]
+    # The sequence stops at the twilight; the data line says the sun turns at solar midnight
+    assert "Sunset → Civil → [Nautical]\\n" in dusk["DESCRIPTION"]
     assert (
         r"Today the sun sinks from 6° below the horizon to 7° below at solar midnight\, its lowest tonight."
         in dusk["DESCRIPTION"]
@@ -236,10 +237,8 @@ def test_white_night_twilight_runs_through_solar_midnight() -> None:
 def test_southern_hemisphere_shortest_day_is_in_june() -> None:
     ics = feed(lat=-33.8688, lon=151.2093, timezone="Australia/Sydney", window_days=0)
 
-    daylight = events_of_type(ics, "daylight")[0]
-    assert re.search(
-        r"more than the shortest day \(Jun 2\d\)\\, [^\\]+ less than the longest \(Dec 2\d\)", daylight["DESCRIPTION"]
-    )
+    daylight = text(events_of_type(ics, "daylight")[0])
+    assert re.search(r"^vs shortest \(Jun 2\d\): \+.+\nvs longest \(Dec 2\d\): −", daylight, re.M)
 
 
 def test_offsets_shift_morning_and_evening_events() -> None:
@@ -261,15 +260,13 @@ def test_supplemental_schedule_lists_only_disabled_types() -> None:
     ics = feed(window_days=0, enabled={"civil": True, "nautical": False, "astro": False, "daylight": False})
     dawn = text(events_of_type(ics, "morning-civil-twilight")[0])
 
-    # Time first, in order, the daylight as the last entry
-    assert re.search(r"^\d\d:\d\d–\d\d:\d\d 🌌 Morning Astronomical Twilight \(\d+m\)$", dawn, re.M)
-    assert re.search(r"^\d\d:\d\d–\d\d:\d\d ⚓ Morning Nautical Twilight \(\d+m\)$", dawn, re.M)
+    # Time first, in order, each twilight with a note, then the daylight under its own header
+    assert re.search(r"^\d\d:\d\d–\d\d:\d\d 🌌 Astronomical\n\u00a0\u00a0First trace of sunlight$", dawn, re.M)
+    assert re.search(r"^\d\d:\d\d–\d\d:\d\d ⚓ Nautical\n\u00a0\u00a0From first light: horizon visible$", dawn, re.M)
     assert re.search(
-        r"^\d\d:\d\d–\d\d:\d\d ☀️ Daylight \(\d+h \d\dm\)\n\n☀️ Daylight\n\d+m \d\ds shorter than yesterday\nSun highest",
-        dawn,
-        re.M,
+        r"\n\n🔆 Daylight \d\d:\d\d–\d\d:\d\d \(\d+h \d\dm\)\nvs yesterday: −\d+m \d\ds \(−0\.\d%\)\nYear: ", dawn
     )
-    assert "🌅 Morning Civil Twilight (" not in dawn, "The event itself is not in its schedule"
+    assert not re.search(r"^\S+ 🌅 Civil$", dawn, re.M), "The event itself is not in its schedule"
     assert events_of_type(ics, "daylight") == []
 
 
@@ -280,20 +277,21 @@ def test_daylight_only_calendar_still_lists_every_twilight() -> None:
     daylight = text(daylight_event)
     night = text(night_event)
 
-    # This evening's twilights follow Daylight, which ends at sunset
+    # This evening's twilights follow Daylight, which ends at sunset, last light among them
     assert re.search(
-        r"🕒 This evening\n\S+ 🌇 Evening Civil Twilight .+\n.+\n\S+ ⚓ Evening Nautical Twilight .+\n.+\n"
-        r"\S+ 🌌 Evening Astronomical Twilight ",
+        r"🕒 This evening\n\S+ 🌇 Civil\n.+\n\S+ ⚓ Nautical\n\u00a0\u00a0Until last light: horizon fades\n"
+        r"\S+ 🌌 Astronomical\n",
         daylight,
     )
-    assert "Morning Civil Twilight" not in daylight, "Morning twilights are over before Daylight starts"
+    assert "🌅 Civil" not in daylight, "Morning twilights are over before Daylight starts"
 
     # Tomorrow morning's twilights follow the Night, which ends where they start
-    morning = re.search(r"🕒 Tomorrow morning\n(\d\d:\d\d)–\d\d:\d\d 🌌 Morning Astronomical Twilight", night)
+    morning = re.search(r"🕒 Tomorrow morning\n(\d\d:\d\d)–\d\d:\d\d 🌌 Astronomical", night)
     assert morning is not None
     ends = local_time(night_event["DTEND"], "Europe/Rome", "{hour:02d}:{minute:02d}")
     assert morning[1] == ends
-    assert "Evening Civil Twilight" not in night
+    assert "From first light: horizon visible" in night
+    assert "🌇 Civil" not in night
 
     # With civil twilight subscribed, its events carry the rest instead
     daylight_event = events_of_type(
@@ -314,11 +312,7 @@ def test_polar_night_carries_twilights_on_the_night() -> None:
     night = text(events_of_type(ics, "night")[0])
 
     # No Daylight event: the Night carries the day's evening twilights, then tomorrow morning's
-    assert re.search(
-        r"🕒 Earlier today\n\S+ 🌇 Evening Civil Twilight .+🕒 Tomorrow morning\n.+ 🌅 Morning Civil Twilight ",
-        night,
-        re.S,
-    )
+    assert re.search(r"🕒 Earlier today\n\S+ 🌇 Civil\n.+🕒 Tomorrow morning\n.+ 🌅 Civil\n", night, re.S)
 
 
 def test_week_summary_on_sundays_only() -> None:
@@ -331,7 +325,12 @@ def test_week_summary_on_sundays_only() -> None:
         assert start.weekday() == 6, "Weeks start on Sunday"
         assert clock.format_datetime(start + timedelta(days=7), clock.BASIC_DATE) == summary["DTEND"]
     assert re.search(r"^📉 \d+m less daylight this week$", summaries[0]["SUMMARY"]), "Days shorten in October"
-    assert re.search(r"Sunrise \d\d:\d\d → \d\d:\d\d · Sunset \d\d:\d\d → \d\d:\d\d", summaries[0]["DESCRIPTION"])
+    # The sections the other events use: the sun, the daylight with its change, the moon
+    assert re.search(
+        r"^Sunday → Saturday\n\n☀️ Sun\nSunrise: \d\d:\d\d → \d\d:\d\d\nSunset: \d\d:\d\d → \d\d:\d\d\n\n"
+        r"🔆 Daylight\n\d+h \d\dm → \d+h \d\dm \(−\d\.\d%\)\n\n\S+ Moon\n",
+        text(summaries[0]),
+    )
 
 
 def test_descriptions_dont_repeat_the_event_times_or_name_instants() -> None:
@@ -339,30 +338,31 @@ def test_descriptions_dont_repeat_the_event_times_or_name_instants() -> None:
 
     assert timed
     for event in timed:
-        assert "From " not in event["DESCRIPTION"], event["UID"]
+        assert not re.search(r"\bFrom \d", event["DESCRIPTION"]), event["UID"]
         assert not re.search(r"\b(civil|nautical|astronomical) (dawn|dusk)\b", event["DESCRIPTION"], re.I), event["UID"]
 
 
 def test_daylight_shows_change_and_place_in_the_year() -> None:
     description = text(events_of_type(feed(today="2026-11-15", window_days=0), "daylight")[0])
 
-    # What changed since yesterday, including on the clock, where the sun peaks, and the year
-    assert re.search(
-        r"^2m 0\ds shorter than yesterday: sunrise 1m \d\ds later, sunset \d+s earlier\n"
-        r"Sun highest at 11:54, 30° above the horizon\n"
-        r"First light \d\d:\d\d, last light \d\d:\d\d \(sun 12° below the horizon\)\n"
-        r"Over the year: 9h 08m ▕█░░░░░░░░░▏ 15h 14m\n"
-        r"42m more than the shortest day \(Dec 21\), 5h 24m less than the longest \(Jun 21\)\n",
-        description,
+    # What changed since yesterday and where the day sits in the year, then what the sun does
+    assert description.startswith(
+        "vs yesterday: −2m 07s (−0.4%)\n"
+        "Year: 9h 08m ▕█░░░░░░░░░▏ 15h 14m\n"
+        "Longer than 72 of 365 days (20%)\n"
+        "vs shortest (Dec 21): +42m (+7.7%)\n"
+        "vs longest (Jun 21): −5h 24m (−35%)\n\n"
+        "☀️ Sun\n"
+        "Sunrise: 1m 13s later than yesterday\n"
+        "Highest at 11:54, 30° up\n"
+        "Sunset: 53s earlier than yesterday\n\n"
     )
     assert "📅" not in description
-    assert "%" not in description
 
 
-def test_daylight_names_first_and_last_light() -> None:
+def test_nautical_twilight_names_first_and_last_light() -> None:
     """First and last light are when morning nautical twilight starts and evening nautical twilight ends."""
     ics = feed(today="2026-11-15", window_days=0)
-    daylight = text(events_of_type(ics, "daylight")[0])
     first = local_time(
         events_of_type(ics, "morning-nautical-twilight")[0]["DTSTART"], "Europe/Rome", "{hour:02d}:{minute:02d}"
     )
@@ -370,15 +370,38 @@ def test_daylight_names_first_and_last_light() -> None:
         events_of_type(ics, "evening-nautical-twilight")[0]["DTEND"], "Europe/Rome", "{hour:02d}:{minute:02d}"
     )
 
-    assert f"First light {first}, last light {last} (sun 12° below the horizon)" in daylight
-    about = text(events_of_type(ics, "morning-nautical-twilight")[0])
-    assert "In military use its start is called first light." in about
+    # On the nautical events, as their first line, and nowhere on Daylight
+    assert text(events_of_type(ics, "morning-nautical-twilight")[0]).startswith("From first light: horizon visible\n")
+    assert text(events_of_type(ics, "evening-nautical-twilight")[0]).startswith("Until last light: horizon fades\n")
+    assert "first light" not in text(events_of_type(ics, "daylight")[0]).lower()
+    assert "In military use its start is called first light." in text(
+        events_of_type(ics, "morning-nautical-twilight")[0]
+    )
+
+    # In a schedule, as the note of the nautical twilight that starts or ends there
+    civil = feed(
+        today="2026-11-15", window_days=0, enabled={"civil": True, "nautical": False, "astro": False, "daylight": False}
+    )
+    dawn = text(events_of_type(civil, "morning-civil-twilight")[0])
+    dusk = text(events_of_type(civil, "evening-civil-twilight")[0])
+    assert re.search(rf"^{first}–\d\d:\d\d ⚓ Nautical\n\u00a0\u00a0From first light: horizon visible$", dawn, re.M)
+    assert re.search(rf"^\d\d:\d\d–{last} ⚓ Nautical\n\u00a0\u00a0Until last light: horizon fades$", dusk, re.M)
 
 
 def test_first_and_last_light_without_astronomical_night() -> None:
     """London in June never gets 18° dark, but still goes 12° below the horizon."""
     ics = feed(lat=51.5074, lon=-0.1278, timezone="Europe/London", today="2026-06-21", window_days=0)
-    assert re.search(r"First light \d\d:\d\d, last light \d\d:\d\d", text(events_of_type(ics, "daylight")[0]))
+    assert text(events_of_type(ics, "morning-nautical-twilight")[0]).startswith("From first light")
+    assert text(events_of_type(ics, "evening-nautical-twilight")[0]).startswith("Until last light")
+
+
+def test_no_first_or_last_light_when_the_sun_stays_above_12_below() -> None:
+    """Stockholm in June: nautical twilight runs through solar midnight without reaching 12° below."""
+    ics = feed(lat=59.33, lon=18.07, timezone="Europe/Stockholm", today="2027-06-21", window_days=1)
+    dusk = text(events_of_type(ics, "evening-nautical-twilight")[0])
+    dawn = text(events_of_type(ics, "morning-nautical-twilight")[1])
+    assert "last light" not in dusk.split("ℹ️ About")[0].lower()
+    assert "first light" not in dawn.split("ℹ️ About")[0].lower()
 
 
 def test_no_first_or_last_light_under_the_midnight_sun() -> None:
@@ -387,10 +410,14 @@ def test_no_first_or_last_light_under_the_midnight_sun() -> None:
     assert "First light" not in daylight and "Last light" not in daylight
 
 
-def test_twilight_length_sits_in_the_years_range() -> None:
-    dawn = events_of_type(feed(today="2026-11-15", window_days=0), "morning-civil-twilight")[0]
-
-    assert dawn["DESCRIPTION"].startswith("Length: 30m · over the year: 28m ▕███░░░░░░░▏ 34m")
+def test_twilights_leave_their_length_to_the_time_slot() -> None:
+    """The calendar shows when a twilight starts and ends: no length line, and no lengths in schedules."""
+    for enabled in (ALL_TYPES, {"civil": True, "nautical": False, "astro": False, "daylight": False}):
+        for event in events(feed(today="2026-11-15", window_days=0, enabled=enabled)):
+            if "twilight" in event["UID"]:
+                description = text(event)
+                assert "Length" not in description, event["UID"]
+                assert not re.search(r"^\d\d:\d\d–\d\d:\d\d .+ \(\d+(h \d\d)?m\)$", description, re.M), event["UID"]
 
 
 def test_calendar_description_has_location_facts() -> None:
@@ -434,12 +461,12 @@ def test_tropics_skip_solstice_claims_that_do_not_hold() -> None:
 
 
 def test_mid_latitude_solstice_claims() -> None:
-    solstice = events_of_type(feed(today="2026-12-21", window_days=0), "winter-solstice")[0]
+    solstice = text(events_of_type(feed(today="2026-12-21", window_days=0), "winter-solstice")[0])
 
-    assert "The shortest day of the year: 9h 08m of daylight." in solstice["DESCRIPTION"]
-    assert "The noon sun is at its lowest of the year: 25°" in solstice["DESCRIPTION"]
-    # Facts about other days go on those days, not here
-    assert not re.search(r"\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d", solstice["DESCRIPTION"])
+    assert "☀️ Sun\nAt noon: 25° up, lowest of the year\n\n" in solstice
+    assert solstice.endswith("🔆 Daylight\nThe shortest day: 9h 08m\nvs longest (Jun 21): −6h 06m (−40%)")
+    # Facts about other days go on those days; the one other date is the extreme it's compared with
+    assert re.findall(r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d+", solstice) == ["Jun 21"]
 
 
 def test_sunrise_and_sunset_turning_points_get_their_own_days() -> None:
@@ -511,14 +538,20 @@ def test_a_sunset_that_crosses_midnight_moves_the_short_way() -> None:
     """Longyearbyen's sunset moves from 23:44 on Apr 16, 2026 to 00:12 the next night: 28 minutes later."""
     ics = feed(lat=78.2232, lon=15.6267, timezone="Arctic/Longyearbyen", today="2026-04-17", window_days=0)
 
-    daylight = events_of_type(ics, "daylight")[0]
-    assert text(daylight).startswith("48m 16s longer than yesterday: sunrise 20m 21s earlier, sunset 27m 55s later")
+    daylight = text(events_of_type(ics, "daylight")[0])
+    assert daylight.startswith("vs yesterday: +48m 16s (+3.8%)\n")
+    # From ten minutes, to the minute
+    assert "Sunrise: 20m earlier than yesterday\n" in daylight
+    assert "Sunset: 28m later than yesterday\n" in daylight
 
 
 def test_a_sun_that_only_skims_the_horizon_says_so() -> None:
     """Refraction keeps the sun in view with its centre a little below the horizon: no "-1° up"."""
     ics = feed(lat=78.2232, lon=15.6267, timezone="Arctic/Longyearbyen", today="2026-04-19", window_days=0)
-    assert "lowest at 00:56, skimming the horizon" in text(events_of_type(ics, "daylight")[0])
+    assert re.search(
+        r"☀️ Sun\n(.+\n)?Highest at \d\d:\d\d, \d+° up\nLowest at 00:56, skimming the horizon\n",
+        text(events_of_type(ics, "daylight")[0]),
+    )
 
     pole = feed(lat=90.0, lon=0.0, timezone="UTC", today="2026-03-19", window_days=0)
     assert "The sun circles the sky skimming the horizon all day" in text(events_of_type(pole, "daylight")[0])
@@ -531,9 +564,9 @@ def test_a_day_with_one_sunrise_or_sunset_keeps_it() -> None:
 
     last_sunrise = daylight["20260417T233922Z"]
     assert last_sunrise["DTEND"] == "20260418T225649Z", "Up until solar midnight"
-    assert last_sunrise["SUMMARY"] == "☀️ Daylight · 23h 17m"
+    assert last_sunrise["SUMMARY"] == "🔆 Daylight · 23h 17m"
     first_sunset = next(e for e in daylight.values() if e["DTEND"] == "20260824T222904Z")
-    assert first_sunset["SUMMARY"] == "☀️ Daylight · 23h 29m", "Up since solar midnight"
+    assert first_sunset["SUMMARY"] == "🔆 Daylight · 23h 29m", "Up since solar midnight"
     assert [e["DTSTART"] for e in events_of_type(ics, "evening-civil-twilight") if e["DTSTART"].startswith("20260824")]
 
 
@@ -572,14 +605,17 @@ def test_no_meteorological_seasons_in_the_tropics() -> None:
 
 
 def test_twilight_data_comes_before_the_explanation() -> None:
-    dawn = events_of_type(
-        feed(window_days=0, enabled={"civil": True, "nautical": False, "astro": False, "daylight": True}),
-        "morning-civil-twilight",
-    )[0]
-    description = dawn["DESCRIPTION"]
+    dawn = text(
+        events_of_type(
+            feed(window_days=0, enabled={"civil": True, "nautical": False, "astro": False, "daylight": True}),
+            "morning-civil-twilight",
+        )[0]
+    )
 
-    assert re.search(r"^Length: \d+m · over the year: 2\dm ▕[█░]{10}▏ 3\dm\\n", description)
-    assert description.find("☀️ Today") < description.find("ℹ️ About")
+    assert dawn.startswith("🕒 This morning\n")
+    assert dawn.find("🕒 This morning") < dawn.find("ℹ️ About")
+    nautical = text(events_of_type(feed(window_days=0), "morning-nautical-twilight")[0])
+    assert nautical.startswith("From first light: horizon visible\n\nℹ️ About\n")
 
 
 def test_night_gives_the_moonless_window() -> None:
@@ -588,10 +624,10 @@ def test_night_gives_the_moonless_window() -> None:
 
     # The moon sets at 21:44:50 (USNO rounds it to 21:45) and the night ends at astronomical dawn
     assert re.search(r"Moonless sky: 21:44–05:2\d \(7h \d\dm\)", night("2026-11-15"))
-    # The Dec 24 full moon at 02:28 falls in the night of Dec 23
-    assert "· Full Moon at 02:28" in night("2026-12-23")
+    # The Dec 24 full moon at 02:28 falls in the night of Dec 23: a line of its own, after the phase
+    assert re.search(r"Moon\\n\w+ \w+\\, \d+% lit\\nFull Moon at 02:28\\n", night("2026-12-23"))
     assert "Next:" not in night("2026-11-15")
-    assert r"Moonless sky: none\, the moon is up all night" in night("2026-11-24")
+    assert r"Moonless sky: none\, moon up all night" in night("2026-11-24")
     assert "Moonless sky: all night" in night("2026-11-10")
     assert "While up" not in night("2026-11-10"), "No brightness note when the moon never rises"
 
@@ -616,15 +652,14 @@ def test_blue_and_golden_hour_appear_only_on_daylight() -> None:
         assert "golden hour" not in twilight["DESCRIPTION"].lower(), kind
         assert "blue hour" not in twilight["DESCRIPTION"].lower(), kind
 
-    # Morning and evening, each in time order
-    daylight = events_of_type(ics, "daylight")[0]
+    # A schedule under its own header: morning, then evening, each in time order
+    daylight = text(events_of_type(ics, "daylight")[0])
     assert re.search(
-        r"📷 Morning: blue hour \d\d:\d\d–(\d\d:\d\d)\\, golden hour \1–\d\d:\d\d", daylight["DESCRIPTION"]
+        r"📷 Blue and golden hour\n\d\d:\d\d–(\d\d:\d\d) Blue hour\n\1–\d\d:\d\d Golden hour\n"
+        r"\d\d:\d\d–(\d\d:\d\d) Golden hour\n\2–\d\d:\d\d Blue hour\n",
+        daylight,
     )
-    assert re.search(
-        r"📷 Evening: golden hour \d\d:\d\d–(\d\d:\d\d)\\, blue hour \1–\d\d:\d\d", daylight["DESCRIPTION"]
-    )
-    assert "photographers' rules of thumb" in daylight["DESCRIPTION"]
+    assert "photographers' rules of thumb" in daylight
 
 
 def test_blue_and_golden_hour_come_with_the_daylight_block_without_a_daylight_event() -> None:
@@ -633,31 +668,31 @@ def test_blue_and_golden_hour_come_with_the_daylight_block_without_a_daylight_ev
     dawn = text(events_of_type(ics, "morning-civil-twilight")[0])
     dusk = text(events_of_type(ics, "evening-civil-twilight")[0])
 
-    # Morning light in the morning schedule, between the twilights and the daylight
+    # Morning light ends the morning schedule, each with its note; then the sun, then the daylight
     assert re.search(
-        r"⚓ Morning Nautical Twilight .+\n.+\n\d\d:\d\d–(\d\d:\d\d) 📷 Blue hour \(\d+m\)\n"
-        r"\1–\d\d:\d\d 📷 Golden hour \(.+\)\n\d\d:\d\d–\d\d:\d\d ☀️ Daylight ",
+        r"⚓ Nautical\n.+\n\d\d:\d\d–(\d\d:\d\d) 📷 Blue hour\n\u00a0\u00a0Deep, even blue sky\n"
+        r"\1–\d\d:\d\d 📷 Golden hour\n\u00a0\u00a0Warm, low light, long shadows\n\n"
+        r"☀️ Sun\nSunrise: .+ than yesterday\nHighest at .+\n\n🔆 Daylight ",
         dawn,
     )
-    daylight_at = dawn.find("☀️ Daylight (")
-    assert "📷 Golden hour" not in dawn[max(daylight_at, 0) :], "Only the morning"
-    assert re.search(r"^Length: .+\nSunrise at \d\d:\d\d, .+ than yesterday\n", dawn)
+    assert "📷 Golden hour" not in dawn[dawn.find("🔆 Daylight ") :], "Only the morning"
 
-    # Evening light opens the evening schedule, before nautical twilight
+    # Evening light opens the evening schedule, before nautical twilight; the sunset follows it
     assert re.search(
-        r"^Length: .+\nSunset at \d\d:\d\d, .+ than yesterday\n\n🕒 This evening\n"
-        r"\d\d:\d\d–(\d\d:\d\d) 📷 Golden hour \(.+\)\n\1–(\d\d:\d\d) 📷 Blue hour \(\d+m\)\n"
-        r"\2–\d\d:\d\d ⚓ Evening Nautical Twilight",
+        r"^🕒 This evening\n\d\d:\d\d–(\d\d:\d\d) 📷 Golden hour\n.+\n\1–(\d\d:\d\d) 📷 Blue hour\n.+\n"
+        r"\2–\d\d:\d\d ⚓ Nautical\n",
         dusk,
     )
+    assert re.search(r"\n\n☀️ Sun\nSunset: .+ than yesterday\n\n🌙 Night ", dusk)
 
-    # Without evening civil twilight, the evening light stays in the morning schedule: nautical starts after it
+    # Without evening civil twilight, the evening light stays in the morning schedule, and the
+    # nautical twilights say how sunrise and sunset moved
     nautical = {"civil": False, "nautical": True, "astro": False, "daylight": False}
-    nautical_dawn = text(
-        events_of_type(feed(today="2026-11-15", window_days=0, enabled=nautical), "morning-nautical-twilight")[0]
-    )
-    assert re.search(r"📷 Golden hour .+\n.+ ☀️ Daylight .+\n.+📷 Golden hour .+\n.+📷 Blue hour ", nautical_dawn, re.S)
-    assert ": sunrise " in nautical_dawn, "Clock changes stay in the daylight line without civil events"
+    nautical_ics = feed(today="2026-11-15", window_days=0, enabled=nautical)
+    nautical_dawn = text(events_of_type(nautical_ics, "morning-nautical-twilight")[0])
+    assert re.search(r"📷 Golden hour\n.+\n\S+ 📷 Golden hour\n.+\n\S+ 📷 Blue hour\n", nautical_dawn)
+    assert "☀️ Sun\nSunrise: " in nautical_dawn
+    assert "☀️ Sun\nSunset: " in text(events_of_type(nautical_ics, "evening-nautical-twilight")[0])
 
 
 def test_schedules_are_in_time_order_without_nested_sections() -> None:
@@ -674,15 +709,21 @@ def test_daylight_and_night_blocks_appear_once_on_the_nearest_twilight() -> None
     ics = feed(window_days=0, enabled={"civil": True, "nautical": True, "astro": True, "daylight": False})
 
     def count(kind: str, needle: str) -> int:
-        return text(events_of_type(ics, kind)[0]).count(needle)
+        """Lines of the event's description that start with the needle."""
+        return sum(1 for line in text(events_of_type(ics, kind)[0]).split("\n") if line.startswith(needle))
 
     # Daylight on the last twilight before sunrise, Night on the last one before night
-    assert count("morning-civil-twilight", "\n☀️ Daylight\n") == 1
-    assert count("morning-nautical-twilight", "☀️ Daylight") == 0
-    assert count("morning-astronomical-twilight", "☀️ Daylight") == 0
-    assert count("evening-astronomical-twilight", "\n🌙 Night\n") == 1
+    assert count("morning-civil-twilight", "🔆 Daylight ") == 1
+    assert count("morning-nautical-twilight", "🔆 Daylight") == 0
+    assert count("morning-astronomical-twilight", "🔆 Daylight") == 0
+    assert count("evening-astronomical-twilight", "🌙 Night ") == 1
     assert count("evening-nautical-twilight", "🌙 Night") == 0
     assert count("evening-civil-twilight", "🌙 Night") == 0
+    # Sunrise on the twilight nearest it, sunset on the one nearest it
+    assert count("morning-civil-twilight", "Sunrise: ") == 1
+    assert count("evening-civil-twilight", "Sunset: ") == 1
+    for kind in ["morning-nautical-twilight", "evening-nautical-twilight", "evening-astronomical-twilight"]:
+        assert count(kind, "☀️ Sun") == 0, kind
 
 
 def test_offsets_are_explained() -> None:
@@ -710,14 +751,16 @@ def test_deep_polar_night_lasts_around_the_clock() -> None:
 
 
 def test_night_length_sits_between_the_years_shortest_and_longest() -> None:
-    solstice = events_of_type(feed(today="2026-12-21", window_days=0), "night")[0]
-    november = events_of_type(feed(today="2026-11-15", window_days=0), "night")[0]
+    solstice = text(events_of_type(feed(today="2026-12-21", window_days=0), "night")[0])
+    november = text(events_of_type(feed(today="2026-11-15", window_days=0), "night")[0])
 
     assert re.search(
-        r"The longest night of the year: \d+h \d\dm more than the shortest \(Jun 2\d\)", solstice["DESCRIPTION"]
+        r"^The longest night of the year\nvs shortest \(Jun 2\d\): \+\d+h \d\dm \(\+\d+%\)$", solstice, re.M
     )
     assert re.search(
-        r"more than the shortest night \(Jun 2\d\)\\, \d+m less than the longest \(Dec 2\d\)", november["DESCRIPTION"]
+        r"^Longer than \d+ of 365 nights \(\d+%\)\nvs shortest \(Jun 2\d\): \+.+\nvs longest \(Dec 2\d\): −\d+m \(−\d\.\d%\)$",
+        november,
+        re.M,
     )
 
 

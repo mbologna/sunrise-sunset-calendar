@@ -9,6 +9,7 @@ from sunrise_sunset_calendar.helpers import (
     format_comparison,
     format_duration,
     format_extremes,
+    format_percent,
     format_range_bar,
     format_signed_duration,
     moonless_windows,
@@ -43,21 +44,39 @@ def test_signed_duration() -> None:
 
 
 def test_comparison_longer() -> None:
-    assert format_comparison(150, "yesterday") == "2m 30s longer than yesterday"
+    assert format_comparison(150, "yesterday", 9 * 3600) == "vs yesterday: +2m 30s (+0.5%)"
 
 
 def test_comparison_shorter() -> None:
-    assert format_comparison(-105, "last night") == "1m 45s shorter than last night"
+    assert format_comparison(-105, "last night", 11 * 3600) == "vs last night: −1m 45s (−0.3%)"
 
 
 def test_comparison_same() -> None:
-    assert format_comparison(0, "yesterday") == "Same length as yesterday"
+    assert format_comparison(0, "yesterday", 9 * 3600) == "Same length as yesterday"
+
+
+def test_comparison_leaves_out_a_percentage_that_rounds_to_zero() -> None:
+    # Near the solstices the day changes by seconds: 2s of 9h is 0.006%
+    assert format_comparison(2, "yesterday", 9 * 3600) == "vs yesterday: +2s"
+    # Nothing to compare against after a day without daylight
+    assert format_comparison(1800, "yesterday", 0) == "vs yesterday: +30m 00s"
+
+
+def test_percent_rounding() -> None:
+    assert format_percent(-110, 34675) == "−0.3%", "True minus sign"
+    assert format_percent(1709, 32856) == "+5.2%"
+    assert format_percent(-20269, 54834) == "−37%", "Whole numbers from 10%"
+    assert format_percent(24480, 15720) == "+156%"
+    assert format_percent(997, 10000) == "+10%", "9.97% rounds to 10.0, so it's a whole number"
+    assert format_percent(0, 100) is None
+    assert format_percent(1, 100000) is None, "0.001% rounds to 0.0%"
+    assert format_percent(5, 0) is None
 
 
 def test_clock_shift() -> None:
-    assert format_clock_shift(73) == "1m 13s later"
-    assert format_clock_shift(-53) == "53s earlier"
-    assert format_clock_shift(0) == "unchanged"
+    assert format_clock_shift(73) == "1m 13s later than yesterday"
+    assert format_clock_shift(-53) == "53s earlier than yesterday"
+    assert format_clock_shift(0) == "the same time as yesterday"
 
 
 def test_range_bar_is_linear_between_labelled_ends() -> None:
@@ -66,22 +85,25 @@ def test_range_bar_is_linear_between_labelled_ends() -> None:
     assert format_range_bar(15 * 3600, 9 * 3600, 15 * 3600) == "9h 00m ▕██████████▏ 15h 00m"
 
 
-def test_extremes_name_the_end_today() -> None:
+def test_extremes_rank_the_day_and_compare_it_with_both_ends() -> None:
     shortest = (9 * 3600, clock.local_timestamp(2026, 12, 21, 12, 0, 0))
     longest = (15 * 3600, clock.local_timestamp(2026, 6, 21, 12, 0, 0))
+    # A year of 9h to 15h days, a quarter of them shorter than 10h
+    lengths = [9 * 3600] * 50 + [9 * 3600 + 1800] * 41 + [10 * 3600] * 10 + [12 * 3600] * 264
 
-    assert (
-        format_extremes("daylight", 10 * 3600, shortest, longest)
-        == "1h 00m more than the shortest day (Dec 21), 5h 00m less than the longest (Jun 21)"
-    )
-    assert (
-        format_extremes("daylight", 9 * 3600 + 1, shortest, longest)
-        == "The shortest day of the year: 6h 00m less than the longest (Jun 21)"
-    )
+    assert format_extremes("daylight", 10 * 3600, shortest, longest, lengths) == [
+        "Longer than 91 of 365 days (25%)",
+        "vs shortest (Dec 21): +1h 00m (+11%)",
+        "vs longest (Jun 21): −5h 00m (−33%)",
+    ]
+    # The extreme day itself: no rank, and the other end
+    assert format_extremes("daylight", 9 * 3600 + 1, shortest, longest, lengths) == [
+        "The shortest day of the year",
+        "vs longest (Jun 21): −6h 00m (−40%)",
+    ]
     # A day seconds from the shortest is not the shortest, and says by how much
-    assert (
-        format_extremes("daylight", 9 * 3600 + 30, shortest, longest)
-        == "30s more than the shortest day (Dec 21), 6h 00m less than the longest (Jun 21)"
+    assert format_extremes("daylight", 9 * 3600 + 30, shortest, longest, lengths)[1] == (
+        "vs shortest (Dec 21): +30s (+0.1%)"
     )
 
 

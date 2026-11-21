@@ -22,6 +22,7 @@ from .helpers import (
     format_duration,
     format_light_block,
     format_local,
+    format_percent,
     format_signed_duration,
     get_moon_phase_emoji,
     get_special_astronomical_events,
@@ -33,6 +34,7 @@ from .helpers import (
     night_about,
     night_details,
     season_description,
+    sun_section,
     twilight_about,
     twilight_bands,
     twilight_details,
@@ -288,6 +290,8 @@ def _render(o: Options, now: int) -> bytes:
             "carriers": {
                 "morning": nearest(("morning_civil", "morning_nautical", "morning_astronomical")),
                 "evening": nearest(("evening_astronomical", "evening_nautical", "evening_civil")),
+                # Sunset goes on the evening twilight nearest it, as sunrise goes on the morning carrier
+                "sunset": nearest(("evening_civil", "evening_nautical", "evening_astronomical")),
             },
             # Tomorrow morning's twilights go on tonight's Night when no twilight is an event
             "spans_tomorrow": solar_spans(nxt, sun_events(day.add_days(2), lat, lon))
@@ -301,47 +305,49 @@ def _render(o: Options, now: int) -> bytes:
             },
             "night": {
                 "seconds": night_seconds,
-                "comparison": format_comparison(night_seconds - last_night, S["comparisons"]["last_night"])
+                "comparison": format_comparison(night_seconds - last_night, S["comparisons"]["last_night"], last_night)
                 if spans["night"] and last_night is not None
                 else None,
                 "moon": moon,
             },
         }
 
-        # Weekly summary: an all-day event spanning Sunday through Saturday
+        # Weekly summary: an all-day event spanning Sunday through Saturday, in the sections the
+        # other events use: the sun's times, the daylight, and the moon's principal phases
         if enabled["daylight"] and day.wall.weekday() == 6:  # Sunday
             week = get_week_summary(day.ts, lat, lon, ev["utc_offset"])
-            phases = [
-                S["moon"]["phase_at"].format(
-                    get_moon_phase_emoji(p["name"], lat),
-                    moon_phase_name(p["name"]),
-                    format_local(p["timestamp"], "datetime"),
-                )
-                for p in moon_phases_between(day.ts, day.add_days(7).ts)
-            ]
-            if not phases:
+            texts = S["week"]
+            phases = moon_phases_between(day.ts, day.add_days(7).ts)
+            if phases:
+                emoji = get_moon_phase_emoji(phases[0]["name"], lat)
+                moon_lines = [
+                    S["moon"]["phase_at"].format(moon_phase_name(p["name"]), format_local(p["timestamp"], "datetime"))
+                    for p in phases
+                ]
+            else:
                 phase_name = get_accurate_moon_phase(day.ts)["phase_name"]
-                phases = [get_moon_phase_emoji(phase_name, lat) + " " + moon_phase_name(phase_name)]
+                emoji = get_moon_phase_emoji(phase_name, lat)
+                moon_lines = [S["moon"]["phase_now"].format(moon_phase_name(phase_name))]
 
-            desc = (
-                S["labels"]["week_daylight"].format(
-                    format_duration(round_int(week["start_length"])), format_duration(round_int(week["end_length"]))
-                )
-                + "\n"
-            )
+            sections = [texts["range"]]
             # Clock times people notice: in December sunsets stop getting earlier while sunrises keep getting later
             saturday = sun_events(day.add_days(6), lat, lon)
             if None not in (ev["sunrise"], ev["sunset"], saturday["sunrise"], saturday["sunset"]):
-                desc += (
-                    S["labels"]["week_sun"].format(
-                        format_local(ev["sunrise"]),
-                        format_local(saturday["sunrise"]),
-                        format_local(ev["sunset"]),
-                        format_local(saturday["sunset"]),
-                    )
+                sections.append(
+                    S["headers"]["sun"]
                     + "\n"
+                    + texts["sunrise"].format(format_local(ev["sunrise"]), format_local(saturday["sunrise"]))
+                    + "\n"
+                    + texts["sunset"].format(format_local(ev["sunset"]), format_local(saturday["sunset"]))
                 )
-            desc += S["labels"]["week_moon"].format("; ".join(phases))
+            start_length, end_length = round_int(week["start_length"]), round_int(week["end_length"])
+            lengths = texts["daylight"].format(format_duration(start_length), format_duration(end_length))
+            percent = format_percent(end_length - start_length, start_length)
+            if percent is not None:
+                lengths = S["comparisons"]["percent"].format(lengths, percent)
+            sections.append(S["headers"]["daylight_plain"] + "\n" + lengths)
+            sections.append(S["headers"]["moon"].format(emoji) + "\n" + "\n".join(moon_lines))
+            desc = "\n\n".join(sections)
 
             summary = (S["week_titles"][week["trend"]]).format(format_duration(round_int(week["total_change"])))
             out.append(ical_event(f"week-{date_str}-{uid_suffix}", all_day(day, 7), summary, desc, dtstamp))
@@ -379,23 +385,17 @@ def _render(o: Options, now: int) -> bytes:
                 continue
             offset = o.rise_offset if band["morning"] else o.set_offset
 
-            # Without a Daylight event, the civil twilight that ends at sunrise or starts at
-            # sunset says how that moved
-            clock_line = None
-            if not enabled["daylight"] and key == "morning_civil" and c["daylight"]["sunrise_shift"] is not None:
-                clock_line = S["labels"]["sunrise_shift"].format(
-                    format_local(ev["sunrise"]), _clock_shift_alone(c["daylight"]["sunrise_shift"])
-                )
-            if not enabled["daylight"] and key == "evening_civil" and c["daylight"]["sunset_shift"] is not None:
-                clock_line = S["labels"]["sunset_shift"].format(
-                    format_local(ev["sunset"]), _clock_shift_alone(c["daylight"]["sunset_shift"])
-                )
-
-            # Data first, then the rest of today's schedule, then the explanation
-            desc = twilight_details(key, span, ev, year_info, clock_line)
-            desc += build_dawn_supplemental(c, key) if band["morning"] else build_dusk_supplemental(c, key)
-            desc += "\n\n" + twilight_about(key, span, spans)
-            desc += offset_note(offset, offset)
+            # Data first, then the schedule, the sun, the period it leads to, and the explanation.
+            # Without a Daylight event, the twilight nearest sunrise or sunset says how that moved.
+            schedule, period = build_dawn_supplemental(c, key) if band["morning"] else build_dusk_supplemental(c, key)
+            sun = ""
+            if not enabled["daylight"]:
+                if key == c["carriers"]["morning"]:
+                    sun = sun_section(c, "morning")
+                elif key == c["carriers"]["sunset"]:
+                    sun = sun_section(c, "evening")
+            parts = [twilight_details(key, span, ev), schedule, sun, period, twilight_about(key, span, spans)]
+            desc = "\n\n".join(part for part in parts if part) + offset_note(offset, offset)
 
             out.append(
                 ical_event(
@@ -410,18 +410,16 @@ def _render(o: Options, now: int) -> bytes:
         # Daylight
         if enabled["daylight"] and spans["daylight"] is not None:
             start, end = spans["daylight"][0], spans["daylight"][1]
-            light = format_light_block(ev)
             # This evening's twilights follow Daylight; tomorrow morning's too when no Night comes between
-            desc = (
-                daylight_details(c).rstrip()
-                + ("" if light == "" else "\n\n" + light)
-                + build_twilight_schedule(c, "this_evening")
-                + (build_twilight_schedule(c, "tomorrow_morning") if spans["night"] is None else "")
-                + "\n\n"
-                + daylight_about(ev)
-                + offset_note(o.rise_offset, o.set_offset)
-                + custom_note
-            )
+            parts = [
+                daylight_details(c).rstrip(),
+                sun_section(c, "day"),
+                format_light_block(ev),
+                build_twilight_schedule(c, "this_evening"),
+                build_twilight_schedule(c, "tomorrow_morning") if spans["night"] is None else "",
+                daylight_about(ev),
+            ]
+            desc = "\n\n".join(part for part in parts if part) + offset_note(o.rise_offset, o.set_offset) + custom_note
             out.append(
                 ical_event(
                     f"daylight-{date_str}-{uid_suffix}",
@@ -438,15 +436,8 @@ def _render(o: Options, now: int) -> bytes:
             # Tomorrow morning's twilights follow the night; this evening's go here only when
             # there is no Daylight event today to carry them (polar night)
             earlier = build_twilight_schedule(c, "this_evening", "earlier_today") if spans["daylight"] is None else ""
-            schedule = earlier + build_twilight_schedule(c, "tomorrow_morning")
-            desc = (
-                night_details(c).rstrip()
-                + schedule
-                + "\n\n"
-                + night_about()
-                + offset_note(o.set_offset, o.rise_offset)
-                + custom_note
-            )
+            parts = [night_details(c).rstrip(), earlier, build_twilight_schedule(c, "tomorrow_morning"), night_about()]
+            desc = "\n\n".join(part for part in parts if part) + offset_note(o.set_offset, o.rise_offset) + custom_note
             out.append(
                 ical_event(
                     f"night-{date_str}-{uid_suffix}",
@@ -477,9 +468,3 @@ class _Output:
     def extend(self, texts: Iterable[str]) -> None:
         for text in texts:
             self.append(text)
-
-
-def _clock_shift_alone(shift: int) -> str:
-    from .helpers import format_clock_shift
-
-    return format_clock_shift(shift, True)
