@@ -714,31 +714,24 @@ def missing_boundaries(key: str, span: Span) -> tuple[bool, bool]:
 
 
 def twilight_details(key: str, span: Span, ev: dict) -> str:
-    """The data lines of a twilight event: first or last light on a nautical twilight, and the sun's path
-    on a day it misses one of the boundaries. "" when there is neither."""
-    lines = []
-    crossing = light_crossing(key, span)
-    if crossing is not None:
-        lines.append(crossing)
+    """The data lines of a twilight event: how it changes the sky, then the sun's path on a day it misses
+    one of the boundaries."""
+    lines = [twilight_note(key, span)]
     path = twilight_path(key, span, ev)
     if path is not None:
         lines.append(path)
     return "\n".join(lines)
 
 
-def light_crossing(key: str, span: Span) -> str | None:
-    """First light on a morning nautical twilight that starts 12° below, last light on an evening one that
-    ends there; None otherwise (a twilight bounded by solar midnight never reaches 12° below)."""
-    if key == "morning_nautical" and span[2] != "solar_midnight":
-        return S["labels"]["first_light"]
-    if key == "evening_nautical" and span[3] != "solar_midnight":
-        return S["labels"]["last_light"]
-    return None
-
-
 def twilight_note(key: str, span: Span) -> str:
-    """The note under a twilight in a schedule: first or last light where it applies."""
-    return light_crossing(key, span) or S["supplemental"][key]
+    """How a twilight changes the sky, start to end: the first line of its event and its note in a schedule.
+
+    A civil twilight that never gets 6° down (solar midnight bounds it) has no first or last light.
+    """
+    unbounded = (key == "morning_civil" and span[2] == "solar_midnight") or (
+        key == "evening_civil" and span[3] == "solar_midnight"
+    )
+    return S["supplemental"][key + "_unbounded" if unbounded else key]
 
 
 def light_periods(ev: dict) -> list[tuple[str, int | None, int | None]]:

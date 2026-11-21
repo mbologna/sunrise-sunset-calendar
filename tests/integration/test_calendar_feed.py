@@ -261,8 +261,10 @@ def test_supplemental_schedule_lists_only_disabled_types() -> None:
     dawn = text(events_of_type(ics, "morning-civil-twilight")[0])
 
     # Time first, in order, each twilight with a note, then the daylight under its own header
-    assert re.search(r"^\d\d:\d\d–\d\d:\d\d 🌌 Astronomical\n\u00a0\u00a0First trace of sunlight$", dawn, re.M)
-    assert re.search(r"^\d\d:\d\d–\d\d:\d\d ⚓ Nautical\n\u00a0\u00a0From first light: horizon visible$", dawn, re.M)
+    assert re.search(
+        r"^\d\d:\d\d–\d\d:\d\d 🌌 Astronomical\n\u00a0\u00a0Full dark gives way to a faint glow$", dawn, re.M
+    )
+    assert re.search(r"^\d\d:\d\d–\d\d:\d\d ⚓ Nautical\n\u00a0\u00a0Horizon appears as stars fade$", dawn, re.M)
     assert re.search(
         r"\n\n🔆 Daylight \d\d:\d\d–\d\d:\d\d \(\d+h \d\dm\)\nvs yesterday: −\d+m \d\ds \(−0\.\d%\)\nYear: ", dawn
     )
@@ -277,9 +279,9 @@ def test_daylight_only_calendar_still_lists_every_twilight() -> None:
     daylight = text(daylight_event)
     night = text(night_event)
 
-    # This evening's twilights follow Daylight, which ends at sunset, last light among them
+    # This evening's twilights follow Daylight, which ends at sunset: civil twilight runs to last light
     assert re.search(
-        r"🕒 This evening\n\S+ 🌇 Civil\n.+\n\S+ ⚓ Nautical\n\u00a0\u00a0Until last light: horizon fades\n"
+        r"🕒 This evening\n\S+ 🌇 Civil\n\u00a0\u00a0No lamps needed until last light\n\S+ ⚓ Nautical\n.+\n"
         r"\S+ 🌌 Astronomical\n",
         daylight,
     )
@@ -290,7 +292,7 @@ def test_daylight_only_calendar_still_lists_every_twilight() -> None:
     assert morning is not None
     ends = local_time(night_event["DTEND"], "Europe/Rome", "{hour:02d}:{minute:02d}")
     assert morning[1] == ends
-    assert "From first light: horizon visible" in night
+    assert "No lamps needed from first light" in night
     assert "🌇 Civil" not in night
 
     # With civil twilight subscribed, its events carry the rest instead
@@ -360,48 +362,60 @@ def test_daylight_shows_change_and_place_in_the_year() -> None:
     assert "📅" not in description
 
 
-def test_nautical_twilight_names_first_and_last_light() -> None:
-    """First and last light are when morning nautical twilight starts and evening nautical twilight ends."""
+def test_civil_twilight_runs_from_first_light_and_to_last_light() -> None:
+    """First and last light as weather apps use the terms: the start of morning and the end of evening
+    civil twilight, with the sun 6° below the horizon."""
     ics = feed(today="2026-11-15", window_days=0)
+
+    # Every twilight event opens with how it changes the sky; the civil ones name first and last light
+    firsts = {
+        "morning-astronomical-twilight": "Full dark gives way to a faint glow",
+        "morning-nautical-twilight": "Horizon appears as stars fade",
+        "morning-civil-twilight": "No lamps needed from first light",
+        "evening-civil-twilight": "No lamps needed until last light",
+        "evening-nautical-twilight": "Horizon fades as more stars appear",
+        "evening-astronomical-twilight": "The last glow fades to full dark",
+    }
+    for kind, line in firsts.items():
+        assert text(events_of_type(ics, kind)[0]).startswith(line + "\n"), kind
+    assert "first light" not in text(events_of_type(ics, "daylight")[0]).lower()
+    assert "Weather apps call its start first light." in text(events_of_type(ics, "morning-civil-twilight")[0])
+    assert "first light" not in text(events_of_type(ics, "morning-nautical-twilight")[0]).lower()
+
+    # In a schedule, the civil twilight that starts at first light and the one that ends at last light
     first = local_time(
-        events_of_type(ics, "morning-nautical-twilight")[0]["DTSTART"], "Europe/Rome", "{hour:02d}:{minute:02d}"
+        events_of_type(ics, "morning-civil-twilight")[0]["DTSTART"], "Europe/Rome", "{hour:02d}:{minute:02d}"
     )
     last = local_time(
-        events_of_type(ics, "evening-nautical-twilight")[0]["DTEND"], "Europe/Rome", "{hour:02d}:{minute:02d}"
+        events_of_type(ics, "evening-civil-twilight")[0]["DTEND"], "Europe/Rome", "{hour:02d}:{minute:02d}"
     )
-
-    # On the nautical events, as their first line, and nowhere on Daylight
-    assert text(events_of_type(ics, "morning-nautical-twilight")[0]).startswith("From first light: horizon visible\n")
-    assert text(events_of_type(ics, "evening-nautical-twilight")[0]).startswith("Until last light: horizon fades\n")
-    assert "first light" not in text(events_of_type(ics, "daylight")[0]).lower()
-    assert "In military use its start is called first light." in text(
-        events_of_type(ics, "morning-nautical-twilight")[0]
+    nautical = feed(
+        today="2026-11-15", window_days=0, enabled={"civil": False, "nautical": True, "astro": False, "daylight": False}
     )
-
-    # In a schedule, as the note of the nautical twilight that starts or ends there
-    civil = feed(
-        today="2026-11-15", window_days=0, enabled={"civil": True, "nautical": False, "astro": False, "daylight": False}
+    dawn = text(events_of_type(nautical, "morning-nautical-twilight")[0])
+    assert re.search(rf"^{first}–\d\d:\d\d 🌅 Civil\n\u00a0\u00a0No lamps needed from first light$", dawn, re.M)
+    daylight_only = feed(
+        today="2026-11-15", window_days=0, enabled={"civil": False, "nautical": False, "astro": False, "daylight": True}
     )
-    dawn = text(events_of_type(civil, "morning-civil-twilight")[0])
-    dusk = text(events_of_type(civil, "evening-civil-twilight")[0])
-    assert re.search(rf"^{first}–\d\d:\d\d ⚓ Nautical\n\u00a0\u00a0From first light: horizon visible$", dawn, re.M)
-    assert re.search(rf"^\d\d:\d\d–{last} ⚓ Nautical\n\u00a0\u00a0Until last light: horizon fades$", dusk, re.M)
+    evening = text(events_of_type(daylight_only, "daylight")[0])
+    assert re.search(rf"^\d\d:\d\d–{last} 🌇 Civil\n\u00a0\u00a0No lamps needed until last light$", evening, re.M)
 
 
 def test_first_and_last_light_without_astronomical_night() -> None:
-    """London in June never gets 18° dark, but still goes 12° below the horizon."""
+    """London in June never gets 18° dark, but civil twilight still starts and ends 6° below."""
     ics = feed(lat=51.5074, lon=-0.1278, timezone="Europe/London", today="2026-06-21", window_days=0)
-    assert text(events_of_type(ics, "morning-nautical-twilight")[0]).startswith("From first light")
-    assert text(events_of_type(ics, "evening-nautical-twilight")[0]).startswith("Until last light")
+    assert text(events_of_type(ics, "morning-civil-twilight")[0]).startswith("No lamps needed from first light")
+    assert text(events_of_type(ics, "evening-civil-twilight")[0]).startswith("No lamps needed until last light")
 
 
-def test_no_first_or_last_light_when_the_sun_stays_above_12_below() -> None:
-    """Stockholm in June: nautical twilight runs through solar midnight without reaching 12° below."""
-    ics = feed(lat=59.33, lon=18.07, timezone="Europe/Stockholm", today="2027-06-21", window_days=1)
-    dusk = text(events_of_type(ics, "evening-nautical-twilight")[0])
-    dawn = text(events_of_type(ics, "morning-nautical-twilight")[1])
-    assert "last light" not in dusk.split("ℹ️ About")[0].lower()
-    assert "first light" not in dawn.split("ℹ️ About")[0].lower()
+def test_no_first_or_last_light_when_the_sun_stays_above_6_below() -> None:
+    """Murmansk in June: the sun dips below the horizon but not 6° down, so civil twilight runs through
+    solar midnight without a first or last light."""
+    ics = feed(lat=68.9585, lon=33.0827, timezone="Europe/Moscow", today="2026-07-25", window_days=1)
+    dusk = text(events_of_type(ics, "evening-civil-twilight")[0])
+    dawn = text(events_of_type(ics, "morning-civil-twilight")[1])
+    assert dusk.startswith("Enough light without lamps\n")
+    assert dawn.startswith("Enough light without lamps\n")
 
 
 def test_no_first_or_last_light_under_the_midnight_sun() -> None:
@@ -612,10 +626,10 @@ def test_twilight_data_comes_before_the_explanation() -> None:
         )[0]
     )
 
-    assert dawn.startswith("🕒 This morning\n")
+    assert dawn.startswith("No lamps needed from first light\n\n🕒 This morning\n")
     assert dawn.find("🕒 This morning") < dawn.find("ℹ️ About")
     nautical = text(events_of_type(feed(window_days=0), "morning-nautical-twilight")[0])
-    assert nautical.startswith("From first light: horizon visible\n\nℹ️ About\n")
+    assert nautical.startswith("Horizon appears as stars fade\n\nℹ️ About\n")
 
 
 def test_night_gives_the_moonless_window() -> None:
@@ -679,7 +693,7 @@ def test_blue_and_golden_hour_come_with_the_daylight_block_without_a_daylight_ev
 
     # Evening light opens the evening schedule, before nautical twilight; the sunset follows it
     assert re.search(
-        r"^🕒 This evening\n\d\d:\d\d–(\d\d:\d\d) 📷 Golden hour\n.+\n\1–(\d\d:\d\d) 📷 Blue hour\n.+\n"
+        r"^No lamps needed until last light\n\n🕒 This evening\n\d\d:\d\d–(\d\d:\d\d) 📷 Golden hour\n.+\n\1–(\d\d:\d\d) 📷 Blue hour\n.+\n"
         r"\2–\d\d:\d\d ⚓ Nautical\n",
         dusk,
     )

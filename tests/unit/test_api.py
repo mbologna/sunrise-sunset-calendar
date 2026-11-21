@@ -27,7 +27,9 @@ def test_noon_in_rome() -> None:
         events = sun_events(clock.LocalDate.parse("2026-11-20", clock.zone("Europe/Rome")), 41.9028, 12.4964)
     sunrise = clock.LocalDate.from_timestamp(events["sunrise"], clock.zone("Europe/Rome")).wall.isoformat()
     assert sun["today"]["sunrise"].startswith(sunrise)
-    assert sun["today"]["first_light"] < sun["today"]["civil_dawn"] < sun["today"]["sunrise"]
+    assert sun["today"]["nautical_dawn"] < sun["today"]["civil_dawn"] < sun["today"]["sunrise"]
+    # Weather apps' first light is civil dawn, already there: no separate key
+    assert "first_light" not in sun["today"]
 
 
 def test_night_in_rome() -> None:
