@@ -85,7 +85,13 @@ Every other path returns 404. Every response carries `X-Content-Type-Options`, `
       "civil_dawn": "2026-11-20T06:35:12+01:00", "sunrise": "2026-11-20T07:05:32+01:00",
       "solar_noon": "2026-11-20T11:55:37+01:00", "sunset": "2026-11-20T16:45:19+01:00",
       "civil_dusk": "2026-11-20T17:15:39+01:00", "last_light": "2026-11-20T17:49:41+01:00",
-      "astronomical_dusk": "2026-11-20T18:22:49+01:00", "day_length": 34787, "polar": null
+      "astronomical_dusk": "2026-11-20T18:22:49+01:00", "day_length": 34787, "polar": null,
+      "vs_yesterday": {"seconds": -115, "percent": -0.33},
+      "year": {
+        "shortest": {"date": "2026-12-21", "day_length": 32854},
+        "longest": {"date": "2026-06-21", "day_length": 54834},
+        "shorter_days": 62, "days": 365
+      }
     },
     "next": {"event": "sunset", "at": "2026-11-20T16:45:19+01:00"}
   },
@@ -100,6 +106,7 @@ Every other path returns 404. Every response carries `X-Content-Type-Options`, `
 - `altitude` is the centre of the body above the horizon, in degrees and without refraction; `azimuth` is in degrees from north. `up` follows the feed's rules: the sun's centre above −0.8333°, the moon's upper limb above the horizon.
 - `period` is where the sun is: `daylight`, `civil_twilight`, `nautical_twilight`, `astronomical_twilight` or `night`.
 - `today` holds the local date's events; an event that doesn't happen (polar day or night) is `null`, and `polar` is `"day"`, `"night"` or `null`. `day_length` is in seconds.
+- `vs_yesterday` and `year` are the numbers behind the feed's Daylight comparisons, unrounded: the change since yesterday in seconds and as a percentage of yesterday's length (`null` after a day without daylight), the year's shortest and longest day, and how many of the year's days are shorter than today. In polar years many days tie at 0 or 24 hours; the extremes are the first of them.
 - The token can come in an `Authorization: Bearer TOKEN` header instead of `?token=`, which keeps it out of request logs and shell history: `curl -H "Authorization: Bearer $TOKEN" 'https://example.com/api/v1/now?lat=41.9028&lon=12.4964&zone=Europe/Rome'`. The header wins when both are given.
 - Without a valid token, 401 with `{"error": "Invalid authentication token"}` and `WWW-Authenticate: Bearer`. Input it can't read gets a 400 with `{"error": "…"}`, unlike the feed, which falls back to defaults. Responses are `no-store`.
 
