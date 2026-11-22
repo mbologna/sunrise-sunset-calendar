@@ -363,8 +363,9 @@ STRINGS: Strings = {
         "morning_civil": {
             "angles": "The sun climbs from 6° below the horizon (about three fingers at arm's length) to sunrise.",
             "text": 'It is named for everyday ("civil") activity: there is enough light to be outdoors '
-            "without lamps under a clear sky. Colours return, only the brightest stars and planets "
-            "remain, and streetlights typically switch off. Aviation rules in many countries count the night "
+            "without lamps under a clear sky; clouds, trees or hills make it come later. Colours return, only "
+            "the brightest stars and planets remain, and streetlights typically switch off. Aviation rules in "
+            "many countries count the night "
             "as ending when this twilight begins. Weather apps call its start first light. The military uses "
             "the term for the start of nautical twilight, with the sun 12° below.",
             "good_for": "early walks and runs; seeing the first colours of the day.",
@@ -372,8 +373,9 @@ STRINGS: Strings = {
         "evening_civil": {
             "angles": "The sun sinks from sunset to 6° below the horizon (about three fingers at arm's length).",
             "text": 'It is named for everyday ("civil") activity: until the sun is 6° down there is still '
-            "enough light to be outdoors without lamps. Colours fade, the brightest stars and planets "
-            "appear, and streetlights typically switch on. Aviation rules in many countries count the night "
+            "enough light to be outdoors without lamps under a clear sky; clouds, trees or hills make it run out "
+            "sooner. Colours fade, the brightest stars and planets appear, and streetlights typically switch on. "
+            "Aviation rules in many countries count the night "
             "as starting when this twilight ends. Weather apps call its end last light; the military uses the "
             "term for the end of nautical twilight, with the sun 12° below.",
             "good_for": "evening walks; the first bright stars and planets.",
