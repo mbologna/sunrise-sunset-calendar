@@ -1,7 +1,7 @@
 # Copier's record of this project's template answers. Don't edit by hand:
 # `copier update` (or Renovate's copier manager) reads it to apply
 # template changes.
-_commit: v1.5.0
+_commit: v1.5.1
 _src_path: https://github.com/mbologna/python-app-template.git
 author: Michele Bologna
 base_variant: slim

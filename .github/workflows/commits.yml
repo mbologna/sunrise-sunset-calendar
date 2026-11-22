@@ -8,9 +8,12 @@ name: Commits
 "on":
   pull_request:
 
+# contents: the commit check clones the history, which a private repository
+# allows only with the token.
 permissions:
+  contents: read
   pull-requests: read
 
 jobs:
   commits:
-    uses: mbologna/.github/.github/workflows/commits.yml@52b335cb95b89c4084d3914b07fbceadc9a4e322 # main
+    uses: mbologna/.github/.github/workflows/commits.yml@a3c72d5835a4634fd90416f79abf930e49d1d96b # main
