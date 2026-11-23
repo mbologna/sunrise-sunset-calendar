@@ -200,6 +200,14 @@ CI runs ruff and the tests through `mbologna/.github`'s `python-ci`, then builds
 
 `tests/golden/` holds 403 recorded responses: 46 locations (polar day and night, both hemispheres, the equator, the date line, every kind of DST rule, including changes at midnight), the full default window, extra dates (DST changes, New Year, a leap day), every combination of event types for six representative places, offsets, notes, malformed input, environment settings, the web page and its form. `test_golden.py` replays every request and compares the bytes, apart from `DTSTAMP`, the moment a feed is generated. When the output changes on purpose, `uv run python -m tests.golden.make_corpus` records the corpus again; review the changed lines before committing. `test_width.py` holds every data line of every recorded description to 38 columns, an emoji counting as two; prose (a sentence ending in a full stop, or a line over 60 columns) may wrap.
 
+## Why not an existing tool
+
+- Carly covers cities only, and sunrise and sunset only.
+- [sunrisesunset.com](https://sunrisesunset.com/) makes printable pages, not a feed.
+- CycleCalcs has the moon and the seasons, but no location.
+
+None offers a feed you can subscribe to for any coordinates, with the three twilights, the moon, weekly summaries and polar days and nights. Checked 2026-11-23.
+
 ## Versioning
 
 `main` is what runs: each push to it that changes the image deploys it to Cloud Run ([Running it](#running-it)). Releases follow SemVer as a changelog: every Monday at 06:00 UTC [auto-release](https://github.com/mbologna/auto-release) tags `vX.Y.Z` from the [Conventional Commit](https://www.conventionalcommits.org/) types merged since the last tag (`feat` minor; `fix`, `perf`, `revert` patch; a breaking change major), or cuts a maintenance release for a week of only dependency updates. The tag builds no image and deploys nothing; its [GitHub Release](https://github.com/mbologna/sunrise-sunset-calendar/releases) lists the changes. To see the next release before Monday, open the summary of the "Release preview" job in a pull request's checks (as if it merged now) or in the latest CI run on `main`, or run `docker run --rm -v "$PWD:/repo:ro" -w /repo -e AUTO_RELEASE_STRATEGY=conventional -e AUTO_RELEASE_FORGE=none ghcr.io/mbologna/auto-release:2.0.0 auto-release plan` in a clone. The preview only shows a maintenance release once it is due, when the last tag is a week old: one that becomes due by Monday appears on Monday's run alone. See the [versioning standard](https://github.com/mbologna/.github/blob/main/VERSIONING.md).
