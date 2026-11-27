@@ -47,7 +47,9 @@ Release of the commit subjects, per the
   cut a release: auto-release tags from the commit types (`feat` minor;
   `fix`, `perf`, `revert` patch; `!` or a `BREAKING CHANGE:` footer major)
   every Monday at 06:00 UTC, and cuts a maintenance release when only
-  dependency updates landed.
+  dependency updates landed. A push to main that fixes a CVE (a
+  `fix(security)` commit, or a Dockerfile base image update that drops
+  fixable HIGH or CRITICAL findings) is tagged at once.
 - Write Conventional Commit subjects; they decide the next version. The
   "Release preview" job summary on each pull request and push to main shows
   the version and notes the next Monday run would tag.
